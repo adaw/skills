@@ -1,3 +1,3 @@
 # Skills
 
-Custom OpenClaw skills repo.
+Adam's skills repo.
