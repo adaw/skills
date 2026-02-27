@@ -7,49 +7,80 @@ description: Run Claude Code on Mac Studio via SSH. Use when you need to execute
 
 This skill executes Claude Code commands on Mac Studio via SSH.
 
-## For Local Execution
-
-Use the **code** skill instead (local Claude Code):
-```bash
-~/.openclaw/workspace/skills/code/scripts/code.sh "<prompt>"
-```
-
-Requirements:
-- Claude Code installed locally
-- Must be logged in: `claude auth login`
-
 ## Usage
 
 ```bash
-ssh adam@mac.local '/opt/homebrew/bin/claude -p --dangerously-skip-permissions "[prompt]" -- ~/repos/[repo]'
+# Basic usage
+~/.openclaw/workspace/skills/scode/scripts/scode.sh <repo> "<prompt>"
+
+# Background mode (runs async, notifies when done)
+~/.openclaw/workspace/skills/scode/scripts/scode.sh -b <repo> "<prompt>"
 ```
 
 ## Examples
 
-- Run a coding task: `claude -p --dangerously-skip-permissions "Add feature X to file.py"`
-- Code review: `claude -p --dangerously-skip-permissions "Review this code for bugs"`
-- Interactive: use `ssh -t` with `pty=true` for interactive sessions
+```bash
+# Run a coding task
+scode.sh calc "Add sin function to calc.py"
+
+# Background mode - returns immediately, notifies on completion
+scode.sh -b myproject "Refactor auth module"
+
+# Monitor background job output
+tail -f /tmp/scode-*.log
+```
+
+## SSH Command Pattern
+
+Direct SSH usage:
+```bash
+ssh adam@mac.local 'cd ~/repos/REPO && /opt/homebrew/bin/claude -p --dangerously-skip-permissions "PROMPT"'
+```
+
+With stream-json output for monitoring:
+```bash
+ssh adam@mac.local 'cd ~/repos/REPO && /opt/homebrew/bin/claude -p --output-format stream-json --dangerously-skip-permissions "PROMPT"'
+```
+
+## CLI Flags Reference
+
+| Flag | Description |
+|------|-------------|
+| `-p` | Non-interactive print mode |
+| `--output-format stream-json` | JSONL streaming output |
+| `--dangerously-skip-permissions` | Skip all prompts |
+| `--max-turns N` | Limit agentic turns |
+| `--max-budget-usd N` | Spending cap |
+| `--append-system-prompt "..."` | Extra instructions |
+| `--allowedTools "tool1,tool2"` | Restrict to specific tools |
+| `--disallowedTools "tool1"` | Block specific tools |
+
+## Stream-JSON Output
+
+When using `--output-format stream-json`, output is JSONL with types:
+- `assistant` - Claude's response content
+- `tool_use` - Tool being called
+- `tool_result` - Tool output
+- `result` - Final result with cost info
+
+Example monitoring:
+```bash
+# Watch for results only
+ssh adam@mac.local '...' | jq -c 'select(.type == "result")'
+
+# Extract final cost
+... | jq -r 'select(.type == "result") | .cost_usd'
+```
 
 ## Requirements
 
-- SSH access to Mac Studio (adam@mac.local)
-- Claude Code installed at /opt/homebrew/bin/claude
-- User must be logged in (`claude auth login` done on Mac Studio)
+- SSH access to Mac Studio: `ssh adam@mac.local`
+- Claude Code at `/opt/homebrew/bin/claude`
+- Authenticated on Mac Studio: `claude auth login`
 
-## Script
+## For Local Execution
 
+Use the **code** skill instead:
 ```bash
-#!/bin/bash
-# Run Claude Code on Mac Studio
-
-REPO="${1:-}"
-PROMPT="${2:-Hello}"
-
-if [ -z "$REPO" ]; then
-  echo "Usage: scode <repo> <prompt>"
-  echo "Example: scode calc 'Add sin function'"
-  exit 1
-fi
-
-ssh adam@mac.local "cd ~/repos/$REPO && /opt/homebrew/bin/claude -p --dangerously-skip-permissions '$PROMPT'"
+~/.openclaw/workspace/skills/code/scripts/code.sh "<prompt>"
 ```
