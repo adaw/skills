@@ -8,6 +8,7 @@ description: >
   or any request that involves spawning a Claude Code agent for a non-trivial coding task.
   DO NOT use for simple single-file edits — use the Edit tool directly instead.
   DO NOT use if Claude Code CLI (`claude`) is not installed.
+  Variant: "/scc [prompt]" runs on Mac Studio via SSH (see scode skill for remote execution).
 ---
 
 # Claude Code Runner
@@ -22,6 +23,33 @@ Claude Code CLI must be installed and authenticated:
 which claude && claude --version
 ```
 If not available, tell the user to install it: `npm install -g @anthropic-ai/claude-code`
+
+## Quick Reference
+
+```bash
+# Basic usage
+/cc "implement feature X"
+
+# With model selection
+/cc --opus "complex architectural task"
+/cc --sonnet "standard coding task"          # default
+/cc --minimax "task using minimax model"
+
+# With auto-push (commits and pushes after completion)
+/cc --push "fix bug Y"
+
+# With branch management
+/cc --branch feature/my-feature "implement feature"
+
+# With workdir auto-detection
+/cc --repo my-project "add tests"
+
+# Combined
+/cc --opus --branch feature/auth --push "implement authentication"
+
+# Remote execution on Mac Studio (uses scode skill)
+/scc --opus "heavy compute task"
+```
 
 ## When to Use
 
@@ -43,6 +71,15 @@ Pick the right workdir based on the task:
 - **Existing project**: Use the project root (look for `package.json`, `Cargo.toml`, `pyproject.toml`, `.git`)
 - **PR review**: Create a temp dir, clone/checkout the relevant branch
 - **New project**: Create a fresh directory
+- **Auto-detection**: Use `--repo <name>` to auto-find in `~/repos/`
+
+```bash
+# Auto-find repo by name
+./launch.sh --repo my-project --prompt "add tests"
+
+# Explicit workdir
+./launch.sh --workdir /path/to/project --prompt "refactor"
+```
 
 ### Step 2: Launch Claude Code
 
@@ -66,10 +103,51 @@ claude -p "[TASK_PROMPT]" \
 | `--verbose` | Include full turn-by-turn detail |
 | `--max-turns N` | Limit autonomous turns (prevent runaway loops). Default: 25, simple tasks: 10 |
 | `--dangerously-skip-permissions` | Skip permission prompts (needed for unattended execution) |
-| `--model sonnet` | Use Sonnet for cost efficiency, or `opus` for complex tasks |
+| `--model <id>` | Model to use (see model mapping below) |
 | `--allowedTools "..."` | Restrict tools if needed (e.g., `"Read,Grep,Glob"` for read-only analysis) |
 | `--append-system-prompt "..."` | Add extra instructions while keeping defaults |
 | `--fallback-model sonnet` | Auto-fallback when primary model is overloaded |
+
+**Model mapping:**
+
+| Shortcut | Model ID |
+|---|---|
+| `opus` | `claude-opus-4-6` |
+| `sonnet` | `claude-sonnet-4-6` (default) |
+| `minimax` | `openrouter/minimax/minimax-01` |
+
+### Step 2b: Branch Management (Optional)
+
+Use `--branch` to work on a specific branch:
+
+```bash
+# Create new branch and work on it
+./launch.sh --branch feature/auth --prompt "implement authentication" --bg
+
+# Checkout existing branch
+./launch.sh --branch bugfix/login --prompt "fix login issue" --bg
+
+# With auto-push after completion
+./launch.sh --branch feature/api --push --prompt "add API endpoints" --bg
+```
+
+The script will:
+1. Check if branch exists locally → checkout
+2. Check if branch exists on remote → checkout tracking branch
+3. Otherwise → create new branch
+
+### Step 2c: Auto Git Push (Optional)
+
+Use `--push` to automatically commit and push changes after CC completes:
+
+```bash
+./launch.sh --prompt "implement feature" --push --bg
+```
+
+After completion:
+1. `git add -A` — stage all changes
+2. `git commit -m "cc: [task summary]"` — commit with auto-generated message
+3. `git push -u origin HEAD` — push to remote
 
 ### Step 3: Monitor Progress
 
@@ -117,40 +195,53 @@ cat /tmp/claude-code-run.jsonl | jq -r 'select(.message.content[]?.name == "Writ
 tail -1 /tmp/claude-code-run.jsonl | jq '{success: (.subtype == "success"), cost: .total_cost_usd, duration_sec: (.duration_ms / 1000), turns: .num_turns, result: .result[:200]}'
 ```
 
-## ⭐ Preferovaný způsob: Background + auto-notifikace
+## ⭐ Preferred: Background + Live Progress + Auto-Push
 
-Vždy spouštět na pozadí. Po dokončení automaticky reportovat výsledek.
+Always run in background with live progress monitoring. Use `launch.sh` which handles everything:
 
 ```bash
-# Launch in background
-claude -p "[PROMPT]" \
-  --output-format stream-json \
-  --verbose \
-  --max-turns 30 \
-  --dangerously-skip-permissions \
-  > /tmp/claude-code-run.jsonl 2>&1 &
-CLAUDE_PID=$!
+# Full-featured launch with all options
+./scripts/launch.sh \
+  --prompt "implement user authentication with JWT" \
+  --repo my-project \
+  --branch feature/auth \
+  --opus \
+  --push \
+  --bg
 
-echo "🚀 Claude Code spuštěn (PID $CLAUDE_PID) — výsledek přijde automaticky"
-
-# Auto-notify po dokončení (spustit v bg subshell)
-(wait $CLAUDE_PID; python3 -c "
-import json
-lines = open('/tmp/claude-code-run.jsonl').readlines()
-result = json.loads(lines[-1]) if lines else {}
-ok = result.get('subtype') == 'success'
-print('✅ DONE' if ok else '❌ FAILED',
-      '| turns:', result.get('num_turns','?'),
-      '| cost: \$', round(result.get('total_cost_usd',0),4),
-      '| duration:', round(result.get('duration_ms',0)/1000), 's')
-" 2>/dev/null) &
+# Minimal background launch
+./scripts/launch.sh --prompt "fix bug" --bg
 ```
 
-Then poll progress periodically:
+**Live progress pings**: Every 5 seconds, the script detects TodoWrite updates and reports:
+```
+━━━ 📋 Progress Update (14:32:15) ━━━
+  ✅ Set up project structure
+  🔧 Implementing API routes
+  ⏳ Write tests
+  📊 Progress: 1/3 tasks
+```
+
+**On completion**:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏁 Claude Code finished (exit code: 0)
+{
+  "success": true,
+  "cost": 0.0523,
+  "duration_sec": 127,
+  "turns": 15
+}
+📦 Auto-committing changes...
+🚀 Pushing to remote...
+✅ Auto-push complete
+```
+
+### Manual polling (if needed)
 
 ```bash
 # Check if still running
-kill -0 $CLAUDE_PID 2>/dev/null && echo "Running..." || echo "Finished"
+kill -0 $(cat /tmp/claude-code-run.pid) 2>/dev/null && echo "Running..." || echo "Finished"
 
 # Latest activity
 tail -5 /tmp/claude-code-run.jsonl | jq -r '.message.content[]?.text // .message.content[]?.name // empty' 2>/dev/null | tail -3
@@ -265,3 +356,20 @@ claude -p "[PROMPT]" \
   --output-format stream-json \
   --dangerously-skip-permissions
 ```
+
+## Remote Execution: /scc (Mac Studio)
+
+For heavy compute tasks or when you want to offload work to a more powerful machine, use `/scc` which runs Claude Code on Mac Studio via SSH.
+
+```bash
+# Run on Mac Studio
+/scc --opus "train model and evaluate"
+
+# Equivalent to:
+# scode "cd ~/repos/project && ./scripts/launch.sh --opus --prompt 'train model'"
+```
+
+This uses the `scode` skill for SSH-based remote execution. See `scode/SKILL.md` for details on:
+- SSH connection setup
+- File syncing between local and remote
+- Output streaming
