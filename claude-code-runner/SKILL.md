@@ -4,7 +4,7 @@ description: >
   Spawn and monitor Claude Code CLI agents for coding tasks with real-time progress reporting.
   Use this skill whenever you need to delegate a coding task to a Claude Code subprocess — building
   features, refactoring, PR reviews, test generation, debugging, or any multi-step coding workflow.
-  Triggers on: "/code [prompt]", "run claude code", "spusť claude na...", "deleguj na claude code",
+  Triggers on: "/cc [prompt]", "run claude code", "spusť claude na...", "deleguj na claude code",
   or any request that involves spawning a Claude Code agent for a non-trivial coding task.
   DO NOT use for simple single-file edits — use the Edit tool directly instead.
   DO NOT use if Claude Code CLI (`claude`) is not installed.
@@ -117,9 +117,9 @@ cat /tmp/claude-code-run.jsonl | jq -r 'select(.message.content[]?.name == "Writ
 tail -1 /tmp/claude-code-run.jsonl | jq '{success: (.subtype == "success"), cost: .total_cost_usd, duration_sec: (.duration_ms / 1000), turns: .num_turns, result: .result[:200]}'
 ```
 
-## Running in Background with Progress Polling
+## ⭐ Preferovaný způsob: Background + auto-notifikace
 
-For long tasks, run in background and poll for updates:
+Vždy spouštět na pozadí. Po dokončení automaticky reportovat výsledek.
 
 ```bash
 # Launch in background
@@ -131,7 +131,19 @@ claude -p "[PROMPT]" \
   > /tmp/claude-code-run.jsonl 2>&1 &
 CLAUDE_PID=$!
 
-echo "Claude Code running as PID $CLAUDE_PID"
+echo "🚀 Claude Code spuštěn (PID $CLAUDE_PID) — výsledek přijde automaticky"
+
+# Auto-notify po dokončení (spustit v bg subshell)
+(wait $CLAUDE_PID; python3 -c "
+import json
+lines = open('/tmp/claude-code-run.jsonl').readlines()
+result = json.loads(lines[-1]) if lines else {}
+ok = result.get('subtype') == 'success'
+print('✅ DONE' if ok else '❌ FAILED',
+      '| turns:', result.get('num_turns','?'),
+      '| cost: \$', round(result.get('total_cost_usd',0),4),
+      '| duration:', round(result.get('duration_ms',0)/1000), 's')
+" 2>/dev/null) &
 ```
 
 Then poll progress periodically:
