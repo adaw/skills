@@ -38,12 +38,6 @@ while [[ $# -gt 0 ]]; do
             WORKDIR="$2"; shift 2 ;;
         --model|-m)
             MODEL="$2"; shift 2 ;;
-        --opus)
-            MODEL="opus"; shift ;;
-        --sonnet)
-            MODEL="sonnet"; shift ;;
-        --minimax)
-            MODEL="minimax"; shift ;;
         --max-turns|-t)
             MAX_TURNS="$2"; shift 2 ;;
         --bg|--background)
@@ -79,9 +73,6 @@ while [[ $# -gt 0 ]]; do
             echo "  --workdir, -w   Working directory (default: cwd)"
             echo "  --repo, -r      Auto-find repo in ~/repos/ by name"
             echo "  --model, -m     Model: sonnet, opus, minimax (default: sonnet)"
-            echo "  --opus          Shortcut for --model opus"
-            echo "  --sonnet        Shortcut for --model sonnet"
-            echo "  --minimax       Shortcut for --model minimax (via openrouter)"
             echo "  --max-turns, -t Maximum turns (default: 25)"
             echo "  --bg            Run in background with live progress"
             echo "  --readonly      Read-only mode (Grep, Glob, Read only)"
