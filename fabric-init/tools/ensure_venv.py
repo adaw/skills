@@ -15,7 +15,6 @@ import argparse
 import contextlib
 import hashlib
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -127,7 +126,6 @@ def ensure_venv(
     venv_python = _venv_bin(venv_path, "python")
     hash_file = venv_path / ".fabric_deps_hash"
 
-    # Check for broken symlink
     broken_symlink = venv_python.is_symlink() and not venv_python.exists()
     venv_exists = venv_python.exists()
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
@@ -195,7 +193,6 @@ def main() -> None:
     parser.add_argument("--json", dest="json_out", action="store_true", help="JSON output")
     args = parser.parse_args()
 
-    # --json implies --quiet, progress goes to stderr
     if args.json_out:
         args.quiet = True
 
