@@ -31,6 +31,8 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 - `{WORK_ROOT}/config.md` (COMMANDS.lint, COMMANDS.format_check)
 - `{WORK_ROOT}/state.md` (wip_item, wip_branch)
 - `{WORK_ROOT}/backlog/{wip_item}.md`
+- `{WORK_ROOT}/decisions/*.md` (accepted decisions — R8 ověřuje compliance)
+- `{WORK_ROOT}/specs/*.md` (technické kontrakty — R8 ověřuje dodržení)
 - `{WORK_ROOT}/reports/test-{wip_item}-*.md` (evidence, pokud existuje)
 - git diff na `{state.wip_branch}` proti `main`
 
@@ -165,7 +167,11 @@ Dimenze:
 - **R5 Testability:** testy pokrývají AC? izolace? flaky?
 - **R6 Maintainability:** čitelnost, naming, modularita
 - **R7 Documentation:** docs + komentáře + ADR když je potřeba
-- **R8 Compliance:** dodržení config konvencí a kontraktů
+- **R8 Compliance:** dodržení architektonických omezení a kontraktů:
+  - `{WORK_ROOT}/decisions/*.md` (accepted) — kód nesmí porušovat přijatá rozhodnutí
+  - `{WORK_ROOT}/specs/*.md` — API endpointy, datový model, schéma musí odpovídat specifikacím
+  - config konvence (naming, cesty, formáty dle config.md)
+  - Porušení accepted decision = **CRITICAL** finding
 
 ### 4) Verdikt (jednoznačně)
 

@@ -49,6 +49,8 @@ Použij ho pro:
 
 - `{WORK_ROOT}/config.md`
 - `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` (sub-vize pro širší kontext)
+- `{WORK_ROOT}/decisions/*.md` (pro governance gap discovery)
+- `{WORK_ROOT}/specs/*.md` (pro spec drift discovery)
 - `{WORK_ROOT}/backlog.md` + backlog items (pro dedup)
 - poslední reporty (pokud existují):
   - `reports/architect-*.md`
@@ -108,8 +110,15 @@ Vygeneruj kandidáty z těchto oblastí:
 5) **Performance**  
 - hot paths, N^2 loops, unnecessary I/O
 
-6) **Developer Experience**  
+6) **Developer Experience**
 - CI gates, pre-commit, faster local dev loop
+
+7) **Architektonická governance**
+- chybějící ADR pro klíčová rozhodnutí (kód dělá implicitní volbu bez dokumentace)
+- specs drift vs kód (spec říká X, kód dělá Y)
+- deprecated decisions bez náhrady (superseded_by prázdné)
+- proposed decisions čekající na accept déle než 14 dní
+- klíčové moduly bez pokrytí specifikací
 
 ### 3) Vision alignment scoring (jednoduše)
 

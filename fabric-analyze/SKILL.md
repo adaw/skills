@@ -30,11 +30,13 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 ## Vstupy (povinné)
 
-1. `{WORK_ROOT}/config.md`  
+1. `{WORK_ROOT}/config.md`
 2. `{WORK_ROOT}/state.md` (sprint N)
 3. `{WORK_ROOT}/sprints/sprint-{N}.md` (Sprint Targets + Task Queue)
 4. `{WORK_ROOT}/backlog/{id}.md` pro všechny targety
-5. `{CODE_ROOT}/` (kódový kontext) + `{TEST_ROOT}/` + `{DOCS_ROOT}/`
+5. `{WORK_ROOT}/decisions/*.md` (architektonická omezení — design MUSÍ respektovat accepted decisions)
+6. `{WORK_ROOT}/specs/*.md` (technické kontrakty — navržené řešení MUSÍ být kompatibilní se specs)
+7. `{CODE_ROOT}/` (kódový kontext) + `{TEST_ROOT}/` + `{DOCS_ROOT}/`
 
 ---
 
@@ -43,6 +45,7 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 - Per-task analýzy: `{ANALYSES_ROOT}/{task-id}-analysis.md`
 - Aktualizovaný sprint plán: doplněná sekce `## Task Queue`
 - Volitelně nové backlog items (Tasks) vytvořené z Epic/Story targetů
+- Volitelně nové/aktualizované specs v `{WORK_ROOT}/specs/` (pokud analýza zpřesní technický kontrakt)
 - Report: `{WORK_ROOT}/reports/analyze-sprint-{N}-{YYYY-MM-DD}.md`
 
 ---
@@ -110,6 +113,11 @@ Vytvoř `{ANALYSES_ROOT}/{task-id}-analysis.md`:
 - Task: {title}
 - Source: sprint-{N}
 - Goal: {sprint_goal}
+
+## Constraints (decisions & specs)
+- Relevant decisions: {seznam D-ID a jejich dopad na tento task, nebo "žádné"}
+- Relevant specs: {seznam spec souborů a jak ovlivňují řešení, nebo "žádné"}
+- Porušení: {pokud navržený approach porušuje decision/spec, explicitně uveď a navrhni řešení}
 
 ## Acceptance Criteria (restate)
 - ...

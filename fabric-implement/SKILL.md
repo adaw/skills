@@ -35,6 +35,8 @@ Povinné:
 - `{WORK_ROOT}/sprints/sprint-{N}.md` (sekce `## Task Queue`)
 - `{WORK_ROOT}/backlog/{id}.md`
 - `{ANALYSES_ROOT}/{id}-analysis.md` (pokud existuje; preferované)
+- `{WORK_ROOT}/decisions/*.md` (architektonická omezení — implementace NESMÍ porušovat accepted decisions)
+- `{WORK_ROOT}/specs/*.md` (technické kontrakty — kód MUSÍ odpovídat specifikacím)
 
 Volitelné:
 - předchozí `reports/review-*.md` (pokud jde o rework)
@@ -163,10 +165,13 @@ git checkout -b {branch_name} || git checkout {branch_name}
 
 Pokud working tree není čistý → FAIL (nejdřív vyřeš).
 
-### 3) VERIFY-FIRST (pochop problém)
+### 3) VERIFY-FIRST (pochop problém + constraints)
 
 - Přečti `{WORK_ROOT}/backlog/{id}.md` (AC + dotčené soubory)
 - Pokud existuje `{ANALYSES_ROOT}/{id}-analysis.md`, použij ho jako plán.
+- Přečti `{WORK_ROOT}/decisions/*.md` — identifikuj which accepted decisions ovlivňují tento task.
+- Přečti `{WORK_ROOT}/specs/*.md` — identifikuj relevantní specs (API kontrakt, schéma, formáty).
+- Pokud implementace by porušila decision nebo spec → STOP, vytvoř intake item `intake/constraint-violation-{id}.md` a reportuj.
 
 Udělej baseline:
 ```bash
@@ -259,5 +264,7 @@ Před návratem:
 - `COMMANDS.test` PASS
 - backlog item aktualizovaný (branch/status/updated)
 - implement report existuje v `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}.md`
+- žádná accepted decision nebyla porušena
+- implementace odpovídá relevantním specs (API formát, schéma, kontrakty)
 
 Pokud ne → FAIL + vytvoř intake item `intake/implement-selfcheck-failed-{id}.md`.

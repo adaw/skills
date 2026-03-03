@@ -165,6 +165,8 @@ mkdir -p {WORK_ROOT}/backlog/done
 mkdir -p {WORK_ROOT}/intake
 mkdir -p {WORK_ROOT}/intake/done
 mkdir -p {WORK_ROOT}/intake/rejected
+mkdir -p {WORK_ROOT}/decisions        # Architecture Decision Records (ADR)
+mkdir -p {WORK_ROOT}/specs            # Technické specifikace a kontrakty
 mkdir -p {WORK_ROOT}/sprints
 mkdir -p {WORK_ROOT}/reports
 mkdir -p {WORK_ROOT}/logs
@@ -286,6 +288,46 @@ Pokud neexistuje:
 
 ---
 
+## 5.5) Decisions & Specs indexy (idempotentně)
+
+`decisions/` a `specs/` jsou **first-class citizens** vedle `vision.md` a `backlog.md`. Každý skill je čte jako architektonická omezení a kontrakty.
+
+### decisions/INDEX.md
+
+Pokud `{WORK_ROOT}/decisions/` obsahuje `*.md` soubory (mimo INDEX.md):
+- přegeneruj `{WORK_ROOT}/decisions/INDEX.md` z frontmatter/hlaviček:
+
+```markdown
+# Decisions (ADR) Index
+
+| ID | Title | Status | Date |
+|----|-------|--------|------|
+```
+
+Pokud `{WORK_ROOT}/decisions/` je prázdný:
+- vytvoř prázdný INDEX.md s hlavičkou a poznámkou:
+  `> Žádná rozhodnutí zatím nebyla zaznamenána. Decisions vytváří fabric-architect.`
+
+### specs/INDEX.md
+
+Pokud `{WORK_ROOT}/specs/` obsahuje `*.md` soubory (mimo INDEX.md):
+- přegeneruj `{WORK_ROOT}/specs/INDEX.md` z frontmatter/hlaviček:
+
+```markdown
+# Specs Index
+
+| Soubor | Title | Status | Date |
+|--------|-------|--------|------|
+```
+
+Pokud `{WORK_ROOT}/specs/` je prázdný:
+- vytvoř prázdný INDEX.md s hlavičkou a poznámkou:
+  `> Žádné specifikace zatím nebyly vytvořeny. Specs vytváří fabric-analyze a fabric-architect.`
+
+> **Poznámka:** Indexy jsou convenience pro rychlý přehled. Skills čtou `decisions/*.md` a `specs/*.md` přímo — celé soubory, ne jen index.
+
+---
+
 ## 6) Backlog index (backlog.md)
 
 Pokud `{WORK_ROOT}/backlog.md` neexistuje, vytvoř:
@@ -320,6 +362,8 @@ Po initu musí existovat:
 - `{WORK_ROOT}/backlog.md`
 - `{WORK_ROOT}/backlog/`
 - `{WORK_ROOT}/intake/`
+- `{WORK_ROOT}/decisions/` + `decisions/INDEX.md`
+- `{WORK_ROOT}/specs/` + `specs/INDEX.md`
 - `{WORK_ROOT}/reports/`
 - `{WORK_ROOT}/sprints/`
 - `{WORK_ROOT}/analyses/`

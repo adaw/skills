@@ -35,6 +35,8 @@ Aplikovat jen **bezpečné** automatické opravy (idempotentní) a vše ostatní
 - `{WORK_ROOT}/state.md`
 - `{WORK_ROOT}/backlog.md`
 - `{WORK_ROOT}/backlog/*.md`
+- `{WORK_ROOT}/decisions/*.md` + `decisions/INDEX.md`
+- `{WORK_ROOT}/specs/*.md` + `specs/INDEX.md`
 - `{WORK_ROOT}/sprints/*.md`
 - `{WORK_ROOT}/templates/*.md`
 - `{CODE_ROOT}/`, `{TEST_ROOT}/`, `{DOCS_ROOT}/` (existence + volitelné commands)
@@ -68,6 +70,8 @@ Ověř existenci:
 - `{WORK_ROOT}/backlog.md`
 - `{WORK_ROOT}/backlog/` + `backlog/done/`
 - `{WORK_ROOT}/intake/` + `intake/done/` + `intake/rejected/`
+- `{WORK_ROOT}/decisions/` + `decisions/INDEX.md`
+- `{WORK_ROOT}/specs/` + `specs/INDEX.md`
 - `{WORK_ROOT}/reports/`
 - `{WORK_ROOT}/sprints/`
 - `{WORK_ROOT}/analyses/`
@@ -135,6 +139,29 @@ Validace:
 - `Order` je unikátní a začíná od 1 (nebo je aspoň monotónní)
 
 Pokud Task Queue odkazuje na neexistující backlog item → CRITICAL + intake.
+
+### 5.5) Decisions & Specs audit
+
+#### Decisions (`{WORK_ROOT}/decisions/*.md`)
+
+- Ověř, že každý soubor má frontmatter s `id`, `status`, `date` (dle `adr.md` template).
+- Safe auto-fix: pokud chybí `status`, doplň `status: proposed`.
+- WARNING: decision se `status: proposed` starší než 14 dní → vytvoř intake item `intake/check-stale-proposed-decision-{id}.md` (vyžaduje review/accept).
+- WARNING: decision se `status: deprecated` bez `superseded_by` → vytvoř intake item.
+- Ověř, že `decisions/INDEX.md` odpovídá realitě (počet souborů, titulky). Safe auto-fix: přegeneruj INDEX.md.
+
+#### Specs (`{WORK_ROOT}/specs/*.md`)
+
+- Ověř, že každý spec má hlavičku s Title, Date, Status.
+- WARNING: spec se `Status: Draft` starší než 30 dní → vytvoř intake item `intake/check-stale-draft-spec-{name}.md`.
+- Ověř, že `specs/INDEX.md` odpovídá realitě. Safe auto-fix: přegeneruj INDEX.md.
+
+#### Cross-reference
+
+- Pro každý accepted decision: ověř, že soubory zmíněné v sekci "Implementace" existují v `{CODE_ROOT}/`. WARNING pokud ne.
+- Pro každý spec: ověř, že odpovídající kódové soubory existují. WARNING pokud spec referuje neexistující modul.
+
+---
 
 ### 6) Config COMMANDS sanity
 
