@@ -90,9 +90,11 @@ B) **Node.js (`package.json`)**
 - pokud `scripts.format:check` nebo `scripts.format-check` existuje → `COMMANDS.format_check = "<pm> run <script>"`
 
 C) **Python**
-- pokud existuje `pyproject.toml` nebo převaha `*.py` → `COMMANDS.test = "python -m pytest"`
-- pokud v `pyproject.toml` najdeš `ruff` → `COMMANDS.lint = "python -m ruff check ."` a `COMMANDS.format_check = "python -m ruff format --check ."`
-- jinak pokud najdeš `black` → `COMMANDS.format_check = "python -m black --check ."`
+- pokud existuje `pyproject.toml` nebo převaha `*.py`:
+  - `COMMANDS.test = "python skills/fabric-init/tools/ensure_venv.py && .venv/bin/pytest"`
+  - (ensure_venv zajistí venv před každým testem — lazy, pouze při změně deps)
+- pokud v `pyproject.toml` najdeš `ruff` → `COMMANDS.lint = ".venv/bin/ruff check ."` a `COMMANDS.format_check = ".venv/bin/ruff format --check ."`
+- jinak pokud najdeš `black` → `COMMANDS.format_check = ".venv/bin/black --check ."`
 
 D) **Go / Rust (pokud detekováno)**
 - `go.mod` → `COMMANDS.test = "go test ./..."` a `COMMANDS.format_check = "test -z \"$(gofmt -l .)\""`
@@ -106,6 +108,26 @@ Pokud jsi něco autodetekoval nebo vypnul:
 - vytvoř `{WORK_ROOT}/reports/config-commands-{YYYY-MM-DD}.md` (co bylo `TBD`, co bylo nastaveno, confidence, proč)
 - vytvoř intake item `{WORK_ROOT}/intake/config-commands-autodetected.md` (aby to bylo auditovatelné / přezkoumatelné)
 
+
+
+## 0.2) Ensure venv (Python projekty)
+
+Pokud projekt je Python (detekováno ,  nebo převaha ):
+
+
+
+**Logika :**
+-  neexistuje → vytvoří + nainstaluje deps
+- / změněn (hash) → pip install update
+- Beze změny → skip (< 100ms)
+- Hash uložen v 
+
+**Kdy volat:**
+- Při fabric-init bootstrapu (jednou)
+- Volá se automaticky před každým testem přes COMMANDS.test (viz 0.1 C)
+- Při fabric-check před quality gates
+
+**Výsledek:** .venv/ vždy aktuální — agent může přidat závislost do pyproject.toml a testy poběží bez manuálního zásahu.
 
 ## 1) Konfigurace (config.md) — bootstrap a kontrola (povinné)
 
