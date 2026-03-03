@@ -12,15 +12,71 @@ Použití:
 """
 from __future__ import annotations
 import argparse
+import contextlib
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+# --- Platform helpers ---
 
-HASH_FILE = ".venv/.fabric_deps_hash"
+_IS_WIN = sys.platform == "win32"
 
+
+def _venv_bin(venv_path: Path, name: str) -> Path:
+    if _IS_WIN:
+        return venv_path / "Scripts" / (name + ".exe")
+    return venv_path / "bin" / name
+
+
+# --- File locking ---
+
+@contextlib.contextmanager
+def _lock(lock_path: Path):
+    if _IS_WIN:
+        yield
+        return
+    import fcntl
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = open(lock_path, "w")
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
+
+
+# --- TOML dev-extras detection ---
+
+def _has_dev_extras(pyproject: Path) -> bool:
+    try:
+        data = _parse_toml(pyproject)
+    except Exception:
+        return False
+    opt_deps = data.get("project", {}).get("optional-dependencies", {})
+    if "dev" in opt_deps:
+        return True
+    poetry_dev = data.get("tool", {}).get("poetry", {}).get("dev-dependencies", {})
+    if poetry_dev:
+        return True
+    return False
+
+
+def _parse_toml(path: Path) -> dict:
+    text = path.read_bytes()
+    try:
+        import tomllib
+        return tomllib.loads(text.decode())
+    except ImportError:
+        pass
+    import tomli
+    return tomli.loads(text.decode())
+
+
+# --- Core logic ---
 
 def hash_files(*paths: Path) -> str:
     h = hashlib.sha256()
@@ -43,83 +99,95 @@ def find_dep_files(repo_root: Path) -> list[Path]:
 
 
 def run(cmd: list[str], cwd: Path, quiet: bool) -> int:
-    kwargs = {"cwd": cwd}
+    kwargs: dict = {"cwd": cwd}
     if quiet:
         kwargs["capture_output"] = True
     return subprocess.run(cmd, **kwargs).returncode
 
 
-def ensure_venv(repo_root: Path, venv_path: Path, quiet: bool) -> bool:
-    """
-    Returns True if venv was created/updated, False if skipped.
-    """
+def _log(msg: str, quiet: bool, *, force_stderr: bool = False) -> None:
+    if not quiet:
+        dest = sys.stderr if force_stderr else sys.stdout
+        print(msg, file=dest)
+
+
+def ensure_venv(
+    repo_root: Path,
+    venv_path: Path,
+    quiet: bool,
+    *,
+    stderr_progress: bool = False,
+) -> bool:
+    def log(msg: str) -> None:
+        _log(msg, quiet, force_stderr=stderr_progress)
+
     dep_files = find_dep_files(repo_root)
     current_hash = hash_files(*dep_files) if dep_files else "no-deps"
 
-    venv_python = venv_path / "bin" / "python"
-    hash_file = repo_root / HASH_FILE
+    venv_python = _venv_bin(venv_path, "python")
+    hash_file = venv_path / ".fabric_deps_hash"
 
+    # Check for broken symlink
+    broken_symlink = venv_python.is_symlink() and not venv_python.exists()
     venv_exists = venv_python.exists()
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
 
     if venv_exists and stored_hash == current_hash:
-        if not quiet:
-            print(f"[ensure_venv] venv OK, deps unchanged — skip")
+        log("[ensure_venv] venv OK, deps unchanged — skip")
         return False
 
-    # Create venv if missing
-    if not venv_exists:
-        if not quiet:
-            print(f"[ensure_venv] Creating venv at {venv_path}...")
-        rc = run([sys.executable, "-m", "venv", str(venv_path)], repo_root, quiet)
+    need_create = not venv_exists or broken_symlink
+
+    if need_create:
+        if broken_symlink:
+            log("[ensure_venv] Broken python symlink detected, recreating with --clear...")
+            venv_cmd = [sys.executable, "-m", "venv", "--clear", str(venv_path)]
+        else:
+            log(f"[ensure_venv] Creating venv at {venv_path}...")
+            venv_cmd = [sys.executable, "-m", "venv", str(venv_path)]
+        rc = run(venv_cmd, repo_root, quiet)
         if rc != 0:
-            print(f"[ensure_venv] ERROR: venv creation failed (rc={rc})", file=sys.stderr)
-            sys.exit(rc)
+            raise RuntimeError(f"[ensure_venv] ERROR: venv creation failed (rc={rc})")
 
-    pip = venv_path / "bin" / "pip"
+    pip = _venv_bin(venv_path, "pip")
 
-    # Upgrade pip silently
-    run([str(pip), "install", "--upgrade", "pip"], repo_root, quiet=True)
+    # pip upgrade — warn on failure
+    pip_up_rc = run([str(pip), "install", "--upgrade", "pip"], repo_root, quiet=True)
+    if pip_up_rc != 0:
+        print(f"[ensure_venv] WARNING: pip upgrade failed (rc={pip_up_rc})", file=sys.stderr)
 
-    # Install deps
-    if (repo_root / "pyproject.toml").exists():
-        if not quiet:
-            print(f"[ensure_venv] Installing pyproject.toml deps...")
+    rc = 0
+    has_pyproject = (repo_root / "pyproject.toml").exists()
+    has_requirements = (repo_root / "requirements.txt").exists()
+    has_setup = (repo_root / "setup.py").exists() or (repo_root / "setup.cfg").exists()
+
+    if has_pyproject:
+        log("[ensure_venv] Installing pyproject.toml deps...")
         extras = ".[dev]" if _has_dev_extras(repo_root / "pyproject.toml") else "."
         rc = run([str(pip), "install", "-e", extras], repo_root, quiet)
-    elif (repo_root / "requirements.txt").exists():
-        if not quiet:
-            print(f"[ensure_venv] Installing requirements.txt...")
+    elif has_requirements:
+        log("[ensure_venv] Installing requirements.txt...")
         rc = run([str(pip), "install", "-r", "requirements.txt"], repo_root, quiet)
         if rc == 0 and (repo_root / "requirements-dev.txt").exists():
             rc = run([str(pip), "install", "-r", "requirements-dev.txt"], repo_root, quiet)
+    elif has_setup:
+        log("[ensure_venv] Installing setup.py/setup.cfg via pip install -e ...")
+        rc = run([str(pip), "install", "-e", "."], repo_root, quiet)
     else:
-        if not quiet:
-            print(f"[ensure_venv] No dep files found — empty venv created")
+        log("[ensure_venv] No dep files found — empty venv created")
         rc = 0
 
     if rc != 0:
-        print(f"[ensure_venv] ERROR: pip install failed (rc={rc})", file=sys.stderr)
-        sys.exit(rc)
+        raise RuntimeError(f"[ensure_venv] ERROR: pip install failed (rc={rc})")
 
-    # Save hash
     hash_file.parent.mkdir(parents=True, exist_ok=True)
     hash_file.write_text(current_hash)
 
-    if not quiet:
-        print(f"[ensure_venv] venv ready ✓")
+    log("[ensure_venv] venv ready ✓")
     return True
 
 
-def _has_dev_extras(pyproject: Path) -> bool:
-    try:
-        content = pyproject.read_text()
-        return "[project.optional-dependencies]" in content or '[tool.poetry.dev-dependencies]' in content
-    except Exception:
-        return False
-
-
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Ensure project venv is up to date")
     parser.add_argument("--repo-root", default=".", help="Path to repo root")
     parser.add_argument("--venv", default=".venv", help="Venv directory name/path")
@@ -127,10 +195,26 @@ def main():
     parser.add_argument("--json", dest="json_out", action="store_true", help="JSON output")
     args = parser.parse_args()
 
+    # --json implies --quiet, progress goes to stderr
+    if args.json_out:
+        args.quiet = True
+
     repo_root = Path(args.repo_root).resolve()
     venv_path = Path(args.venv) if Path(args.venv).is_absolute() else repo_root / args.venv
 
-    updated = ensure_venv(repo_root, venv_path, args.quiet)
+    lock_path = venv_path.parent / (venv_path.name + ".lock")
+
+    try:
+        with _lock(lock_path):
+            updated = ensure_venv(
+                repo_root,
+                venv_path,
+                args.quiet,
+                stderr_progress=args.json_out,
+            )
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
 
     if args.json_out:
         print(json.dumps({
