@@ -2,7 +2,7 @@
 
 Fabric je deterministický lifecycle framework pro LLM‑driven development. Poskytuje agentovi strukturovaný stavový automat, jasné kontrakty mezi kroky a nástroje pro mechanickou práci (IO, patchování, logování), aby se LLM mohl soustředit na přemýšlení, návrh a generování řešení. Framework je přenositelný přes adresář skills/ a vytváří si vlastní runtime workspace.
 
-## Preflight (lokálně)
+## Preflight
 - Spust: `Načti a proveď skills/fabric-init/SKILL.md`
 
 

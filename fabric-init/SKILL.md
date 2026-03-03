@@ -42,6 +42,12 @@ python skills/fabric-init/tools/fabric.py bootstrap --create-vision-stub --out-j
 python skills/fabric-init/tools/validate_fabric.py --workspace
 ```
 
+2.1) Vygeneruj governance indexy (deterministicky):
+
+```bash
+python skills/fabric-init/tools/fabric.py governance-index
+```
+
 3) Vygeneruj krátký init report:
 - přečti `{WORK_ROOT}/reports/bootstrap-{YYYY-MM-DD}.json`
 - zapiš `{WORK_ROOT}/reports/init-{YYYY-MM-DD}.md` (co bylo vytvořeno, co chybí, co je risk)
@@ -90,11 +96,9 @@ B) **Node.js (`package.json`)**
 - pokud `scripts.format:check` nebo `scripts.format-check` existuje → `COMMANDS.format_check = "<pm> run <script>"`
 
 C) **Python**
-- pokud existuje `pyproject.toml` nebo převaha `*.py`:
-  - `COMMANDS.test = "python skills/fabric-init/tools/ensure_venv.py && .venv/bin/pytest"`
-  - (ensure_venv zajistí venv před každým testem — lazy, pouze při změně deps)
-- pokud v `pyproject.toml` najdeš `ruff` → `COMMANDS.lint = ".venv/bin/ruff check ."` a `COMMANDS.format_check = ".venv/bin/ruff format --check ."`
-- jinak pokud najdeš `black` → `COMMANDS.format_check = ".venv/bin/black --check ."`
+- pokud existuje `pyproject.toml` nebo převaha `*.py` → `COMMANDS.test = "python -m pytest"`
+- pokud v `pyproject.toml` najdeš `ruff` → `COMMANDS.lint = "python -m ruff check ."` a `COMMANDS.format_check = "python -m ruff format --check ."`
+- jinak pokud najdeš `black` → `COMMANDS.format_check = "python -m black --check ."`
 
 D) **Go / Rust (pokud detekováno)**
 - `go.mod` → `COMMANDS.test = "go test ./..."` a `COMMANDS.format_check = "test -z \"$(gofmt -l .)\""`
@@ -108,26 +112,6 @@ Pokud jsi něco autodetekoval nebo vypnul:
 - vytvoř `{WORK_ROOT}/reports/config-commands-{YYYY-MM-DD}.md` (co bylo `TBD`, co bylo nastaveno, confidence, proč)
 - vytvoř intake item `{WORK_ROOT}/intake/config-commands-autodetected.md` (aby to bylo auditovatelné / přezkoumatelné)
 
-
-
-## 0.2) Ensure venv (Python projekty)
-
-Pokud projekt je Python (detekováno ,  nebo převaha ):
-
-
-
-**Logika :**
--  neexistuje → vytvoří + nainstaluje deps
-- / změněn (hash) → pip install update
-- Beze změny → skip (< 100ms)
-- Hash uložen v 
-
-**Kdy volat:**
-- Při fabric-init bootstrapu (jednou)
-- Volá se automaticky před každým testem přes COMMANDS.test (viz 0.1 C)
-- Při fabric-check před quality gates
-
-**Výsledek:** .venv/ vždy aktuální — agent může přidat závislost do pyproject.toml a testy poběží bez manuálního zásahu.
 
 ## 1) Konfigurace (config.md) — bootstrap a kontrola (povinné)
 
@@ -165,13 +149,14 @@ mkdir -p {WORK_ROOT}/backlog/done
 mkdir -p {WORK_ROOT}/intake
 mkdir -p {WORK_ROOT}/intake/done
 mkdir -p {WORK_ROOT}/intake/rejected
-mkdir -p {WORK_ROOT}/decisions        # Architecture Decision Records (ADR)
-mkdir -p {WORK_ROOT}/specs            # Technické specifikace a kontrakty
 mkdir -p {WORK_ROOT}/sprints
 mkdir -p {WORK_ROOT}/reports
 mkdir -p {WORK_ROOT}/logs
 mkdir -p {WORK_ROOT}/analyses
 mkdir -p {WORK_ROOT}/templates
+mkdir -p {WORK_ROOT}/decisions
+mkdir -p {WORK_ROOT}/specs
+mkdir -p {WORK_ROOT}/reviews
 
 mkdir -p {VISIONS_ROOT}             # Sub-vize (rozšíření core vision.md)
 
@@ -203,7 +188,7 @@ Požadované soubory ber z `{WORK_ROOT}/config.md` → YAML klíč `TEMPLATES_RE
 
 1) Načti `TEMPLATES_REQUIRED` (list názvů souborů). Pokud chybí, použij default list:
    - `adr.md`, `audit-report.md`, `close-report.md`, `epic.md`, `intake.md`, `migration-report.md`,
-     `review-summary.md`, `sprint-plan.md`, `state.md`, `status-report.md`, `story.md`, `task.md`, `report.md`
+     `review-summary.md`, `sprint-plan.md`, `state.md`, `status-report.md`, `spec.md`, `story.md`, `task.md`, `report.md`
 2) Ověř existenci **source-of-truth** šablon v `{CANON_TEMPLATES_ROOT}`:
    - Pro každý `t` ověř existenci `{CANON_TEMPLATES_ROOT}/{t}`.
    - Pokud některá chybí:
@@ -288,46 +273,6 @@ Pokud neexistuje:
 
 ---
 
-## 5.5) Decisions & Specs indexy (idempotentně)
-
-`decisions/` a `specs/` jsou **first-class citizens** vedle `vision.md` a `backlog.md`. Každý skill je čte jako architektonická omezení a kontrakty.
-
-### decisions/INDEX.md
-
-Pokud `{WORK_ROOT}/decisions/` obsahuje `*.md` soubory (mimo INDEX.md):
-- přegeneruj `{WORK_ROOT}/decisions/INDEX.md` z frontmatter/hlaviček:
-
-```markdown
-# Decisions (ADR) Index
-
-| ID | Title | Status | Date |
-|----|-------|--------|------|
-```
-
-Pokud `{WORK_ROOT}/decisions/` je prázdný:
-- vytvoř prázdný INDEX.md s hlavičkou a poznámkou:
-  `> Žádná rozhodnutí zatím nebyla zaznamenána. Decisions vytváří fabric-architect.`
-
-### specs/INDEX.md
-
-Pokud `{WORK_ROOT}/specs/` obsahuje `*.md` soubory (mimo INDEX.md):
-- přegeneruj `{WORK_ROOT}/specs/INDEX.md` z frontmatter/hlaviček:
-
-```markdown
-# Specs Index
-
-| Soubor | Title | Status | Date |
-|--------|-------|--------|------|
-```
-
-Pokud `{WORK_ROOT}/specs/` je prázdný:
-- vytvoř prázdný INDEX.md s hlavičkou a poznámkou:
-  `> Žádné specifikace zatím nebyly vytvořeny. Specs vytváří fabric-analyze a fabric-architect.`
-
-> **Poznámka:** Indexy jsou convenience pro rychlý přehled. Skills čtou `decisions/*.md` a `specs/*.md` přímo — celé soubory, ne jen index.
-
----
-
 ## 6) Backlog index (backlog.md)
 
 Pokud `{WORK_ROOT}/backlog.md` neexistuje, vytvoř:
@@ -362,8 +307,6 @@ Po initu musí existovat:
 - `{WORK_ROOT}/backlog.md`
 - `{WORK_ROOT}/backlog/`
 - `{WORK_ROOT}/intake/`
-- `{WORK_ROOT}/decisions/` + `decisions/INDEX.md`
-- `{WORK_ROOT}/specs/` + `specs/INDEX.md`
 - `{WORK_ROOT}/reports/`
 - `{WORK_ROOT}/sprints/`
 - `{WORK_ROOT}/analyses/`

@@ -29,6 +29,9 @@ DOCS_ROOT: docs/                        # Dokumentace
 CONFIG_ROOT: config/                    # Runtime konfigurace projektu (mimo Fabric workspace, pokud existuje)
 ANALYSES_ROOT: fabric/analyses/         # Výstupy analýz (task/solution design) – musí existovat
 VISIONS_ROOT: fabric/visions/           # Sub-vize a rozšíření core vision.md
+DECISIONS_ROOT: fabric/decisions/       # ADR / governance decisions (workspace)
+SPECS_ROOT: fabric/specs/               # Technical specs (workspace)
+REVIEWS_ROOT: fabric/reviews/           # Curated human/AI reviews (workspace)
 TEMPLATES_ROOT: fabric/templates/       # Runtime šablony (workspace; vytváří bootstrap pokud chybí)
 LOGS_ROOT: fabric/logs/                 # Protokol + debug (jsonl + md)
 
@@ -57,11 +60,16 @@ SCHEMA:
   sprint_plan: fabric.sprint_plan.v1
   state: fabric.state.v1
   reports: fabric.report.v1
+  adr: fabric.adr.v1
+  spec: fabric.spec.v1
 
 ENUMS:
   statuses: [IDEA, DESIGN, READY, IN_PROGRESS, IN_REVIEW, BLOCKED, DONE]
   tiers: [T0, T1, T2, T3]
   efforts: [XS, S, M, L, XL, TBD]
+
+  adr_statuses: [proposed, accepted, deprecated, superseded, rejected]
+  spec_statuses: [draft, active, deprecated, superseded]
 
   # Typy backlog položek v {WORK_ROOT}/backlog/
   types: [Initiative, Epic, Story, Task, Bug, Chore, Spike]
@@ -80,6 +88,7 @@ TEMPLATES_REQUIRED:
   - sprint-plan.md
   - state.md
   - status-report.md
+  - spec.md
   - story.md
   - task.md
   - report.md
@@ -125,6 +134,14 @@ QUALITY:
   # strict = lint/format musí být nakonfigurované a běžet (nesmí být "" ani TBD).
   mode: bootstrap  # bootstrap | strict
 
+GOVERNANCE:
+  # Governance thresholds used by fabric-check / deterministic tooling.
+  decisions:
+    stale_proposed_days: 14
+  specs:
+    stale_draft_days: 30
+  reviews:
+    enabled: true
 
 SAFETY:
   # Hard safety rules that the agent must never violate.

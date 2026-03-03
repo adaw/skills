@@ -1,197 +1,170 @@
 ---
 name: fabric-analyze
-description: "Deep pre-implementation analysis for sprint targets. Produces per-task analysis docs in {ANALYSES_ROOT}/, decomposes Epics/Stories into concrete Tasks, updates backlog items to READY when specification is sufficient, and updates the sprint plan Task Queue (authoritative order for WIP=1 implementation)."
+description: "Convert Sprint Targets into Task Queue + per-task analyses with explicit governance constraints."
 ---
 
-# ANALYZE — Analýza + rozpad na Task Queue
+# fabric-analyze
 
-## Účel
+> **Úkol:** Převést `Sprint Targets` → **Task Queue** tak, aby implementace byla deterministická, kontrolovatelná a v souladu s governance (decisions/specs).
 
-Před implementací musíme mít:
-- jasné acceptance criteria,
-- návrh řešení (API/arch, rizika),
-- plán testů,
-- konkrétní implementační frontu (`Task Queue`) seřazenou pro WIP=1.
+## Cíl
 
-## Protokol (povinné)
+- Naplnit `Task Queue` tak, aby na něj šlo navázat `fabric-implement` bez dodatečných otázek.
+- Pro každý task vytvořit krátkou **per-task analýzu** v `{ANALYSES_ROOT}/`.
+- Explicitně uvést **Constraints** (které ADR/spec ovlivňují task).
+- Když chybí informace → vytvořit intake item (clarification / blocker) místo vymýšlení.
 
-Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
+## Vstupy
 
-- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-analyze" --event start`
-- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-analyze" --event end --status OK --report "{WORK_ROOT}/reports/analyze-sprint-{N}-{YYYY-MM-DD}.md"`
-
-Pokud skončíš **STOP** nebo narazíš na CRITICAL:
-- loguj `--event error --status ERROR` a dej krátké `--message` (1 věta).
-
-
-`fabric-analyze` je **most** mezi „co chceme“ (Sprint Targets) a „co přesně budeme dělat“ (Task Queue).
-
----
-
-## Vstupy (povinné)
-
-1. `{WORK_ROOT}/config.md`
-2. `{WORK_ROOT}/state.md` (sprint N)
-3. `{WORK_ROOT}/sprints/sprint-{N}.md` (Sprint Targets + Task Queue)
-4. `{WORK_ROOT}/backlog/{id}.md` pro všechny targety
-5. `{WORK_ROOT}/decisions/*.md` (architektonická omezení — design MUSÍ respektovat accepted decisions)
-6. `{WORK_ROOT}/specs/*.md` (technické kontrakty — navržené řešení MUSÍ být kompatibilní se specs)
-7. `{CODE_ROOT}/` (kódový kontext) + `{TEST_ROOT}/` + `{DOCS_ROOT}/`
-
----
+- `{WORK_ROOT}/config.md`
+- `{WORK_ROOT}/state.md`
+- `{WORK_ROOT}/sprints/sprint-{N}.md`
+- `{WORK_ROOT}/backlog.md` + `{WORK_ROOT}/backlog/{id}.md` (všechny targety)
+- `{WORK_ROOT}/decisions/INDEX.md` + `{WORK_ROOT}/decisions/*.md`
+- `{WORK_ROOT}/specs/INDEX.md` + `{WORK_ROOT}/specs/*.md`
+- `{CODE_ROOT}/` + `{TEST_ROOT}/` + `{DOCS_ROOT}/`
 
 ## Výstupy
 
-- Per-task analýzy: `{ANALYSES_ROOT}/{task-id}-analysis.md`
-- Aktualizovaný sprint plán: doplněná sekce `## Task Queue`
-- Volitelně nové backlog items (Tasks) vytvořené z Epic/Story targetů
-- Volitelně nové/aktualizované specs v `{WORK_ROOT}/specs/` (pokud analýza zpřesní technický kontrakt)
-- Report: `{WORK_ROOT}/reports/analyze-sprint-{N}-{YYYY-MM-DD}.md`
-
----
+- Aktualizovaný `{WORK_ROOT}/sprints/sprint-{N}.md` (vyplněný `Task Queue`)
+- `{ANALYSES_ROOT}/{task_id}-analysis.md` pro každý task v Task Queue
+- 0..N intake items v `{WORK_ROOT}/intake/` (clarifications / blockers)
+- `{WORK_ROOT}/reports/analyze-{YYYY-MM-DD}-{run_id}.md` (souhrn)
 
 ## Kanonická pravidla
 
 1. **Task Queue je autoritativní** pro implementaci. Implement/test/review se řídí pouze `Task Queue`.
-2. **Do Task Queue patří pouze:** `Task | Bug | Chore | Spike`.
-3. Pokud je target `Epic/Story`, analyze ho rozpadne na Tasks.
-4. Pokud target nebo task nemá dost specifikace → vytvoř intake item „clarification“ a nech status `DESIGN`.
-5. Pokud je specifikace dostatečná → nastav task status `READY`.
+2. **Každá per-task analýza musí mít sekci `Constraints`** (i kdyby byla `None`).
+3. **Do Task Queue patří pouze:** `Task | Bug | Chore | Spike`.
+4. `Epic/Story` target se vždy rozpadne na konkrétní Tasks.
+5. Když není dost specifikace → vytvoř intake item (clarification) a nech task status `DESIGN`.
+6. Když je specifikace dostatečná → nastav task status `READY`.
 
+## Formát per-task analýzy (povinný)
+
+Ulož do `{ANALYSES_ROOT}/{task_id}-analysis.md`:
+
+```md
 ---
+schema: fabric.report.v1
+kind: analysis
+run_id: "{run_id}"
+created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
+task_id: "{task_id}"
+source_target: "{target_id}"
+status: "DRAFT"  # DRAFT | READY
+---
+
+# {task_id} — Analysis
+
+## Goal
+{WHAT_SUCCESS_LOOKS_LIKE}
+
+## Constraints
+> Explicitně uveď, které **accepted ADR** a **active specs** ovlivňují tento task.
+
+- Decisions (ADR): {ADR_IDS_OR_NONE}
+- Specs: {SPEC_IDS_OR_NONE}
+- Notes: {HOW_THEY_CONSTRAIN}
+
+## Design
+- Approach: {APPROACH}
+- Files likely touched: {FILES}
+- Risks: {RISKS}
+
+## Plan
+1. {STEP_1}
+2. {STEP_2}
+3. {STEP_3}
+
+## Tests
+- Baseline: {BASELINE_COMMANDS}
+- New tests: {NEW_TESTS}
+- Evidence artifacts: {WHAT_TO_SAVE_IN_REPORTS}
+
+## Acceptance criteria mapping
+- AC1: {MAP_TO_REQUIREMENT}
+- AC2: {MAP_TO_REQUIREMENT}
+
+## Open questions
+- {QUESTION_1}
+- {QUESTION_2}
+```
 
 ## Postup
 
-### 1) Načti config + sprint plán
+### 0) Deterministická příprava (rychlá)
 
-1. Z configu si vytáhni `SPRINT.max_tasks` a cesty v YAML sekci.
-2. Ze `state.md` vezmi sprint `N`.
-3. Načti `sprints/sprint-{N}.md`:
-   - `Sprint Targets` tabulka = vstup
-   - `Task Queue` tabulka = buď prázdná, nebo částečně vyplněná
-
-### 2) Projdi Sprint Targets a vytvoř „worklist“
-
-Pro každý target ID:
-- načti `{WORK_ROOT}/backlog/{id}.md`
-- extrahuj: `type`, `status`, `title`, `tier`, `effort`, `prio`, `depends_on/blocked_by`
-- z těla extrahuj AC checkboxy (sekce „Acceptance Criteria“)
-
-Rozděl na:
-- **A) už je Task-like** (`Task/Bug/Chore/Spike`)
-- **B) je container** (`Epic/Story`) → bude rozpad
-
-### 3) Container rozpad (Epic/Story → Tasks)
-
-Pro každý Epic/Story:
-1. Vytvoř 2–8 konkrétních Tasks (dle rozsahu) tak, aby:
-   - každý task má jasnou hodnotu + AC
-   - tasks jsou malé (ideálně do 1–3 hodin agentního času)
-2. ID generuj deterministicky:
-   - `task-{parent_id}-{short_slug}`
-   - pokud kolize → přidej `-2`, `-3`, ...
-3. Každý nově vytvořený task ulož do `{WORK_ROOT}/backlog/{task-id}.md` podle `{WORK_ROOT}/templates/task.md`:
-   - `source: intake` (nebo `source: generate` pokud to vzniklo čistě generativně)
-   - `tier` zděď z parenta
-   - `effort` = `TBD` pokud si nejsi jistý, jinak XS/S/M/L
-   - `prio` prozatím zděď (nebo 0); PRIO recalculuje `fabric-prio` v dalším cyklu, pokud je potřeba
-
-4. Parent Epic/Story **nezavírej**. Nech ho jako target/kontext.
-
-> Pokud Epic/Story nemá dost informací pro rozpad → vytvoř intake item `clarification` místo tasks.
-
-### 4) Per-task analýza (pro každý task ve výsledné worklist)
-
-Pro každý task, který má jít do Task Queue:
-
-Vytvoř `{ANALYSES_ROOT}/{task-id}-analysis.md`:
-
-```markdown
-# Analysis — {task-id} ({YYYY-MM-DD})
-
-## Context
-- Task: {title}
-- Source: sprint-{N}
-- Goal: {sprint_goal}
-
-## Constraints (decisions & specs)
-- Relevant decisions: {seznam D-ID a jejich dopad na tento task, nebo "žádné"}
-- Relevant specs: {seznam spec souborů a jak ovlivňují řešení, nebo "žádné"}
-- Porušení: {pokud navržený approach porušuje decision/spec, explicitně uveď a navrhni řešení}
-
-## Acceptance Criteria (restate)
-- ...
-
-## Design / Approach
-- Chosen approach:
-- Alternatives considered:
-- Key tradeoffs:
-
-## Affected files (expected)
-- {CODE_ROOT}/...
-- {TEST_ROOT}/...
-- {DOCS_ROOT}/...
-
-## Test plan
-- Unit:
-- Integration:
-- Edge cases:
-- Regression scope:
-
-## Risks & mitigations
-- Risk:
-  - Mitigation:
-
-## Implementation plan (WIP-friendly)
-1. ...
-2. ...
-
-## Open questions
-- ...
+```bash
+python skills/fabric-init/tools/fabric.py backlog-index
+python skills/fabric-init/tools/fabric.py governance-index
 ```
 
-### 5) Nastav READY vs DESIGN
+> Tohle je strojová práce: srovná indexy a odhalí strukturální drift.
 
-Pro každý task:
-- Pokud má ≥ 3 jasná AC a je zřejmé, co upravit/testovat → nastav backlog item `status: READY`
-- Jinak `status: DESIGN` a vytvoř intake item `intake/clarification-{task-id}.md`:
-  - co chybí
-  - 2–5 konkrétních otázek
-  - návrh rozhodnutí
+### 1) Načti sprint plan a targety
 
-> Nezapomeň aktualizovat `updated:` ve frontmatter.
+- Najdi aktivní sprint v `state.md` (`state.active_sprint`) a otevři `sprints/sprint-{N}.md`.
+- Z tabulky `Sprint Targets` vezmi seznam targetů.
+- Pokud `Task Queue` už existuje a není prázdná:
+  - doplň jen chybějící tasks
+  - nemaž ručně vložené změny, pokud nejsou zjevně špatně.
 
-### 6) Aktualizuj Task Queue ve sprint plánu
+### 2) Pro každý target vytvoř návrh tasks
 
-1. Vezmi všechny tasky vybrané pro sprint.
-2. Seřaď:
-   - nejdřív tasks, které odemykají ostatní (dependency order)
-   - potom zbytek podle PRIO
-3. Ořízni na `SPRINT.max_tasks`.
-4. Přepiš sekci `## Task Queue` tabulkou:
+Pro každý target:
 
-| Order | ID | Title | Type | Effort | Status | Depends on |
-|------:|----|-------|------|--------|--------|------------|
+1) Otevři backlog item `{WORK_ROOT}/backlog/{target}.md`
+2) Urči typ (Epic/Story/Task/Bug/Chore/Spike)
+3) Pokud Epic/Story:
+   - rozpadni na 3–12 tasks (jasně pojmenované, testovatelné)
+4) Pokud Task/Bug/Chore/Spike:
+   - vytvoř 1 task (můžeš ho upřesnit na implementovatelný)
 
-- `Order` je autoritativní pořadí pro implement.
-- Pokud je nějaký task `DESIGN`/`BLOCKED`, může být v queue, ale implement se zastaví a vytvoří intake.
+Každý task musí mít:
+- `ID` (např. `{target}-T01`, nebo nově `TASK-XXXX` — buď konzistentní v rámci sprintu)
+- `Type` (Task/Bug/Chore/Spike)
+- `Status` (DESIGN/READY)
+- `Description` (1–2 věty max)
+- `Estimate` (S/M/L; heuristika)
 
-### 7) Vytvoř analyze report
+### 3) Governance constraints per task
 
-Vytvoř `{WORK_ROOT}/reports/analyze-sprint-{N}-{YYYY-MM-DD}.md`:
-- kolik targetů bylo rozpadnuto
-- kolik tasks vzniklo
-- kolik tasks je READY vs DESIGN vs BLOCKED
-- rizika a „first task to implement“ (Order=1)
+- Z `decisions/INDEX.md` a `specs/INDEX.md` vyber relevantní kontrakty.
+- Pokud backlog item explicitně odkazuje na ADR/SPEC, použij je.
+- Pokud je konflikt:
+  - nevymýšlej workaround
+  - vytvoř intake item `intake/governance-clarification-{task_id}.md`
+  - v tasku nastav `Status = DESIGN`
 
----
+### 4) Zapiš per-task analýzy
 
-## Fail conditions (musí vytvořit intake + report)
+- Pro každý task vytvoř `{ANALYSES_ROOT}/{task_id}-analysis.md` podle template výše.
+- Pokud má task otevřené otázky → ponech `status: DRAFT` a `Task Queue Status = DESIGN`.
+- Pokud je vše jasné → `status: READY` a `Task Queue Status = READY`.
 
-- Sprint plán nemá `Sprint Targets` tabulku
-- Target ID nemá odpovídající backlog soubor
-- Nelze vytvořit `Task Queue` (např. žádné tasks a zároveň chybí informace pro rozpad)
+### 5) Aktualizuj sprint plan deterministicky
 
-V těchto případech:
-- vytvoř intake item `intake/analyze-blocked-sprint-{N}.md`
-- reportuj CRITICAL v analyze reportu
+Preferuj `plan-apply` (ne ruční edit), aby byl diff čistý:
+
+```bash
+python skills/fabric-init/tools/fabric.py plan-apply --plan "{WORK_ROOT}/sprints/sprint-{N}.md" --patch "{WORK_ROOT}/plans/analyze-{run_id}.yaml"
+```
+
+- Pokud `plan-apply` není praktické, uprav sprint plan ručně, ale zachovej tabulku strukturu.
+
+### 6) Vygeneruj analyze report
+
+- Shrň:
+  - kolik targetů
+  - kolik tasks (READY vs DESIGN)
+  - jaké ADR/SPEC constraints byly použity
+  - jaké clarifications jsi vytvořil do intake
+
+Ulož do `{WORK_ROOT}/reports/analyze-{YYYY-MM-DD}-{run_id}.md` (schema `fabric.report.v1`).
+
+## Self-check
+
+- [ ] Každý task má per-task analýzu a má sekci `Constraints`.
+- [ ] Každý task v Task Queue je implementovatelný bez dalších otázek, nebo je označen `DESIGN` a má intake item.
+- [ ] Governance indexy existují a jsou čitelné (`decisions/INDEX.md`, `specs/INDEX.md`).

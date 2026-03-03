@@ -1,3 +1,8 @@
+---
+schema: fabric.state.v1
+kind: state
+---
+
 # State — Fabric-Loop Orchestrator
 
 > Šablona pro `{WORK_ROOT}/state.md`.

@@ -34,8 +34,8 @@ Výstup musí být:
 
 - `{WORK_ROOT}/config.md` (CODE_ROOT, TEST_ROOT, DOCS_ROOT)
 - `{WORK_ROOT}/vision.md` (pro alignment)
-- `{WORK_ROOT}/decisions/*.md` (existující architektonická rozhodnutí — respektuj je, nenavrhuj to co je už rozhodnuto)
-- `{WORK_ROOT}/specs/*.md` (technické kontrakty — ověř, zda kód odpovídá)
+- `{WORK_ROOT}/decisions/` + `decisions/INDEX.md` (ADR / governance)
+- `{WORK_ROOT}/specs/` + `specs/INDEX.md` (technical specs)
 - `{CODE_ROOT}/` (kód)
 - `{TEST_ROOT}/` (testy)
 - `{DOCS_ROOT}/` (docs)
@@ -45,14 +45,13 @@ Výstup musí být:
 ## Výstupy
 
 - `{WORK_ROOT}/reports/architect-{YYYY-MM-DD}.md`
+- (volitelně) 0..N nových governance artefaktů:
+  - `decisions/ADR-*.md` (status: proposed)
+  - `specs/SPEC-*.md` (status: draft)
+  - po vytvoření spusť: `python skills/fabric-init/tools/fabric.py governance-index`
 - 0..N intake items v `{WORK_ROOT}/intake/`:
   - `source: arch`
   - podle `{WORK_ROOT}/templates/intake.md`
-- 0..N nových decisions v `{WORK_ROOT}/decisions/`:
-  - dle `{WORK_ROOT}/templates/adr.md`
-  - `status: proposed` (přijato bude po review)
-- 0..N nových/aktualizovaných specs v `{WORK_ROOT}/specs/`:
-  - pokud audit odhalí nezdokumentovaný kontrakt → vytvoř spec
 
 ---
 
@@ -61,8 +60,7 @@ Výstup musí být:
 ### 1) Context scan
 
 - přečti `vision.md` (pillars/goals/principles)
-- přečti `{WORK_ROOT}/decisions/*.md` (existující ADR — respektuj accepted decisions, ověř zda kód dodržuje)
-- přečti `{WORK_ROOT}/specs/*.md` (technické kontrakty — ověř zda kód odpovídá specifikacím)
+- přečti `decisions/INDEX.md` a `specs/INDEX.md` (pokud existují) — chápej to jako **kontrakt**
 - proveď rychlý scan repo struktury:
   - entrypoints, core modules, dependency boundaries
   - test layout
@@ -76,7 +74,25 @@ Do reportu uveď:
 - dependency graph (high-level)
 - build/test pipeline snapshot (zhruba)
 
-### 3) Najdi hotspots
+### 3) Governance audit (ADR/specs)
+
+Zkontroluj:
+- zda existují klíčové ADR pro kritické volby (bezpečnost, multi-tenant, data model, integrace, P2P/memory atd.)
+- zda existují specs pro části, kde bez toho vzniká chaos (API, storage, scheduler, protocol/logging)
+- drift: kde kód očividně odporuje accepted ADR/spec (pokud existují)
+- „mrtvé“ proposed ADR nebo draft specs (stárnou a nikdo je neřeší)
+
+Pokud najdeš zásadní chybějící rozhodnutí/spec:
+- navrhni nový soubor:
+  - `decisions/ADR-XXXX-<slug>.md` (status: proposed)
+  - `specs/SPEC-XXXX-<slug>.md` (status: draft)
+- použij runtime template:
+  - `{TEMPLATES_ROOT}/adr.md`
+  - `{TEMPLATES_ROOT}/spec.md`
+- v těle uveď: Context, Decision/Spec, Consequences, Evidence, Alternatives.
+- po vytvoření spusť: `python skills/fabric-init/tools/fabric.py governance-index`
+
+### 4) Najdi hotspots
 
 Hledej:
 - velké soubory / vysoká komplexita
@@ -86,7 +102,7 @@ Hledej:
 - nejasné vlastnictví configu
 - security footguns (secrets, auth, input parsing)
 
-### 4) Z toho vyrob actionable findings
+### 5) Z toho vyrob actionable findings
 
 V reportu udělej tabulku:
 
@@ -95,7 +111,7 @@ V reportu udělej tabulku:
 
 Severity: CRITICAL/HIGH/MEDIUM/LOW
 
-### 5) Vytvoř intake items (top 3–7)
+### 6) Vytvoř intake items (top 3–7)
 
 Pro každé finding s CRITICAL/HIGH (a vybrané MEDIUM):
 - vytvoř intake item soubor dle `{WORK_ROOT}/templates/intake.md`:
@@ -109,30 +125,9 @@ Pro každé finding s CRITICAL/HIGH (a vybrané MEDIUM):
   - riziko (proč to bolí)
   - doporučenou akci (konkrétně)
 
-### 6) Vytvoř ADR pro klíčová rozhodnutí
-
-Pokud audit odhalí architektonické rozhodnutí, které:
-- ovlivňuje víc než 1 modul/komponentu,
-- definuje konvenci nebo kontrakt,
-- vybírá z více alternativ,
-
-→ vytvoř ADR v `{WORK_ROOT}/decisions/` dle `{WORK_ROOT}/templates/adr.md`:
-- ID: `D{NNNN}` (inkrementální, vyšší než existující)
-- `status: proposed`
-- v sekci Kontext referuj finding z reportu
-- v sekci Alternativy popiš zvažované přístupy
-
-Pokud audit odhalí nezdokumentovaný implicitní kontrakt v kódu (API formát, schéma, protokol):
-→ vytvoř spec v `{WORK_ROOT}/specs/` s popisem kontraktu a `Status: Draft`
-
-> **Pravidlo:** Decisions se NIKDY nevytváří jako `accepted` — vždy `proposed`. Přijímá je review nebo člověk.
-
 ---
 
 ## Self-check
 
 - report existuje
 - každé CRITICAL/HIGH finding má buď intake item, nebo explicitní zdůvodnění proč ne
-- pokud vznikly nové decisions → jsou v `{WORK_ROOT}/decisions/` se `status: proposed`
-- pokud vznikly nové specs → jsou v `{WORK_ROOT}/specs/`
-- existující accepted decisions nebyly porušeny (nebo je v reportu vysvětleno proč)

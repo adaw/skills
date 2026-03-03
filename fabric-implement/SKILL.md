@@ -35,8 +35,8 @@ Povinné:
 - `{WORK_ROOT}/sprints/sprint-{N}.md` (sekce `## Task Queue`)
 - `{WORK_ROOT}/backlog/{id}.md`
 - `{ANALYSES_ROOT}/{id}-analysis.md` (pokud existuje; preferované)
-- `{WORK_ROOT}/decisions/*.md` (architektonická omezení — implementace NESMÍ porušovat accepted decisions)
-- `{WORK_ROOT}/specs/*.md` (technické kontrakty — kód MUSÍ odpovídat specifikacím)
+- `{WORK_ROOT}/decisions/` + `decisions/INDEX.md`
+- `{WORK_ROOT}/specs/` + `specs/INDEX.md`
 
 Volitelné:
 - předchozí `reports/review-*.md` (pokud jde o rework)
@@ -165,13 +165,10 @@ git checkout -b {branch_name} || git checkout {branch_name}
 
 Pokud working tree není čistý → FAIL (nejdřív vyřeš).
 
-### 3) VERIFY-FIRST (pochop problém + constraints)
+### 3) VERIFY-FIRST (pochop problém)
 
 - Přečti `{WORK_ROOT}/backlog/{id}.md` (AC + dotčené soubory)
 - Pokud existuje `{ANALYSES_ROOT}/{id}-analysis.md`, použij ho jako plán.
-- Přečti `{WORK_ROOT}/decisions/*.md` — identifikuj which accepted decisions ovlivňují tento task.
-- Přečti `{WORK_ROOT}/specs/*.md` — identifikuj relevantní specs (API kontrakt, schéma, formáty).
-- Pokud implementace by porušila decision nebo spec → STOP, vytvoř intake item `intake/constraint-violation-{id}.md` a reportuj.
 
 Udělej baseline:
 ```bash
@@ -182,6 +179,20 @@ Pokud baseline selže:
 - nezaváděj nový kód
 - vytvoř intake item `intake/baseline-tests-failing.md` (je to blocker)
 - FAIL
+
+#### 3.1) Governance compliance (VERIFY-FIRST)
+
+- Otevři `{ANALYSES_ROOT}/{id}-analysis.md` a najdi sekci **Constraints**.
+- Pro každé uvedené `ADR-*` a `SPEC-*`:
+  - otevři odpovídající soubor v `{WORK_ROOT}/decisions/` nebo `{WORK_ROOT}/specs/`
+  - explicitně ověř, že plánovaná implementace tyto kontrakty **neporuší**.
+- Pokud task implicitně vyžaduje porušení **accepted ADR** nebo **active spec**:
+  - **STOP** (neimplementuj)
+  - vytvoř intake item `intake/governance-conflict-{id}.md` s důkazy:
+    - proč je konflikt nevyhnutelný
+    - které soubory by musely porušit kontrakt
+    - návrh řešení (např. nová ADR/spec, nebo změna acceptance criteria)
+  - FAIL
 
 ### 4) Implementuj minimální změnu
 
@@ -264,7 +275,5 @@ Před návratem:
 - `COMMANDS.test` PASS
 - backlog item aktualizovaný (branch/status/updated)
 - implement report existuje v `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}.md`
-- žádná accepted decision nebyla porušena
-- implementace odpovídá relevantním specs (API formát, schéma, kontrakty)
 
 Pokud ne → FAIL + vytvoř intake item `intake/implement-selfcheck-failed-{id}.md`.

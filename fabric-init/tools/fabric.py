@@ -97,6 +97,9 @@ DEFAULT_REQUIRED_DIRS = [
     "analyses",
     "templates",
     "visions",
+    "decisions",
+    "specs",
+    "reviews",
 ]
 
 
@@ -240,11 +243,17 @@ def ensure_workspace_skeleton(repo_root: Path, config_path: Optional[Path], crea
     templates_root_rel = paths.get("TEMPLATES_ROOT", f"{work_root_rel.rstrip('/')}/templates/")
     analyses_root_rel = paths.get("ANALYSES_ROOT", f"{work_root_rel.rstrip('/')}/analyses/")
     visions_root_rel = paths.get("VISIONS_ROOT", f"{work_root_rel.rstrip('/')}/visions/")
+    decisions_root_rel = paths.get("DECISIONS_ROOT", f"{work_root_rel.rstrip('/')}/decisions/")
+    specs_root_rel = paths.get("SPECS_ROOT", f"{work_root_rel.rstrip('/')}/specs/")
+    reviews_root_rel = paths.get("REVIEWS_ROOT", f"{work_root_rel.rstrip('/')}/reviews/")
 
     work_root = resolve_rel(repo_root, work_root_rel)
     templates_dir = resolve_rel(repo_root, templates_root_rel)
     analyses_dir = resolve_rel(repo_root, analyses_root_rel)
     visions_dir = resolve_rel(repo_root, visions_root_rel)
+    decisions_dir = resolve_rel(repo_root, decisions_root_rel)
+    specs_dir = resolve_rel(repo_root, specs_root_rel)
+    reviews_dir = resolve_rel(repo_root, reviews_root_rel)
 
     # Create required dirs
     for d in DEFAULT_REQUIRED_DIRS:
@@ -255,6 +264,12 @@ def ensure_workspace_skeleton(repo_root: Path, config_path: Optional[Path], crea
             p = visions_dir
         elif d == "templates":
             p = templates_dir
+        elif d == "decisions":
+            p = decisions_dir
+        elif d == "specs":
+            p = specs_dir
+        elif d == "reviews":
+            p = reviews_dir
         assert p is not None
         if not p.exists():
             ensure_dir(p)
@@ -301,6 +316,14 @@ def ensure_workspace_skeleton(repo_root: Path, config_path: Optional[Path], crea
             encoding="utf-8",
         )
         summary["created_files"].append(str(visions_readme))
+
+
+    # Ensure governance indices (lightweight, deterministic)
+    for title, d in [("Decisions (ADR) Index", decisions_dir), ("Specs Index", specs_dir), ("Reviews Index", reviews_dir)]:
+        idx = d / "INDEX.md"
+        if not idx.exists():
+            idx.write_text(f"# {title}\n\n| ID | Title | Status | Date | File |\n|---|---|---|---|---|\n", encoding="utf-8")
+            summary["created_files"].append(str(idx))
 
     return summary
 
@@ -396,6 +419,126 @@ def generate_backlog_index(work_root: Path, items: List[Dict[str, Any]]) -> str:
     lines.append("")
     return "\n".join(lines)
 
+
+def _first_heading(md: str) -> str:
+    for ln in md.splitlines():
+        s = ln.strip()
+        if s.startswith("#"):
+            # strip leading #'s and whitespace
+            return s.lstrip("#").strip()
+    return ""
+
+
+def _parse_date_yyyy_mm_dd(s: str) -> Optional[datetime]:
+    try:
+        return datetime.strptime(s.strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def parse_governance_items(dir_path: Path) -> List[Dict[str, Any]]:
+    """Parse markdown files in a governance directory (decisions/specs/reviews).
+
+    Deterministic order: filename.
+    Supports both YAML-frontmatter files and plain markdown.
+    """
+    items: List[Dict[str, Any]] = []
+    if not dir_path.exists():
+        return items
+    for p in sorted(dir_path.glob("*.md"), key=lambda x: x.name):
+        if not p.is_file():
+            continue
+        if p.name.upper() == "INDEX.MD":
+            continue
+        txt = read_text(p)
+        fm = parse_frontmatter(txt) or {}
+        item: Dict[str, Any] = {}
+        stem = p.stem
+        item_id = fm.get("id") if isinstance(fm.get("id"), str) else None
+        if not item_id and (stem.startswith("ADR-") or stem.startswith("SPEC-")):
+            item_id = stem
+        if not item_id:
+            item_id = stem
+        item["id"] = item_id
+        title = fm.get("title") if isinstance(fm.get("title"), str) else ""
+        if not title:
+            title = _first_heading(txt)
+        item["title"] = title
+        item["schema"] = fm.get("schema") if isinstance(fm.get("schema"), str) else ""
+        item["status"] = fm.get("status") if isinstance(fm.get("status"), str) else ""
+        item["date"] = fm.get("date") if isinstance(fm.get("date"), str) else ""
+        item["_file"] = p.name
+        items.append(item)
+    return items
+
+
+def generate_governance_index(title: str, items: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    lines.append(f"# {title}\n")
+    lines.append("| ID | Title | Status | Date | File |")
+    lines.append("|---|---|---|---|---|")
+    for it in items:
+        file_name = str(it.get("_file", ""))
+        file_cell = f"[{file_name}]({file_name})" if file_name else ""
+        lines.append(
+            f"| {it.get('id','')} | {str(it.get('title','')).replace('|','/')} | {it.get('status','')} | {it.get('date','')} | {file_cell} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def scan_governance(items: List[Dict[str, Any]], stale_status: str, stale_days: int, allowed_statuses: Optional[List[str]] = None, expected_schema: str = "") -> Dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    by_status: Dict[str, int] = {}
+    stale: List[Dict[str, Any]] = []
+    missing_dates: List[Dict[str, Any]] = []
+    invalid_status: List[Dict[str, Any]] = []
+    invalid_schema: List[Dict[str, Any]] = []
+    seen_ids: Dict[str, int] = {}
+    duplicates: List[Dict[str, Any]] = []
+    for it in items:
+        st = str(it.get("status") or "UNKNOWN").strip() or "UNKNOWN"
+        by_status[st] = by_status.get(st, 0) + 1
+        item_id = str(it.get("id") or "")
+        if item_id:
+            seen_ids[item_id] = seen_ids.get(item_id, 0) + 1
+            if seen_ids[item_id] == 2:
+                duplicates.append({"id": item_id})
+        if allowed_statuses and st not in allowed_statuses and st != "UNKNOWN":
+            invalid_status.append({"id": it.get("id"), "file": it.get("_file"), "status": st})
+        if expected_schema:
+            sch = str(it.get("schema") or "")
+            if sch and sch != expected_schema:
+                invalid_schema.append({"id": it.get("id"), "file": it.get("_file"), "schema": sch})
+        dt = _parse_date_yyyy_mm_dd(str(it.get("date") or "").strip())
+        if not dt:
+            missing_dates.append({"id": it.get("id"), "file": it.get("_file"), "status": st})
+            continue
+        age_days = (now - dt).days
+        if st == stale_status and age_days > stale_days:
+            stale.append({"id": it.get("id"), "file": it.get("_file"), "age_days": age_days, "status": st, "date": it.get("date")})
+    return {
+        "count": len(items),
+        "by_status": by_status,
+        "stale": stale[:200],
+        "missing_dates": missing_dates[:200],
+        "invalid_status": invalid_status[:200],
+        "invalid_schema": invalid_schema[:200],
+        "duplicates": duplicates[:200],
+    }
+
+
+def _cfg_gov_int(cfg: Dict[str, Any], section: str, key: str, default: int) -> int:
+    gov = cfg.get("GOVERNANCE") if isinstance(cfg.get("GOVERNANCE"), dict) else {}
+    if isinstance(gov, dict):
+        sec = gov.get(section)
+        if isinstance(sec, dict):
+            v = sec.get(key)
+            try:
+                return int(v)
+            except Exception:
+                return default
+    return default
 
 def backlog_set(backlog_dir: Path, item_id: str, fields: Dict[str, Any]) -> None:
     path = backlog_dir / f"{item_id}.md"
@@ -1177,6 +1320,128 @@ def cmd_backlog_index(args: argparse.Namespace) -> int:
     idx = generate_backlog_index(work_root, items)
     (work_root / "backlog.md").write_text(idx + "\n", encoding="utf-8")
     print(json.dumps({"written": safe_relpath(work_root / "backlog.md", repo_root), "count": len(items)}, indent=2, ensure_ascii=False))
+    return 0
+
+
+
+def cmd_governance_index(args: argparse.Namespace) -> int:
+    """Regenerate decisions/specs/reviews indices deterministically."""
+    repo_root = find_repo_root(Path(args.repo_root) if args.repo_root else Path.cwd())
+    _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
+    paths = get_paths_block(cfg)
+
+    work_root_rel = paths.get("WORK_ROOT", "fabric/")
+    work_root = resolve_rel(repo_root, work_root_rel)
+
+    decisions_root_rel = paths.get("DECISIONS_ROOT", f"{str(work_root_rel).rstrip('/')}/decisions/")
+    specs_root_rel = paths.get("SPECS_ROOT", f"{str(work_root_rel).rstrip('/')}/specs/")
+    reviews_root_rel = paths.get("REVIEWS_ROOT", f"{str(work_root_rel).rstrip('/')}/reviews/")
+
+    decisions_dir = resolve_rel(repo_root, decisions_root_rel)
+    specs_dir = resolve_rel(repo_root, specs_root_rel)
+    reviews_dir = resolve_rel(repo_root, reviews_root_rel)
+
+    written: List[str] = []
+
+    kind = args.kind or "all"
+    if kind in ("all", "decisions"):
+        items = parse_governance_items(decisions_dir)
+        txt = generate_governance_index("Decisions (ADR) Index", items)
+        out = decisions_dir / "INDEX.md"
+        ensure_dir(out.parent)
+        out.write_text(txt + "\n", encoding="utf-8")
+        written.append(safe_relpath(out, repo_root))
+
+    if kind in ("all", "specs"):
+        items = parse_governance_items(specs_dir)
+        txt = generate_governance_index("Specs Index", items)
+        out = specs_dir / "INDEX.md"
+        ensure_dir(out.parent)
+        out.write_text(txt + "\n", encoding="utf-8")
+        written.append(safe_relpath(out, repo_root))
+
+    if kind in ("all", "reviews"):
+        items = parse_governance_items(reviews_dir)
+        txt = generate_governance_index("Reviews Index", items)
+        out = reviews_dir / "INDEX.md"
+        ensure_dir(out.parent)
+        out.write_text(txt + "\n", encoding="utf-8")
+        written.append(safe_relpath(out, repo_root))
+
+    print(json.dumps({"schema": "fabric.governance_index.v1", "written": written}, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_governance_scan(args: argparse.Namespace) -> int:
+    """Scan decisions/specs for stale items and missing metadata."""
+    repo_root = find_repo_root(Path(args.repo_root) if args.repo_root else Path.cwd())
+    _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
+    paths = get_paths_block(cfg)
+
+    work_root_rel = paths.get("WORK_ROOT", "fabric/")
+    decisions_root_rel = paths.get("DECISIONS_ROOT", f"{str(work_root_rel).rstrip('/')}/decisions/")
+    specs_root_rel = paths.get("SPECS_ROOT", f"{str(work_root_rel).rstrip('/')}/specs/")
+    reviews_root_rel = paths.get("REVIEWS_ROOT", f"{str(work_root_rel).rstrip('/')}/reviews/")
+
+    decisions_dir = resolve_rel(repo_root, decisions_root_rel)
+    specs_dir = resolve_rel(repo_root, specs_root_rel)
+    reviews_dir = resolve_rel(repo_root, reviews_root_rel)
+
+    dec_items = parse_governance_items(decisions_dir)
+    spec_items = parse_governance_items(specs_dir)
+    rev_items = parse_governance_items(reviews_dir)
+
+    stale_proposed_days = _cfg_gov_int(cfg, "decisions", "stale_proposed_days", 14)
+    stale_draft_days = _cfg_gov_int(cfg, "specs", "stale_draft_days", 30)
+
+    out = {
+        "schema": "fabric.governance_scan.v1",
+        "created_at": now_iso_utc(),
+        "decisions": scan_governance(
+            dec_items,
+            stale_status="proposed",
+            stale_days=stale_proposed_days,
+            allowed_statuses=(cfg.get("ENUMS", {}) or {}).get("adr_statuses"),
+            expected_schema=((cfg.get("SCHEMA", {}) or {}).get("adr") or ""),
+        ),
+        "specs": scan_governance(
+            spec_items,
+            stale_status="draft",
+            stale_days=stale_draft_days,
+            allowed_statuses=(cfg.get("ENUMS", {}) or {}).get("spec_statuses"),
+            expected_schema=((cfg.get("SCHEMA", {}) or {}).get("spec") or ""),
+        ),
+        "reviews": {"count": len(rev_items)},
+    }
+    if args.json_out:
+        out_p = (repo_root / args.json_out).resolve()
+        write_json(out_p, out)
+        print(str(out_p))
+    else:
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_review_publish(args: argparse.Namespace) -> int:
+    """Publish a report into reviews/ for easier human/agent consumption."""
+    repo_root = find_repo_root(Path(args.repo_root) if args.repo_root else Path.cwd())
+    _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
+    paths = get_paths_block(cfg)
+    work_root_rel = paths.get("WORK_ROOT", "fabric/")
+    reviews_root_rel = paths.get("REVIEWS_ROOT", f"{str(work_root_rel).rstrip('/')}/reviews/")
+    reviews_dir = resolve_rel(repo_root, reviews_root_rel)
+
+    src = (repo_root / args.src).resolve()
+    if not src.exists():
+        raise FileNotFoundError(f"review-publish: src not found: {src}")
+    ensure_dir(reviews_dir)
+    dest = reviews_dir / src.name
+    shutil.copy2(src, dest)
+    # update index deterministically
+    items = parse_governance_items(reviews_dir)
+    idx = generate_governance_index("Reviews Index", items)
+    (reviews_dir / "INDEX.md").write_text(idx + "\n", encoding="utf-8")
+    print(json.dumps({"schema": "fabric.review_publish.v1", "src": safe_relpath(src, repo_root), "dest": safe_relpath(dest, repo_root)}, indent=2, ensure_ascii=False))
     return 0
 
 
@@ -2932,6 +3197,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("backlog-index", help="Regenerate backlog.md index from items.")
     p.set_defaults(func=cmd_backlog_index)
+
+    p = sub.add_parser("governance-index", help="Regenerate decisions/specs/reviews INDEX.md deterministically.")
+    p.add_argument("--kind", default="all", choices=["all", "decisions", "specs", "reviews"], help="Which index to regenerate.")
+    p.set_defaults(func=cmd_governance_index)
+
+    p = sub.add_parser("governance-scan", help="Scan decisions/specs for stale items and missing metadata.")
+    p.add_argument("--json-out", default="", help="Optional path to write JSON output.")
+    p.set_defaults(func=cmd_governance_scan)
+
+    p = sub.add_parser("review-publish", help="Copy a report into reviews/ and refresh reviews/INDEX.md.")
+    p.add_argument("--src", required=True, help="Source report path relative to repo root (e.g., fabric/reports/review-...md)")
+    p.set_defaults(func=cmd_review_publish)
+
 
     p = sub.add_parser("backlog-set", help="Patch frontmatter fields for a backlog item (JSON dict).")
     p.add_argument("--id", required=True)

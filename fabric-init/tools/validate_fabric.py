@@ -53,6 +53,7 @@ REQUIRED_SKILLS = [
 
 DEFAULT_REQUIRED_TEMPLATES = [
     "adr.md",
+    "spec.md",
     "audit-report.md",
     "close-report.md",
     "epic.md",
@@ -201,6 +202,10 @@ def validate_config(config_path: Path, runnable: bool) -> Tuple[Result, dict, di
         for k in ["backlog_item", "intake_item", "sprint_plan", "state", "reports"]:
             if k not in schema:
                 errors.append(f"config.md: SCHEMA.{k} missing.")
+        # Governance schemas are strongly recommended (used by decisions/specs tooling)
+        for k in ["adr", "spec"]:
+            if k not in schema:
+                warnings.append(f"config.md: SCHEMA.{k} missing (recommended).")
 
     if not isinstance(enums, dict):
         warnings.append("config.md: ENUMS block missing (recommended).")
@@ -209,6 +214,9 @@ def validate_config(config_path: Path, runnable: bool) -> Tuple[Result, dict, di
         for k in ["statuses", "types", "task_types"]:
             if k not in enums:
                 errors.append(f"config.md: ENUMS.{k} missing.")
+        for k in ["adr_statuses", "spec_statuses"]:
+            if k not in enums:
+                warnings.append(f"config.md: ENUMS.{k} missing (recommended).")
 
     if not isinstance(quality, dict):
         warnings.append("config.md: QUALITY block missing (recommended). Assuming bootstrap.")
@@ -309,19 +317,18 @@ def validate_templates(repo_root: Path, templates_root_rel: str, contracts: dict
 
     schema = contracts.get("SCHEMA") or {}
     expected = {
-        "epic.md": schema.get("backlog_item"),
-        "story.md": schema.get("backlog_item"),
+        "report.md": schema.get("reports"),
         "task.md": schema.get("backlog_item"),
-        "intake.md": schema.get("intake_item"),
-        "sprint-plan.md": schema.get("sprint_plan"),
-	        "report.md": schema.get("reports"),
-	        "test-report.md": schema.get("reports"),
-        "audit-report.md": schema.get("reports"),
-        "close-report.md": schema.get("reports"),
-        "migration-report.md": schema.get("reports"),
+        "story.md": schema.get("backlog_item"),
         "review-summary.md": schema.get("reports"),
+        "audit-report.md": schema.get("reports"),
+        "test-report.md": schema.get("reports"),
+        "sprint-plan.md": schema.get("sprint_plan"),
+        "state.md": schema.get("state"),
         "status-report.md": schema.get("reports"),
-        "adr.md": schema.get("reports"),
+        # Governance templates can have their own schema (preferred) or fallback to reports for legacy.
+        "adr.md": schema.get("adr") or schema.get("reports"),
+        "spec.md": schema.get("spec") or schema.get("reports"),
     }
 
     for fname, expected_schema in expected.items():
@@ -445,6 +452,9 @@ def validate_workspace(repo_root: Path, work_root_rel: str, runnable: bool) -> R
         "analyses",
         "templates",
         "visions",
+        "decisions",
+        "specs",
+        "reviews",
         "logs",
         "logs/commands",
         "archive",
@@ -491,6 +501,15 @@ def validate_workspace(repo_root: Path, work_root_rel: str, runnable: bool) -> R
                     warnings.append(f"sub-vision looks very short: {p}")
                 if re.search(r"\b(TODO|TBD|FIXME|XXX)\b", txt, re.IGNORECASE):
                     warnings.append(f"placeholder markers in {p} (consider finishing).")
+
+    
+    # Governance indices (recommended for readability + automation)
+    for d in ["decisions", "specs", "reviews"]:
+        idx = work_root / d / "INDEX.md"
+        if not idx.exists():
+            warnings.append(f"Missing governance index file: {idx} (recommended; regenerate via fabric.py governance-index).")
+
+
 
     return Result(len(errors) == 0, warnings, errors)
 

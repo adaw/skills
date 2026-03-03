@@ -49,9 +49,9 @@ Použij ho pro:
 
 - `{WORK_ROOT}/config.md`
 - `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` (sub-vize pro širší kontext)
-- `{WORK_ROOT}/decisions/*.md` (pro governance gap discovery)
-- `{WORK_ROOT}/specs/*.md` (pro spec drift discovery)
 - `{WORK_ROOT}/backlog.md` + backlog items (pro dedup)
+- `{WORK_ROOT}/decisions/` + `decisions/INDEX.md`
+- `{WORK_ROOT}/specs/` + `specs/INDEX.md`
 - poslední reporty (pokud existují):
   - `reports/architect-*.md`
   - `reports/gap-*.md`
@@ -91,7 +91,7 @@ Podívej se do backlog indexu:
 - pokud je v backlogu < 10 položek se statusem `READY` nebo `DESIGN` (a nejsou DONE) → generuj
 - pokud backlog je zdravý → vygeneruj max 3 „quality improvements“ nebo nic
 
-### 2) Discovery zdroje (6 kategorií)
+### 2) Discovery zdroje (7 kategorií)
 
 Vygeneruj kandidáty z těchto oblastí:
 
@@ -110,15 +110,14 @@ Vygeneruj kandidáty z těchto oblastí:
 5) **Performance**  
 - hot paths, N^2 loops, unnecessary I/O
 
-6) **Developer Experience**
+6) **Developer Experience**  
 - CI gates, pre-commit, faster local dev loop
 
 7) **Architektonická governance**
-- chybějící ADR pro klíčová rozhodnutí (kód dělá implicitní volbu bez dokumentace)
-- specs drift vs kód (spec říká X, kód dělá Y)
-- deprecated decisions bez náhrady (superseded_by prázdné)
-- proposed decisions čekající na accept déle než 14 dní
-- klíčové moduly bez pokrytí specifikací
+- chybějící ADR/spec pro klíčové oblasti
+- drift: kód proti accepted ADR / active spec
+- stale proposed ADR (> stale_proposed_days)
+- stale draft specs (> stale_draft_days)
 
 ### 3) Vision alignment scoring (jednoduše)
 

@@ -4,7 +4,7 @@
 # Statusy: proposed (návrh), accepted (přijatý), deprecated (zastaralý), superseded (nahrazený)
 
 id: "ADR-{NNN}"
-schema: fabric.report.v1
+schema: fabric.adr.v1
 title: "{DECISION_TITLE}"
 date: "{YYYY-MM-DD}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"

@@ -115,7 +115,7 @@ def parse_config_md(p: Path) -> Dict[str, Any]:
 def get_paths_block(config: Dict[str, Any]) -> Dict[str, str]:
     # Paths are top-level keys in the paths YAML fence (WORK_ROOT etc.).
     # In merged form, they are top-level keys.
-    keys = ["WORK_ROOT", "SKILLS_ROOT", "CODE_ROOT", "TEST_ROOT", "DOCS_ROOT", "CONFIG_ROOT", "TEMPLATES_ROOT", "ANALYSES_ROOT", "VISIONS_ROOT"]
+    keys = ["WORK_ROOT", "SKILLS_ROOT", "CODE_ROOT", "TEST_ROOT", "DOCS_ROOT", "CONFIG_ROOT", "TEMPLATES_ROOT", "ANALYSES_ROOT", "VISIONS_ROOT", "DECISIONS_ROOT", "SPECS_ROOT", "REVIEWS_ROOT"]
     out: Dict[str, str] = {}
     for k in keys:
         v = config.get(k)

@@ -31,9 +31,9 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 - `{WORK_ROOT}/config.md` (COMMANDS.lint, COMMANDS.format_check)
 - `{WORK_ROOT}/state.md` (wip_item, wip_branch)
 - `{WORK_ROOT}/backlog/{wip_item}.md`
-- `{WORK_ROOT}/decisions/*.md` (accepted decisions — R8 ověřuje compliance)
-- `{WORK_ROOT}/specs/*.md` (technické kontrakty — R8 ověřuje dodržení)
 - `{WORK_ROOT}/reports/test-{wip_item}-*.md` (evidence, pokud existuje)
+- `{WORK_ROOT}/decisions/` + `decisions/INDEX.md` (compliance source of truth)
+- `{WORK_ROOT}/specs/` + `specs/INDEX.md` (compliance source of truth)
 - git diff na `{state.wip_branch}` proti `main`
 
 ---
@@ -41,6 +41,9 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 ## Výstupy
 
 - `{WORK_ROOT}/reports/review-{wip_item}-{YYYY-MM-DD}-{run_id}.md` *(frontmatter `schema: fabric.report.v1` + `verdict`)*
+- (volitelně) publikace pro čtení v `{WORK_ROOT}/reviews/`:
+  - `python skills/fabric-init/tools/fabric.py review-publish --src "{WORK_ROOT}/reports/review-{wip_item}-{YYYY-MM-DD}-{run_id}.md"`
+  - aktualizuje `reviews/INDEX.md`
 - update backlog item:
   - `review_report: "reports/review-{wip_item}-{YYYY-MM-DD}-{run_id}.md"`
   - `updated: {YYYY-MM-DD}`
@@ -167,11 +170,18 @@ Dimenze:
 - **R5 Testability:** testy pokrývají AC? izolace? flaky?
 - **R6 Maintainability:** čitelnost, naming, modularita
 - **R7 Documentation:** docs + komentáře + ADR když je potřeba
-- **R8 Compliance:** dodržení architektonických omezení a kontraktů:
-  - `{WORK_ROOT}/decisions/*.md` (accepted) — kód nesmí porušovat přijatá rozhodnutí
-  - `{WORK_ROOT}/specs/*.md` — API endpointy, datový model, schéma musí odpovídat specifikacím
-  - config konvence (naming, cesty, formáty dle config.md)
-  - Porušení accepted decision = **CRITICAL** finding
+- **R8 Compliance:** dodržení config konvencí + **accepted ADR** + **active specs** (porušení = CRITICAL)
+
+
+#### R8 Compliance — konkrétně (povinné)
+
+1) Otevři `decisions/INDEX.md` a identifikuj `accepted` ADR (nebo ty, které jsou zmíněné v analýze tasku).
+2) Otevři `specs/INDEX.md` a identifikuj `active` specs (nebo ty, které jsou zmíněné v analýze tasku).
+3) Pokud diff zavádí změnu, která **odporuje accepted ADR** nebo **porušuje active spec**:
+   - zapiš finding severity **CRITICAL**
+   - v reportu cituj konkrétní ADR/SPEC + konkrétní změnu v diffu
+   - doporuč: buď upravit implementaci, nebo vytvořit nový ADR/SPEC (nepřepisuj accepted bez procesu)
+
 
 ### 4) Verdikt (jednoznačně)
 
