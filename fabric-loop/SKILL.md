@@ -439,12 +439,24 @@ Pokud kdykoliv nastavíš `state.error` nebo vytvoříš CRITICAL intake (kontra
 
 **Poznámka (multi-task sprint / single-piece flow):** Fáze IMPLEMENTACE se opakuje **per task**. Po `review=CLEAN` jde orchestrátor na `close`, kde se task **merge-ne** (a WIP se resetuje). Teprve potom se vybere další READY task z `Task Queue`.
 
-### Countery a limity (per task)
+### Countery a limity (per task) — PERSISTED
 
-Orchestrátor udržuje pro aktuální WIP task dva in-memory countery (reset při změně wip_item):
+Countery jsou **persistované v backlog item metadata** (ne in-memory). Tím přežijí crash orchestrátoru.
+
+Při dispatchování implement/test/review, orchestrátor:
+1. Načte backlog item `{WORK_ROOT}/backlog/{wip_item}.md`
+2. Přečte frontmatter klíče `test_fail_count` a `rework_count` (default 0 pokud chybí)
+3. Po tiku aktualizuje hodnotu v backlog itemu
+
+Klíče v backlog item frontmatter (přidej pokud chybí):
+```yaml
+test_fail_count: 0    # inkrementuje fabric-loop po test FAIL
+rework_count: 0       # inkrementuje fabric-loop po review REWORK
+```
 
 - **test_fail_count**: Inkrementuj při `test → FAIL → implement`. Pokud `test_fail_count >= max_rework_iters` (default 3) → STOP + set `state.error = "test_fail_count exceeded"` + vytvoř intake item. Neposílej zpět na implement — task je nestabilní.
 - **rework_count**: Inkrementuj při `review → REWORK → implement`. Pokud `rework_count >= max_rework_iters` → review by měl vrátit REDESIGN (viz fabric-review pravidla). Orchestrátor to enforceuje: pokud `rework_count >= max_rework_iters` a review vrátí REWORK místo REDESIGN → přepiš na REDESIGN a zaloguj override.
+- **Reset:** Oba countery se resetují na 0 při změně `wip_item` (nový task) nebo po úspěšném `close`.
 
 ### Auto-fix scope (clarifikace)
 
@@ -521,6 +533,24 @@ Nastav v `state.md`:
 
 ## Crash recovery (když state.error != null)
 Cíl: pokračovat bezpečně a idempotentně.
+
+### Git state pre-flight (povinné — před KAŽDÝM dispatch)
+Před dispatchem jakéhokoli skillu ověř konzistenci git stavu:
+```bash
+# Detekuj stale merge-in-progress
+if git rev-parse --verify MERGE_HEAD >/dev/null 2>&1; then
+  echo "WARN: stale merge-in-progress, aborting"; git merge --abort
+fi
+# Detekuj stale rebase-in-progress
+if [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then
+  echo "WARN: stale rebase-in-progress, aborting"; git rebase --abort
+fi
+# Detekuj stale revert-in-progress
+if git rev-parse --verify REVERT_HEAD >/dev/null 2>&1; then
+  echo "WARN: stale revert-in-progress, aborting"; git revert --abort
+fi
+```
+Pokud jakýkoli abort selže → `state.error = "git state inconsistent"` + STOP + intake item.
 
 ### Obecný postup
 1. Přečti `state.error` + `step`

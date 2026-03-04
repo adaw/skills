@@ -135,21 +135,35 @@ Pro každý MERGEABLE task v pořadí:
      Ve `strict` režimu musí být nakonfigurované (nesmí být `""` ani `TBD`).
 
    ```bash
+   GATE_RESULT="PASS"
+
    # lint (optional)
    if [ "{COMMANDS.lint}" = "TBD" ]; then echo "lint: TBD (configure COMMANDS.lint)"; exit 2; fi
-   if [ -n "{COMMANDS.lint}" ]; then timeout 120 {COMMANDS.lint}; else echo "lint: SKIPPED"; fi
+   if [ -n "{COMMANDS.lint}" ]; then
+     timeout 120 {COMMANDS.lint}; LINT_EXIT=$?
+     if [ $LINT_EXIT -eq 124 ]; then echo "TIMEOUT: lint"; GATE_RESULT="TIMEOUT"; elif [ $LINT_EXIT -ne 0 ]; then GATE_RESULT="FAIL_LINT"; fi
+   else echo "lint: SKIPPED"; fi
 
-   # format_check (optional) — s timeoutem
+   # format_check (optional)
    if [ "{COMMANDS.format_check}" = "TBD" ]; then echo "format_check: TBD (configure COMMANDS.format_check)"; exit 2; fi
-   if [ -n "{COMMANDS.format_check}" ]; then timeout 120 {COMMANDS.format_check}; else echo "format_check: SKIPPED"; fi
+   if [ -n "{COMMANDS.format_check}" ]; then
+     timeout 120 {COMMANDS.format_check}; FMT_EXIT=$?
+     if [ $FMT_EXIT -eq 124 ]; then echo "TIMEOUT: format_check"; GATE_RESULT="TIMEOUT"; elif [ $FMT_EXIT -ne 0 ]; then GATE_RESULT="FAIL_FORMAT"; fi
+   else echo "format_check: SKIPPED"; fi
 
-   # test (required) — s timeoutem
-   if [ "{COMMANDS.test}" = "TBD" ] || [ -z "{COMMANDS.test}" ]; then echo "test: NOT CONFIGURED (configure COMMANDS.test)"; exit 2; fi
-   timeout 300 {COMMANDS.test}
+   # test (required)
+   if [ "{COMMANDS.test}" = "TBD" ] || [ -z "{COMMANDS.test}" ]; then echo "test: NOT CONFIGURED"; exit 2; fi
+   timeout 300 {COMMANDS.test}; TEST_EXIT=$?
+   if [ $TEST_EXIT -eq 124 ]; then echo "TIMEOUT: test"; GATE_RESULT="TIMEOUT"; elif [ $TEST_EXIT -ne 0 ]; then GATE_RESULT="FAIL_TEST"; fi
 
-   # e2e test (optional — spusť pokud existuje a není TBD) — s timeoutem
-   if [ -n "{COMMANDS.test_e2e}" ] && [ "{COMMANDS.test_e2e}" != "TBD" ]; then timeout 600 {COMMANDS.test_e2e}; else echo "test_e2e: SKIPPED"; fi
+   # e2e test (optional)
+   if [ -n "{COMMANDS.test_e2e}" ] && [ "{COMMANDS.test_e2e}" != "TBD" ]; then
+     timeout 600 {COMMANDS.test_e2e}; E2E_EXIT=$?
+     if [ $E2E_EXIT -eq 124 ]; then echo "TIMEOUT: test_e2e"; GATE_RESULT="TIMEOUT"; elif [ $E2E_EXIT -ne 0 ]; then GATE_RESULT="FAIL_E2E"; fi
+   else echo "test_e2e: SKIPPED"; fi
    ```
+
+   > **Timeout (exit 124) se NESMÍ zaměnit za normální test FAIL.** Timeout = killed externally, FAIL = test assertion failed. Odlišná příčina, odlišná remediace.
 
 6. Pokud gates FAIL:
 
@@ -167,13 +181,20 @@ Pro každý MERGEABLE task v pořadí:
    Pokud auto-fix opravil něco, commitni a znovu spusť všechny gates:
    ```bash
    git add -A && git commit -m "chore({id}): auto-fix lint/format on main"
-   {COMMANDS.lint}
-   {COMMANDS.format_check}
-   {COMMANDS.test}
+   # Zapamatuj si PRE auto-fix stav pro regression detekci
+   PRE_FIX_FAILURES="${GATE_RESULT}"
+   timeout 120 {COMMANDS.lint}; POST_LINT=$?
+   timeout 120 {COMMANDS.format_check}; POST_FMT=$?
+   timeout 300 {COMMANDS.test}; POST_TEST=$?
    ```
 
+   **Regression detekce:** Pokud auto-fix způsobil NOVÉ selhání (testy FAILily po auto-fixu, ale ne před ním):
+   - Revertni auto-fix commit: `git revert --no-edit HEAD`
+   - Vytvoř intake item `intake/close-autofix-regression-{date}.md` s diff pre/post
+   - Pokračuj revertem merge commitu (6b)
+
    Pokud po auto-fixu všechny gates PASS → pokračuj krokem 7 (úspěch).
-   Pokud stále FAIL (nebo selhaly testy, ne jen lint/format) → pokračuj revertem níže.
+   Pokud stále FAIL (stejné chyby jako před auto-fixem) → pokračuj revertem níže.
 
    **6b) Revert (pokud auto-fix nepomohl nebo selhaly testy):**
    - **NEPOUŽÍVEJ** `git reset --hard` ani force push.
@@ -188,7 +209,10 @@ Pro každý MERGEABLE task v pořadí:
      fi
      ```
    - Pokud revert FAIL (konflikty):
-     vytvoř intake item `intake/close-revert-conflict-{id}.md` (zahrň `git status` + konfliktové soubory), nastav `state.error` a **STOP**.
+     1. **Vyčisti working tree:** `git revert --abort` (vrátí main do pre-revert stavu)
+     2. Vytvoř intake item `intake/close-revert-conflict-{id}.md` (zahrň `git status` + konfliktové soubory)
+     3. Nastav `state.error` a **STOP**
+     4. Při re-run fabric-close: detekuj, že merge commit existuje ale revert selhal → zkus revert znovu (idempotentní díky `--abort` cleanup)
    - Po úspěšném revertu znovu spusť `{COMMANDS.test}` (main musí zůstat green). Pokud to FAIL, nastav `state.error` a **STOP**.
    - vytvoř intake item `intake/close-merge-failed-{id}.md` s výpisem failu + odkazem na revert commit
    - označ task jako carry-over (reason: merge gates failed)
@@ -205,7 +229,12 @@ Pro každý MERGEABLE task v pořadí:
      git branch -d {branch} 2>/dev/null || true
      git push origin --delete {branch} 2>/dev/null || true
      ```
-     Poznámka: `-d` (ne `-D`) = safe delete (odmítne smazat nemerged branch). Remote delete je best-effort (může selhat bez push práv — to je OK, zapiš do reportu).
+     Poznámka: `-d` (ne `-D`) = safe delete (odmítne smazat nemerged branch).
+
+     **Remote delete handling:**
+     - Pokud remote delete selže (network, práva, branch neexistuje): zaloguj WARNING do close reportu.
+     - Pokud lokální branch stále existuje po remote delete failure: vytvoř intake item `intake/close-branch-cleanup-{branch}.md`.
+     - Při příštím `fabric-init` nebo `fabric-status` se orphaned branches detekují a reportují.
 
 > Poznámka: Když má projekt CI, je vhodné po merge udělat `git push origin main` (pokud má agent práva). Pokud ne, aspoň to uveď v reportu jako next action.
 
@@ -270,6 +299,23 @@ V těchto případech: vytvoř intake item + CRITICAL v close reportu.
 - **Revert proběhl:** Re-run detekuje `HEAD` bez merge commitu → začne od merge znovu.
 - **Branch delete selhal (remote):** Zalogováno jako warning v reportu, nefatální. Re-run zkusí znovu.
 - **Částečný sprint (některé tasky merged, jiné ne):** Close zpracovává tasky sekvenčně; hotové tasky přeskočí (status=DONE v backlog).
+
+### Network partition a git consistency
+
+Fabric předpokládá lokální git operace (žádný remote push na main v default flow). Proto:
+- **Network outage během `git push origin --delete`:** Neblokuje — remote delete je best-effort s `|| true`.
+- **Network outage během `git fetch --all --prune`:** Selže pre-merge check → `state.error` + STOP. Recovery: opakuj po obnovení sítě.
+- **Partial merge (merge commit napsán, ale git process killed):**
+  Detekce: `git status` ukáže „merge in progress" nebo dirty tree.
+  Recovery: `git merge --abort` → clean state → re-run od začátku.
+  ```bash
+  # Při startu fabric-close vždy zkontroluj stav:
+  if git rev-parse --verify MERGE_HEAD >/dev/null 2>&1; then
+    echo "WARN: merge in progress detected, aborting stale merge"
+    git merge --abort
+  fi
+  ```
+- **Corrupted git index:** `git status` vrátí error → `state.error` + STOP + intake item `intake/close-git-corruption-{date}.md`.
 
 ---
 

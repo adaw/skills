@@ -163,6 +163,18 @@ git pull --ff-only
 git checkout -b {branch_name} || git checkout {branch_name}
 ```
 
+**Post-checkout validace (povinné):**
+```bash
+# Ověř, že nejsme v detached HEAD
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "{branch_name}" ]; then
+  echo "ERROR: detached HEAD or checkout failed"; exit 1
+fi
+# Pokud branch existuje na remote, synchronizuj
+if git ls-remote --heads origin {branch_name} | grep -q {branch_name}; then
+  git pull --ff-only origin {branch_name} || echo "WARN: remote diverged, using local"
+fi
+```
+
 Pokud working tree není čistý → FAIL (nejdřív vyřeš).
 
 ### 3) VERIFY-FIRST (pochop problém)
@@ -255,6 +267,13 @@ Pokud working tree je dirty z neočekávaného důvodu (uncommitted changes pře
 - spusť auto-fix
 - proveď separaci
 - pop stash: `git stash pop`
+- **Pokud stash pop selže** (merge conflict):
+  1. `git stash drop` NEPROVÁDĚJ (stash obsahuje necommitnutou práci)
+  2. `git checkout -- .` reset conflicted files
+  3. `git stash pop` znovu (nebo `git stash show -p | git apply --3way`)
+  4. Pokud stále selže → `git stash list` a zaloguj stash ref do reportu
+  5. Vytvoř intake item `intake/implement-stash-conflict-{date}.md` s instrukcí pro manuální recovery
+  6. FAIL task (nesmíš riskovat ztrátu kódu)
 
 Pokud existují pre-existing fixy (soubory mimo diff tasku):
 - commitni je **separátně** před task commitem:
@@ -310,9 +329,25 @@ Vytvoř `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md` jako
 
 ### Timeout handling
 
-- Spouštěj quality gate příkazy s timeoutem: `timeout 120 {COMMANDS.lint}`, `timeout 120 {COMMANDS.format_check}`, `timeout 300 {COMMANDS.test}`.
-- Pokud timeout vyprší (exit code 124): zapiš do implement reportu `TIMEOUT` a FAIL gate.
-- Auto-fix se nepokouší opakovaně po timeoutu — rovnou FAIL s intake item `intake/implement-timeout-{date}.md`.
+Spouštěj quality gate příkazy s timeoutem a **vždy kontroluj exit code**:
+
+```bash
+timeout 120 {COMMANDS.lint}
+LINT_EXIT=$?
+if [ $LINT_EXIT -eq 124 ]; then echo "TIMEOUT: lint exceeded 120s"; GATE_RESULT="TIMEOUT"; fi
+
+timeout 120 {COMMANDS.format_check}
+FMT_EXIT=$?
+if [ $FMT_EXIT -eq 124 ]; then echo "TIMEOUT: format_check exceeded 120s"; GATE_RESULT="TIMEOUT"; fi
+
+timeout 300 {COMMANDS.test}
+TEST_EXIT=$?
+if [ $TEST_EXIT -eq 124 ]; then echo "TIMEOUT: test exceeded 300s"; GATE_RESULT="TIMEOUT"; fi
+```
+
+- Pokud GATE_RESULT=TIMEOUT: zapiš do implement reportu `TIMEOUT` + který příkaz + délku.
+- Auto-fix se nepokouší po timeoutu — rovnou FAIL s intake item `intake/implement-timeout-{date}.md`.
+- Timeout exit code 124 NESMÍ být zaměněn za normální test failure (124 = killed by timeout, ne test FAIL).
 
 ---
 

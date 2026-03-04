@@ -61,13 +61,18 @@ Pokud chybí → vytvoř intake item `intake/review-missing-wip-or-commands.md` 
 
 ### Rework counter check
 
-Před review spočítej existující review reporty pro daný task:
+Načti `rework_count` z backlog item metadata (persisted counter, nastavuje fabric-loop):
 ```bash
-ls {WORK_ROOT}/reports/review-{wip_item}-*.md 2>/dev/null | wc -l
+# Preferuj persisted counter z backlog item frontmatter
+REWORK_COUNT=$(grep 'rework_count:' {WORK_ROOT}/backlog/{wip_item}.md | awk '{print $2}')
+# Fallback: počet existujících review reportů (méně spolehlivé — soubory mohou být smazány/archivovány)
+if [ -z "$REWORK_COUNT" ]; then
+  REWORK_COUNT=$(ls {WORK_ROOT}/reports/review-{wip_item}-*.md 2>/dev/null | wc -l)
+fi
 ```
 
-Pokud count >= `SPRINT.max_rework_iters` (default 3):
-- Verdikt = `ESCALATE` (ne REWORK)
+Pokud REWORK_COUNT >= `SPRINT.max_rework_iters` (default 3):
+- Verdikt = `REDESIGN` (ne REWORK — task vyžaduje zásadní změnu přístupu)
 - Vytvoř intake item `intake/review-max-rework-exceeded-{wip_item}.md`:
   - shrnutí opakujících se findings
   - doporučení: rozdělit task, změnit přístup, nebo eskalovat na člověka

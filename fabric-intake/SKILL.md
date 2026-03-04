@@ -66,7 +66,9 @@ Výsledek musí být:
 ---
 
 
-## FAST PATH (doporučeno) — scan → plan → apply (bez ručních přesunů/editací)
+## FAST PATH (povinné) — scan → plan → apply (bez ručních přesunů/editací)
+
+> **FAST PATH je primární postup.** Používej ho vždy. Sekce „Postup" níže slouží jako **reference pro rozhodovací logiku** (triage rules, vision alignment, dedup) — ne jako alternativní flow. FAST PATH volá stejnou logiku deterministicky přes tooling.
 
 1) Seznam intake položek (strojově):
 
@@ -122,8 +124,10 @@ Zpracuj pouze:
 - ignoruj `{WORK_ROOT}/intake/done/` a `{WORK_ROOT}/intake/rejected/`
 
 Pokud nejsou žádné pending intake items:
-- vytvoř report `reports/intake-{date}.md` s „0 items“
-- DONE
+- vytvoř report `reports/intake-{date}.md` s „0 items processed”
+- DONE (vrať se orchestrátoru)
+
+> **Clarifikace pro fabric-loop:** Intake vrací „0 items” jako normální výsledek, NE jako chybový stav. Orchestrátor pokračuje na další step (prio). Intake NENÍ loop boundary — i s 0 items lifecycle pokračuje dál.
 
 ### 3) Pro každý intake item proveď triage
 
@@ -166,6 +170,12 @@ Z `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md`:
 Pokud `linked_vision_goal` zůstane prázdné:
 - nastav `status: IDEA`
 - tier clamp: max `T2` (i kdyby raw_priority ukazovalo výš)
+
+**T0/T1 early gate:** Pokud by tier vyšel T0 nebo T1 ale `linked_vision_goal` je prázdné:
+- **NEVYTVÁŘEJ** backlog item s T0/T1 bez vision link
+- Vytvoř intake item `intake/intake-t0t1-missing-vision-{id}.md` s požadavkem na doplnění vision alignment
+- Původní intake přesuň do `intake/done/` s poznámkou „blocked: requires vision alignment for T0/T1"
+- Tím se zabrání, aby se high-priority práce mimo vizi dostala do sprint queue
 
 #### 3.4 Urči Type
 
@@ -271,6 +281,8 @@ Pokud se nepodaří vytvořit backlog item nebo je schema nekonzistentní:
 ---
 
 ## Self-check
+
+> **Naming clarifikace:** Intake **items** (soubory v `intake/`) pojmenovávej dle config konvence `{source}-{slug}-{date-or-id}.md`. Intake **report** (výstup skillu) je `reports/intake-{YYYY-MM-DD}.md`. Nezaměňuj.
 
 Před návratem:
 - žádné nezpracované soubory v `intake/` (vše přesunuto do `intake/done/` nebo ponecháno s vysvětlením)

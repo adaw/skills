@@ -113,6 +113,8 @@ C) **Python**
 D) **Go / Rust (pokud detekováno)**
 - `go.mod`:
   - `COMMANDS.test = "go test ./..."`
+  - `COMMANDS.lint = "golangci-lint run"` (pokud `golangci-lint` dostupný; jinak `""`)
+  - `COMMANDS.lint_fix = "golangci-lint run --fix"` (pokud dostupný)
   - `COMMANDS.format_check = "test -z \"$(gofmt -l .)\""`
   - `COMMANDS.format = "gofmt -w ."`
 - `Cargo.toml`:
@@ -121,6 +123,32 @@ D) **Go / Rust (pokud detekováno)**
   - `COMMANDS.lint_fix = "cargo clippy --fix --allow-dirty -- -D warnings"`
   - `COMMANDS.format_check = "cargo fmt -- --check"`
   - `COMMANDS.format = "cargo fmt"`
+
+E) **Java / JVM (pokud detekováno)**
+- `build.gradle` nebo `build.gradle.kts`:
+  - `COMMANDS.test = "gradle test"`
+  - `COMMANDS.lint = ""` (Java nemá standardní lint; nastav `""`)
+  - `COMMANDS.format_check = ""` (pokud `spotless` plugin → `gradle spotlessCheck`)
+  - `COMMANDS.format = ""` (pokud `spotless` → `gradle spotlessApply`)
+- `pom.xml`:
+  - `COMMANDS.test = "mvn test"`
+  - `COMMANDS.lint = ""` (pokud `checkstyle` plugin → `mvn checkstyle:check`)
+  - `COMMANDS.format_check = ""`
+  - `COMMANDS.format = ""`
+
+F) **Ruby (pokud detekováno)**
+- `Gemfile` nebo `Rakefile`:
+  - `COMMANDS.test = "bundle exec rake test"` (nebo `bundle exec rspec` pokud `.rspec` existuje)
+  - `COMMANDS.lint = "bundle exec rubocop"` (pokud `.rubocop.yml` existuje)
+  - `COMMANDS.lint_fix = "bundle exec rubocop -A"` (pokud rubocop dostupný)
+  - `COMMANDS.format_check = ""` (Ruby nemá standardní formátování mimo rubocop)
+  - `COMMANDS.format = ""`
+
+G) **Fallback (žádný rozpoznaný projekt)**
+- Pokud žádný z výše uvedených signálů neodpovídá:
+  - `COMMANDS.test` → nastav fail-fast placeholder: `echo "CONFIGURE COMMANDS.test" && exit 1`
+  - Ostatní → `""` (vypnuto)
+  - Vytvoř intake item `intake/init-unknown-project-type.md` s doporučením ručně nakonfigurovat COMMANDS
 
 ### Evidence
 
