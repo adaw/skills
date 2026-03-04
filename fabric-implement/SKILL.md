@@ -223,7 +223,14 @@ if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; t
 {COMMANDS.test}
 ```
 
-Pokud format check failne a config má `COMMANDS.format`, můžeš spustit auto-format a znovu `format_check`.
+#### Auto-fix (pokud gates failnou)
+
+Pokud lint nebo format check failne a config má příslušný fix příkaz, **spusť auto-fix a opakuj gate**:
+
+1. **Lint fail** + `COMMANDS.lint_fix` není prázdné → spusť `{COMMANDS.lint_fix}`, pak znovu `{COMMANDS.lint}`.
+2. **Format fail** + `COMMANDS.format` není prázdné → spusť `{COMMANDS.format}`, pak znovu `{COMMANDS.format_check}`.
+
+Auto-fix smí proběhnout **max 1×** per gate per implement run. Pokud po auto-fixu gate stále failne → oprav manuálně (v rámci stejného tasku).
 
 Pokud něco selže:
 - neopouštěj branch

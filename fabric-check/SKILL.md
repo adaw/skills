@@ -214,6 +214,20 @@ if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; t
 
 Výsledek zapiš do reportu (PASS/FAIL).
 
+#### Auto-fix (safe, idempotentní)
+
+Pokud lint nebo format check failne a config má příslušný fix příkaz, **spusť auto-fix a opakuj gate**:
+
+1. **Lint fail** + `COMMANDS.lint_fix` není prázdné → spusť `{COMMANDS.lint_fix}`, pak znovu `{COMMANDS.lint}`.
+2. **Format fail** + `COMMANDS.format` není prázdné → spusť `{COMMANDS.format}`, pak znovu `{COMMANDS.format_check}`.
+
+Auto-fix smí proběhnout **max 1×** per gate. Pokud po auto-fixu gate stále failne → zapiš do reportu jako FAIL a vytvoř intake item.
+
+Pokud auto-fix něco opravil, commitni změny:
+```bash
+git add -A && git commit -m "chore: auto-fix lint/format (fabric-check)"
+```
+
 Pokud by to bylo příliš drahé, zaznamenej to jako `skipped` s důvodem.
 
 **Volitelně (framework self-test):**
