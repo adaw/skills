@@ -800,12 +800,53 @@ def run_command(repo_root: Path, work_root: Path, cfg: Dict[str, Any], key: str,
     if cmd in (None, "", "TBD"):
         return CmdResult(ok=False, exit_code=127, duration_s=0.0, log_path=None, tail=f"COMMANDS.{key} is not configured: {cmd!r}")
 
+    cmd = str(cmd).strip()
     logs_dir = work_root / "logs" / "commands"
-    ensure_dir(logs_dir)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    log_path = logs_dir / f"{key}-{stamp}.log"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    ts = now_utc().strftime("%Y%m%d-%H%M%S")
+    log_path = logs_dir / f"{key}-{ts}.log"
+
+    env = os.environ.copy()
+
+    # Best-effort Python venv management: if the repo looks like Python (or venv exists),
+    # ensure `.venv` and run commands with venv PATH first. This keeps Makefile targets
+    # (`pytest`, `ruff`, `python -m ...`) working deterministically.
+    try:
+        env_cfg = cfg.get("ENV") or {}
+        venv_dir = ".venv"
+        if isinstance(env_cfg, dict):
+            venv_dir = str(env_cfg.get("venv") or env_cfg.get("venv_dir") or venv_dir)
+        venv_path = (repo_root / venv_dir) if not Path(venv_dir).is_absolute() else Path(venv_dir)
+
+        looks_python = any((repo_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"))
+        if looks_python or venv_path.exists():
+            ensure_script = Path(__file__).resolve().parent / "ensure_venv.py"
+            ensure_cmd = [sys.executable, str(ensure_script), "--repo-root", str(repo_root), "--venv", str(venv_dir), "--json"]
+            ensure_proc = subprocess.run(ensure_cmd, cwd=str(repo_root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+            with log_path.open("w", encoding="utf-8") as f:
+                f.write("=== ensure_venv ===\n")
+                if ensure_proc.stdout:
+                    f.write(ensure_proc.stdout.strip() + "\n")
+                if ensure_proc.stderr:
+                    f.write(ensure_proc.stderr.strip() + "\n")
+                f.write("=== command ===\n")
+
+            bin_dir = venv_path / ("Scripts" if os.name == "nt" else "bin")
+            if bin_dir.exists():
+                env["VIRTUAL_ENV"] = str(venv_path)
+                env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
+        else:
+            with log_path.open("w", encoding="utf-8") as f:
+                f.write("=== command ===\n")
+    except Exception as e:
+        with log_path.open("w", encoding="utf-8") as f:
+            f.write("=== ensure_venv (error) ===\n")
+            f.write(str(e) + "\n")
+            f.write("=== command ===\n")
 
     start = time.time()
+    tail: List[str] = []
     proc = subprocess.Popen(
         cmd,
         cwd=str(repo_root),
@@ -813,23 +854,20 @@ def run_command(repo_root: Path, work_root: Path, cfg: Dict[str, Any], key: str,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        bufsize=1,
-        universal_newlines=True,
+        env=env,
     )
-    output_lines: List[str] = []
-    try:
-        assert proc.stdout is not None
+    assert proc.stdout is not None
+    with log_path.open("a", encoding="utf-8") as f:
         for line in proc.stdout:
-            output_lines.append(line.rstrip("\n"))
-            # stream to file
-            with log_path.open("a", encoding="utf-8") as f:
-                f.write(line)
-    finally:
-        proc.wait()
-    dur = time.time() - start
-    tail = "\n".join(output_lines[-tail_lines:]) if tail_lines > 0 else None
-    ok = proc.returncode == 0
-    return CmdResult(ok=ok, exit_code=int(proc.returncode or 0), duration_s=dur, log_path=str(log_path), tail=tail)
+            f.write(line)
+            tail.append(line.rstrip("\n"))
+            if len(tail) > tail_lines:
+                tail.pop(0)
+    rc = proc.wait()
+    dur = round(time.time() - start, 3)
+    return CmdResult(ok=(rc == 0), exit_code=rc, duration_s=dur, log_path=str(log_path), tail="\n".join(tail))
+
+
 
 
 def snapshot_status(repo_root: Path, cfg: Dict[str, Any], out_path: Path, tail_lines: int) -> Dict[str, Any]:
@@ -2127,7 +2165,7 @@ def _default_contract_outputs() -> Dict[str, List[str]]:
         "intake": ["reports/intake-*.md"],
         "prio": ["reports/prio-*.md", "backlog.md"],
         "sprint": ["sprints/sprint-*.md", "reports/sprint-*.md"],
-        "analyze": ["reports/analyze-*.md", "analyses/*-analysis.md"],
+        "analyze": ["reports/analyze-*.md"],
         "implement": ["reports/implement-*.md"],
         "test": ["reports/test-*.md"],
         "review": ["reports/review-*.md"],

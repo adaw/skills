@@ -51,17 +51,18 @@ def _lock(lock_path: Path):
 # --- TOML dev-extras detection ---
 
 def _has_dev_extras(pyproject: Path) -> bool:
+    """Return True if pyproject defines a PEP 621 optional-dependency group named 'dev'.
+
+    Note: Poetry dev-dependencies are NOT installable via pip extras. We handle baseline tooling
+    separately after the main install to keep ensure_venv portable (no poetry dependency).
+    """
     try:
         data = _parse_toml(pyproject)
     except Exception:
         return False
     opt_deps = data.get("project", {}).get("optional-dependencies", {})
-    if "dev" in opt_deps:
-        return True
-    poetry_dev = data.get("tool", {}).get("poetry", {}).get("dev-dependencies", {})
-    if poetry_dev:
-        return True
-    return False
+    return isinstance(opt_deps, dict) and ("dev" in opt_deps)
+
 
 
 def _parse_toml(path: Path) -> dict:
@@ -102,6 +103,27 @@ def run(cmd: list[str], cwd: Path, quiet: bool) -> int:
     if quiet:
         kwargs["capture_output"] = True
     return subprocess.run(cmd, **kwargs).returncode
+def _ensure_baseline_tools(repo_root: Path, venv_path: Path, pip: Path, quiet: bool) -> None:
+    """Best-effort install of baseline dev tools used by Fabric commands.
+
+    Keeps COMMANDS like `pytest` / `ruff` usable even when the project doesn't declare them
+    as pip-installable extras (common with Poetry projects). Non-fatal by design.
+    """
+    baseline_tools = ["pytest", "ruff"]
+    missing = [t for t in baseline_tools if not _venv_bin(venv_path, t).exists()]
+    if not missing:
+        return
+    log("[ensure_venv] Installing baseline tools: " + ", ".join(missing) + "...")
+    tools_rc = run([str(pip), "install", *missing], repo_root, quiet)
+    if tools_rc != 0:
+        print(
+            f"[ensure_venv] WARNING: baseline tools install failed (rc={tools_rc}): {', '.join(missing)}",
+            file=sys.stderr,
+        )
+    else:
+        log("[ensure_venv] Baseline tools ready ✓")
+
+
 
 
 def _log(msg: str, quiet: bool, *, force_stderr: bool = False) -> None:
@@ -132,6 +154,9 @@ def ensure_venv(
 
     if venv_exists and stored_hash == current_hash:
         log("[ensure_venv] venv OK, deps unchanged — skip")
+        # Still ensure baseline tools (best-effort).
+        pip = _venv_bin(venv_path, "pip")
+        _ensure_baseline_tools(repo_root, venv_path, pip, quiet)
         return False
 
     need_create = not venv_exists or broken_symlink
@@ -177,6 +202,8 @@ def ensure_venv(
 
     if rc != 0:
         raise RuntimeError(f"[ensure_venv] ERROR: pip install failed (rc={rc})")
+
+    _ensure_baseline_tools(repo_root, venv_path, pip, quiet)
 
     hash_file.parent.mkdir(parents=True, exist_ok=True)
     hash_file.write_text(current_hash)

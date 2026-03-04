@@ -102,11 +102,12 @@ LIFECYCLE:
 
 RUN:
   # Fabric-loop execution window (user-triggered). Default behavior is deterministic.
-  # Users can optionally add: `loop=<N>` or `loop=auto` to the fabric-loop prompt.
-  max_ticks_default: 1     # when no loop=... is provided
-  max_ticks_clamp: [1, 50] # clamp for loop=<N>
-  auto_max_ticks: 25       # hard cap for loop=auto to prevent infinite loops
-  idle_step: idle          # sentinel step meaning "no actionable work"
+  # Users can optionally add: `loop=<N>` (loops) or `loop=auto` to the fabric-loop prompt.
+  max_loops_default: 1      # when no loop=... is provided
+  max_loops_clamp: [1, 50]  # clamp for loop=<N>
+  auto_max_loops: 100       # hard cap for loop=auto to prevent infinite loops
+  max_ticks_per_loop: 25    # safety cap inside a single loop
+  idle_step: idle           # sentinel step meaning "no actionable work"
 
 # Deterministic IO contracts. Used by `fabric.py contract-check` and recommended in `fabric-loop`.
 # Keep these conservative: existence checks only.
@@ -120,7 +121,7 @@ CONTRACTS:
     intake: ["reports/intake-*.md"]
     prio: ["reports/prio-*.md", "backlog.md"]
     sprint: ["sprints/sprint-*.md", "reports/sprint-*.md"]
-    analyze: ["reports/analyze-*.md", "analyses/*-analysis.md"]
+    analyze: ["reports/analyze-*.md"]
     implement: ["reports/implement-*.md"]
     test: ["reports/test-*.md"]
     review: ["reports/review-*.md"]

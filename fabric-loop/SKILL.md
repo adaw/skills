@@ -26,24 +26,26 @@ Volitelně může uživatel přidat parametr:
 - `Načti a proveď skills/fabric-loop/SKILL.md loop=auto`
 
 ### Semantika
-- `loop=<N>` = maximální počet orchestrátor **ticků** v rámci tohoto spuštění.
-  - 1 tick = **jeden dispatch** (jeden lifecycle step → jeden skill) + kontrakt check + posun `state.step`.
+- `loop=<N>` = maximální počet orchestrátor **loopů** v rámci tohoto spuštění.
+  - 1 loop = opakuj orchestrátor ticků, dokud nenastane **loop boundary**:
+    - `COMPLETED_STEP == "archive"` (sprint uzavřen), nebo
+    - `state.step == "idle"` (není práce), nebo
+    - STOP/CRITICAL (např. `state.error`, kontrakt breach).
   - Default: `loop=1`.
   - Limit: `N` omez na rozsah **1–50** (cokoliv mimo clampni na nejbližší mez).
 
 - `loop=auto` = „běž, dokud je co dělat“:
-  - opakuj tick, dokud **existuje práce** (pending intake / backlog práce / WIP), a dokud nenastane STOP/CRITICAL,
+  - opakuj loopy, dokud **existuje práce** (pending intake / backlog práce / WIP), a dokud nenastane STOP/CRITICAL,
   - jakmile dojde práce, nastav `state.step=idle` a skonči,
-  - vždy s hard-capem `AUTO_MAX_TICKS` (default `25`, lze přepsat v `config.md` jako `RUN.auto_max_ticks`).
+  - vždy s hard-capem `AUTO_MAX_LOOPS` (default `100`, lze přepsat v `config.md` jako `RUN.auto_max_loops`).
 
 ### Parsování
 V uživatelském triggeru (promptu) hledej token `loop=<...>` (case-insensitive). Pokud existuje více výskytů, vezmi první.
 
 - pokud je hodnota `auto` → `RUN_MODE=auto`
-- jinak parsuj jako integer → `RUN_MODE=fixed`, `MAX_TICKS=<N>`
+- jinak parsuj jako integer → `RUN_MODE=fixed`, `MAX_LOOPS=<N>`
 
-**Stop dřív než vyčerpáš tick limit, pokud nastane STOP/CRITICAL** (např. `state.error`, kontrakt breach, missing config/commands). V režimu `loop=auto` skonči také tehdy, když se systém dostane do `state.step=idle`.
-
+**Stop dřív než vyčerpáš limit, pokud nastane STOP/CRITICAL** (např. `state.error`, kontrakt breach, missing config/commands). V režimu `loop=auto` skonči také tehdy, když se systém dostane do `state.step=idle`.
 ## Idle režim (state.step=idle)
 `idle` je **sentinel step** znamenající: „momentálně není žádná akční práce“.  
 Nejde o lifecycle krok; `idle` používá pouze `fabric-loop` jako **stop marker** a jako „sleep state“.
@@ -113,7 +115,7 @@ python skills/fabric-init/tools/fabric.py backlog-scan --json-out "{WORK_ROOT}/r
 ## Protokol (povinné)
 Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
 
-- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-loop" --event start --message "run window" --data '{"max_ticks": <MAX_TICKS>}'`
+- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-loop" --event start --message "run window" --data '{"max_loops": <MAX_LOOPS>, "max_ticks_per_loop": <MAX_TICKS_PER_LOOP>}'`
 - `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-loop" --event end --status OK --report "{WORK_ROOT}/reports/run-{run_id}.md"`
 
 Pokud skončíš **STOP** nebo narazíš na CRITICAL:
@@ -271,19 +273,18 @@ FÁZE 3: UZAVŘENÍ
 ---
 
 
-## Okno běhu (tick loop)
-Na začátku běhu urč `RUN_MODE` a `MAX_TICKS` podle parametru `loop=<...>` v uživatelském triggeru (viz sekce *Spuštění*) a podle `RUN.*` v `config.md`:
+## Okno běhu (loop window)
+Na začátku běhu urč `RUN_MODE`, `MAX_LOOPS` a `MAX_TICKS_PER_LOOP` podle parametru `loop=<...>` (viz sekce *Spuštění*) a podle `RUN.*` v `config.md`:
 
-- pokud parametr **není**: `RUN_MODE=fixed`, `MAX_TICKS = RUN.max_ticks_default` (default `1`)
-- pokud `loop=<N>`: `RUN_MODE=fixed`, `MAX_TICKS = clamp(N, RUN.max_ticks_clamp)` (default clamp `1–50`)
-- pokud `loop=auto`: `RUN_MODE=auto`, `MAX_TICKS = RUN.auto_max_ticks` (default `25`)
+- pokud parametr **není**: `RUN_MODE=fixed`, `MAX_LOOPS = RUN.max_loops_default` (fallback `RUN.max_ticks_default`, default `1`)
+- pokud `loop=<N>`: `RUN_MODE=fixed`, `MAX_LOOPS = clamp(N, RUN.max_loops_clamp)` (fallback `RUN.max_ticks_clamp`, default clamp `1–50`)
+- pokud `loop=auto`: `RUN_MODE=auto`, `MAX_LOOPS = RUN.auto_max_loops` (default `100`)
 
-Pokud `RUN.*` v `config.md` chybí, použij uvedené defaulty.
+`MAX_TICKS_PER_LOOP = RUN.max_ticks_per_loop` (fallback `RUN.auto_max_ticks`, default `25`) je safety cap proti nekonečným smyčkám.
 
-Pak proveď nejvýše `MAX_TICKS` ticků. Každý tick je **jeden dispatch jednoho skillu**.
-
+Pak proveď nejvýše `MAX_LOOPS` loopů. Každý loop obsahuje 1+ ticků (dispatchů) až do loop boundary.
 ### Tick algoritmus (deterministický)
-Pro každý tick:
+V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro každý tick:
 
 1) Načti `{WORK_ROOT}/state.md`.
 2) Pokud `state.error != null` → spusť crash recovery (sekce níže) a **STOP**.
@@ -319,7 +320,7 @@ Pro každý tick:
      - po `review` čte poslední review report (vyžaduje `verdict: CLEAN|REWORK|REDESIGN` nebo `Verdict:`)
      - po `close` rozhodne mezi `implement` vs `docs` podle sprint plánu
      - po `prio` a po `archive` v `RUN_MODE=auto` umí spadnout do `idle`
-     - po `archive` incrementuje `state.sprint`
+      - po `archive` incrementuje `state.sprint` a tím uzavírá loop
    - `tick` patchne `state.md` (`step/phase/last_completed/last_run/last_tick_at`).
    - pokud chybí důkazy nebo je kontrakt porušen → nastaví `state.error` a vrátí non‑zero → **STOP + ESCALATE**.
 
