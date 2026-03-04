@@ -376,7 +376,7 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
    - **idle:** idle
 7) Zapiš odkaz na hlavní run report do `{WORK_ROOT}/reports/run-{run_id}.md` (append-only).
 
-   Doporučeno deterministicky:
+   Deterministicky (povinné):
 
    ```bash
    python skills/fabric-init/tools/fabric.py run-report \
@@ -384,6 +384,12 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
      --completed "<COMPLETED_STEP>" \
      --status "OK" \
      --note "<1-line-summary>"
+   RR_EXIT=$?
+   if [ $RR_EXIT -ne 0 ]; then
+     echo "WARN: run-report append failed (exit $RR_EXIT)"
+     # Run-report failure je WARNING, ne STOP — audit trail je neúplný, ale orchestrace pokračuje.
+     # Zaloguj do protocol.jsonl pro post-mortem analýzu.
+   fi
    ```
 
 8) Pokud `AUDIT=1`: proveď **audit provedeného skillu** (po každém ticku).
@@ -498,6 +504,12 @@ Reset obou counterů na 0 nastává ve **dvou** situacích:
 
 Kdo provádí reset: **fabric-loop** (ne fabric-close, ne fabric-implement). Reset se provádí PŘED prvním dispatch na nový task, tzn. PŘED prvním implement tickem.
 
+**Invocation point v tick algoritmu:** Counter operace se volají v kroku 6) MEZI `tick --completed` a dalším dispatch:
+- Po `tick --completed "test"` → pokud next_step=implement (FAIL/TIMEOUT) → **inkrement** test_fail_count (kód níže)
+- Po `tick --completed "review"` → pokud next_step=implement (REWORK) → **inkrement** rework_count (kód níže)
+- Po `tick --completed "close"` → pokud next_step=implement (nový task) → **reset** obou counterů v novém wip_item (kód níže)
+- Po `tick --completed "close"` → vždy → **reset** counterů v uzavřeném task (audit trail, kód níže)
+
 #### Explicitní reset kód (povinný)
 
 **Při výběru nového tasku** (fabric-loop, před prvním implement dispatch):
@@ -527,13 +539,19 @@ sed -i "s/^rework_count:.*/rework_count: 0/" "$DONE_FILE" 2>/dev/null || echo "W
 
 **Error handling pro sed:** Pokud `sed -i` selže (permission, locked file), vypiš WARNING (zachytí run report) a pokračuj — counter na 0 je default a systém degraduje gracefully (counter check používá `${CURRENT:-0}`).
 
+**Atomicity note:** `sed -i` není atomické (vytváří temp file + rename). Pro crash-safety:
+- Preferuj `python skills/fabric-init/tools/fabric.py backlog-set --id "{wip_item}" --fields-json '{"test_fail_count": N, "rework_count": M}'` (atomic YAML write).
+- Fallback: bash `sed -i` s `|| echo "WARN: ..."` je akceptabilní v single-instance mode (worst case: counter je o 1 nižší po crash → systém degraduje gracefully).
+- Nikdy nepoužívej dva separátní `sed -i` pro dva countery v jednom souboru — buď jeden `sed -i` s více `-e`, nebo jeden Python call pro oba najednou.
+
 ### Auto-fix scope (clarifikace)
 
 Auto-fix (`lint_fix`, `format`) se spouští **max 1× per gate per skill run**. Across rework cycles se může spustit vícekrát — to je záměr: každý implement run je čistý pokus. Celkový počet auto-fix pokusů per task je bounded `max_rework_iters` (default 3). Auto-fix nikdy neopakuje po timeoutu.
 
 ### Verdict parsing (kanonický formát)
 
-`tick()` parsuje verdikty z reportů takto:
+`tick()` parsuje verdikty z reportů takto (vždy z **nejnovějšího** reportu podle mtime):
+> **Stale report guard:** Pokud existuje více reportů pro stejný step+wip_item (z předchozích runů/rework cyklů), `tick` MUSÍ parsovat NEJNOVĚJŠÍ (ls -t | head -1). Starší reporty nesmažou se (audit trail), ale nesmí ovlivnit aktuální verdikt.
 - **test report:** Hledá řádek `Result: PASS` nebo `Result: FAIL` nebo `Result: TIMEOUT` (case-insensitive). Fallback: frontmatter `result:` YAML klíč. Pokud ani jedno → error.
   - `PASS` → next step = review
   - `FAIL` → next step = implement (+ counter increment)
@@ -625,11 +643,20 @@ fi
 ```
 Pokud jakýkoli abort selže → `state.error = "git state inconsistent"` + STOP + intake item.
 
-### Obecný postup
+### Error kategorizace (rozlišení pro recovery)
+
+`state.error` může mít dvě kategorie:
+- **Intentional STOP** (prefix `BLOCKED_ONLY:` nebo `STOP:`): Orchestrátor záměrně zastavil (všechno BLOCKED, counter limit, config drift). Recovery: **NE-retry**. Pouze ESCALATE na uživatele.
+- **Crash/failure** (vše ostatní): Neočekávaný problém. Recovery: retry postup níže.
+
+Jak rozlišit: Pokud `state.error` začíná `BLOCKED_ONLY:` nebo `STOP:` nebo `test_fail_count exceeded` → **intentional**, přeskoč retry a rovnou ESCALATE.
+
+### Obecný postup (pro crash/failure errors)
 1. Přečti `state.error` + `step`
-2. Zkontroluj, zda existuje výstup, který měl vzniknout
-3. Pokud výstup existuje → error byl false alarm → vyčisti `error` a pokračuj dál
-4. Pokud výstup neexistuje → rerun stejného step (idempotentně), max 1×
+2. Pokud error je **intentional** (viz kategorizace výše) → ESCALATE bez retry
+3. Zkontroluj, zda existuje výstup, který měl vzniknout
+4. Pokud výstup existuje → error byl false alarm → vyčisti `error` a pokračuj dál
+5. Pokud výstup neexistuje → rerun stejného step (idempotentně), max 1×
 5. Pokud selže znovu → eskalace:
    - vytvoř evidence pack (ZIP) pro debug:
 

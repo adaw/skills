@@ -291,6 +291,7 @@ Pro každý MERGEABLE task v pořadí:
      - `merge_commit: {SHA}`
      - `status: DONE`
      - `updated: {YYYY-MM-DD}`
+     - `branch: null` *(vyčisti stale branch referenci — zabraňuje reuse v příštím sprintu)*
    - **smaž feature branch** (povinné — zabraňuje hromadění stale branches):
      ```bash
      git branch -d {branch} 2>/dev/null || true
