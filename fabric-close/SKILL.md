@@ -261,3 +261,28 @@ Po uzavření sprintu nastav ve `{WORK_ROOT}/state.md`:
 - git working tree není čistý na main při merge
 
 V těchto případech: vytvoř intake item + CRITICAL v close reportu.
+
+### Idempotence a recovery
+
+**Re-run je bezpečný.** Pokud fabric-close spadne uprostřed:
+- **Merge už proběhl, gates ještě ne:** Re-run detekuje `git log --oneline main | head -1` s merge commitem → přeskočí merge, pokračuje gates.
+- **Gates selhaly, revert ještě neproběhl:** Re-run znovu spustí gates → auto-fix → revert fallback.
+- **Revert proběhl:** Re-run detekuje `HEAD` bez merge commitu → začne od merge znovu.
+- **Branch delete selhal (remote):** Zalogováno jako warning v reportu, nefatální. Re-run zkusí znovu.
+- **Částečný sprint (některé tasky merged, jiné ne):** Close zpracovává tasky sekvenčně; hotové tasky přeskočí (status=DONE v backlog).
+
+---
+
+## Self-check
+
+Před návratem:
+- všechny DONE tasky squash-mergnuty do main (nebo přeskočeny při REDESIGN/BLOCKED)
+- `COMMANDS.test` PASS na main (post-merge)
+- `COMMANDS.test_e2e` PASS na main (pokud definován)
+- `COMMANDS.lint` PASS na main (po případném auto-fix)
+- WIP branch smazán lokálně i remote (nebo zachován při REDESIGN)
+- `state.wip_item = null` a `state.wip_branch = null`
+- close report existuje v `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md`
+- sprint plan aktualizován (task statuses)
+
+Pokud ne → FAIL + vytvoř intake item `intake/close-selfcheck-failed-{date}.md`.

@@ -259,3 +259,24 @@ Pokud se nepodaří vytvořit backlog item nebo je schema nekonzistentní:
 - vytvoř intake item `intake/intake-failed-{date}.md` s detailním důvodem
 - neztrácej data (intake nech v place)
 - reportuj CRITICAL v intake reportu
+
+### Idempotence a recovery
+
+**Re-run je bezpečný.** Zpracování je idempotentní díky move semantice:
+- Zpracované intake soubory se přesouvají do `intake/done/`. Při re-run jsou v `intake/` jen nezpracované.
+- Pokud backlog item pro daný intake už existuje (shodné `id`) → přeskoč (dedup, nezakládej duplicitní).
+- Pokud `backlog.md` regenerace selže → backlog items v `backlog/*.md` jsou zdrojem pravdy, `backlog.md` lze kdykoli přegenerovat.
+- Pokud move do `done/` selže → intake soubor zůstává v `intake/` a bude zpracován při dalším run.
+
+---
+
+## Self-check
+
+Před návratem:
+- žádné nezpracované soubory v `intake/` (vše přesunuto do `intake/done/` nebo ponecháno s vysvětlením)
+- pro každý zpracovaný intake existuje odpovídající backlog item v `backlog/`
+- `backlog.md` regenerován a odpovídá obsahu `backlog/*.md`
+- intake report existuje v `{WORK_ROOT}/reports/intake-{YYYY-MM-DD}.md`
+- duplicity rozpoznány (neztraceny, sloučeny nebo zamítnuty s důvodem)
+
+Pokud ne → FAIL + vytvoř intake item `intake/intake-selfcheck-failed-{date}.md`.

@@ -297,6 +297,14 @@ Vytvoř `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md` jako
 
 ---
 
+### Timeout handling
+
+- Spouštěj quality gate příkazy s timeoutem: `timeout 120 {COMMANDS.lint}`, `timeout 120 {COMMANDS.format_check}`, `timeout 300 {COMMANDS.test}`.
+- Pokud timeout vyprší (exit code 124): zapiš do implement reportu `TIMEOUT` a FAIL gate.
+- Auto-fix se nepokouší opakovaně po timeoutu — rovnou FAIL s intake item `intake/implement-timeout-{date}.md`.
+
+---
+
 ## Self-check
 
 Před návratem:

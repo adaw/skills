@@ -118,6 +118,15 @@ Použij `{WORK_ROOT}/templates/test-report.md` (vytvořeno přes `report-new`).
 
 ---
 
+### Timeout a hanging testy
+
+- Spouštěj příkazy s timeoutem: `timeout 300 {COMMANDS.test}` (5 min default). Pro `test_e2e` použij `timeout 600` (10 min).
+- Pokud timeout vyprší (exit code 124): zapiš do reportu `TIMEOUT` s informací, které testy běžely příliš dlouho.
+- Výsledek TIMEOUT se hodnotí jako FAIL s `root_cause: "Test runner timeout after {N}s"`.
+- Vytvoř intake item `intake/test-timeout-{date}.md` s doporučením: identifikovat pomalé testy, zvážit paralelizaci nebo test split.
+
+---
+
 ## Self-check
 
 - report existuje v `{WORK_ROOT}/reports/`

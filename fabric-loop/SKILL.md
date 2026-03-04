@@ -429,7 +429,7 @@ Pokud kdykoliv nastavíš `state.error` nebo vytvoříš CRITICAL intake (kontra
 | analyze | implement |
 | implement | test |
 | test | pokud FAIL → implement; pokud PASS → review |
-| review | pokud REWORK → implement; pokud CLEAN → close |
+| review | pokud CLEAN → close; pokud REWORK → implement; pokud REDESIGN → close (BLOCKED) |
 | close | pokud existuje další READY task v Task Queue → implement; jinak docs |
 | docs | check |
 | check | archive |
@@ -531,6 +531,13 @@ Pokud `review` report říká `Verdict: CLEAN`:
 - backlog item je označen jako `DONE` (provádí `fabric-review`)
 - `fabric-loop` nastaví next step = `close` (merge WIP a reset WIP se děje až v `fabric-close`)
 
+Pokud `review` report říká `Verdict: REDESIGN`:
+- `fabric-loop` nastaví backlog item status = `BLOCKED` a zapíše důvod z review reportu
+- `fabric-loop` resetuje WIP: `git checkout main`, `state.wip_item = null`, `state.wip_branch = null`
+- Branch se **nesmaže** (zůstává jako reference pro budoucí redesign)
+- `fabric-loop` nastaví next step = `close` — `fabric-close` přeskočí merge (WIP=null) a pokračuje na docs
+- Pokud existuje další READY task v Task Queue → pokračuje na implement; jinak docs→check→archive
+
 
 ---
 
@@ -562,3 +569,17 @@ Na konci každého RUN cyklu:
 - `{WORK_ROOT}/reports/run-{run_id}.md` existuje (vytvořeno `fabric.py run-report`; timeline + odkazy na step reporty)
 - existuje report pro daný step (pokud ho step generuje)
 - pokud došlo k chybě, existuje intake item s reprodukovatelným popisem
+
+---
+
+## Self-check
+
+Před návratem (po posledním tiku RUN cyklu):
+- `state.md` je konzistentní: `step` odpovídá poslednímu dispatchnutému skillu, `error` je null (nebo vyplněný s popisem)
+- `state.last_completed` odpovídá poslednímu úspěšně dokončenému kroku
+- run report existuje v `{WORK_ROOT}/reports/run-{run_id}.md`
+- žádný infinite loop: počet tiků ≤ `MAX_LOOPS × steps_per_loop` (typicky ≤ 50)
+- po-dispatch kontrakt splněn pro každý dispatchnutý krok (minimální výstupy ověřeny)
+- pokud došlo k REDESIGN → backlog item je BLOCKED a WIP resetován
+
+Pokud ne → FAIL + zapiš `state.error` s detailním popisem a STOP.

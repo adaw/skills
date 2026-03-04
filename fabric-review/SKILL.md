@@ -193,6 +193,12 @@ Dimenze:
    - zapiš finding severity **CRITICAL**
    - v reportu cituj konkrétní ADR/SPEC + konkrétní změnu v diffu
    - doporuč: buď upravit implementaci, nebo vytvořit nový ADR/SPEC (nepřepisuj accepted bez procesu)
+4) **Kontraktově-citlivé soubory** — pokud diff mění některý z těchto modulů, ověř příslušný kontrakt explicitně:
+   - `recall/injection.py` nebo `recall/pipeline.py` → D0004 (injection-contract) + LLMEM_INJECTION_FORMAT_V1: preamble warning musí zůstat, XML struktura musí odpovídat spec, CDATA wrapping zachován
+   - `storage/backends/` → LLMEM_QDRANT_SCHEMA_V1: collection schema, vector params, payload fields
+   - `triage/heuristics.py` nebo `triage/patterns.py` → D0001 (secrets-policy) + LLMEM_TRIAGE_HEURISTICS_V1: masking rules, PII hashing
+   - `models.py` → LLMEM_DATA_MODEL_V1: field names, types, enums
+   - Porušení kontraktu bez odpovídajícího ADR supersede = **CRITICAL**
 
 
 ### 4) Verdikt (jednoznačně)
