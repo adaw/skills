@@ -113,9 +113,9 @@ Pro každý MERGEABLE task v pořadí:
 
 1. Připrav main:
    ```bash
-   git fetch --all --prune
+   timeout 60 git fetch --all --prune || { echo "WARN: git fetch failed/timeout"; GATE_RESULT="FETCH_FAIL"; }
    git checkout {main_branch}
-   git pull --ff-only
+   git pull --ff-only || { echo "WARN: pull failed, using local main"; }
    ```
 2. Zapamatuj si pre-merge HEAD:
    ```bash
@@ -125,11 +125,29 @@ Pro každý MERGEABLE task v pořadí:
    - pokud je lokální: `git show-ref --verify refs/heads/{branch}`
    - pokud není, ale je remote: `git checkout -b {branch} origin/{branch}`
 
-4. Squash merge:
+4. Squash merge (s conflict detection):
    ```bash
    git merge --squash {branch}
+   MERGE_EXIT=$?
+   if [ $MERGE_EXIT -ne 0 ]; then
+     echo "ERROR: squash merge conflict for {branch}"
+     # Vyčisti conflict stav
+     git merge --abort 2>/dev/null || git reset --merge
+     # Označ jako carry-over
+     # Vytvoř intake item
+     echo "Carry-over: merge conflict, needs manual resolution"
+     # NEPOKRAČUJ na commit — přeskoč na další task
+   fi
    git commit -m "feat({id}): {title} (sprint {N})"
    ```
+
+   **Squash conflict handling:** Pokud `git merge --squash` selže (exit ≠ 0):
+   - Vyčisti merge stav: `git merge --abort` (nebo `git reset --merge` pokud --abort nefunguje)
+   - Ověř čistý working tree: `git status --porcelain` (pokud dirty → `git checkout -- .` + `git clean -fd`)
+   - Vytvoř intake item `intake/close-merge-conflict-{id}.md` s: branch name, conflict files, pre-merge HEAD
+   - Označ task jako CARRY-OVER (reason: squash merge conflict)
+   - **Nepokračuj** na commit / quality gates — přeskoč na další MERGEABLE task
+   - Tím se zajistí, že merge conflict jednoho tasku nezablokuje celý sprint
 5. Spusť quality gates na main (bezpečně, podle `QUALITY.mode`):
    - **Poznámka:** v `bootstrap` režimu mohou být `lint` / `format_check` vypnuté (`""`) → ber jako `SKIPPED`.
      Ve `strict` režimu musí být nakonfigurované (nesmí být `""` ani `TBD`).
@@ -171,11 +189,17 @@ Pro každý MERGEABLE task v pořadí:
    Pokud selhaly lint nebo format_check (ne test), zkus auto-fix před revertem:
 
    ```bash
-   # lint auto-fix (pokud lint failnul a lint_fix existuje)
-   if [ -n "{COMMANDS.lint_fix}" ] && [ "{COMMANDS.lint_fix}" != "TBD" ]; then {COMMANDS.lint_fix}; fi
+   # lint auto-fix (pokud lint failnul a lint_fix existuje) — s timeoutem
+   if [ -n "{COMMANDS.lint_fix}" ] && [ "{COMMANDS.lint_fix}" != "TBD" ]; then
+     timeout 120 {COMMANDS.lint_fix}
+     if [ $? -eq 124 ]; then echo "TIMEOUT: lint_fix on main"; fi
+   fi
 
-   # format auto-fix (pokud format_check failnul a format existuje)
-   if [ -n "{COMMANDS.format}" ] && [ "{COMMANDS.format}" != "TBD" ]; then {COMMANDS.format}; fi
+   # format auto-fix (pokud format_check failnul a format existuje) — s timeoutem
+   if [ -n "{COMMANDS.format}" ] && [ "{COMMANDS.format}" != "TBD" ]; then
+     timeout 120 {COMMANDS.format}
+     if [ $? -eq 124 ]; then echo "TIMEOUT: format on main"; fi
+   fi
    ```
 
    Pokud auto-fix opravil něco, commitni a znovu spusť všechny gates:

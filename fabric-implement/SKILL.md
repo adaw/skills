@@ -157,9 +157,9 @@ Git kroky:
 
 ```bash
 git status --porcelain
-git fetch --all --prune
+timeout 60 git fetch --all --prune || echo "WARN: git fetch failed/timeout (network?), continuing with local state"
 git checkout {main_branch}
-git pull --ff-only
+git pull --ff-only || echo "WARN: pull failed, using local main"
 git checkout -b {branch_name} || git checkout {branch_name}
 ```
 
@@ -239,8 +239,8 @@ if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; t
 
 Pokud lint nebo format check failne a config má příslušný fix příkaz, **spusť auto-fix a opakuj gate**:
 
-1. **Lint fail** + `COMMANDS.lint_fix` není prázdné → spusť `{COMMANDS.lint_fix}`, pak znovu `{COMMANDS.lint}`.
-2. **Format fail** + `COMMANDS.format` není prázdné → spusť `{COMMANDS.format}`, pak znovu `{COMMANDS.format_check}`.
+1. **Lint fail** + `COMMANDS.lint_fix` není prázdné → spusť `timeout 120 {COMMANDS.lint_fix}` (exit 124 = timeout → FAIL, nepokouš se znovu), pak znovu `{COMMANDS.lint}`.
+2. **Format fail** + `COMMANDS.format` není prázdné → spusť `timeout 120 {COMMANDS.format}` (exit 124 = timeout → FAIL), pak znovu `{COMMANDS.format_check}`.
 
 Pokud lint/format fail a příslušný fix příkaz **je prázdný** (`""`) → auto-fix není možný. Vytvoř intake item `intake/implement-recommend-lint-fix-command.md` (jednorázově, jen pokud ještě neexistuje) a oprav chyby manuálně.
 

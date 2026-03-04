@@ -138,12 +138,22 @@ Na branchi:
 ```bash
 git checkout {wip_branch}
 
-# lint (optional)
-if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then {COMMANDS.lint}; else echo "lint: SKIPPED"; fi
+# lint (optional) — s timeoutem, aby review nikdy nehangoval
+if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then
+  timeout 120 {COMMANDS.lint}
+  LINT_EXIT=$?
+  if [ $LINT_EXIT -eq 124 ]; then echo "TIMEOUT: lint exceeded 120s"; LINT_RESULT="TIMEOUT"; elif [ $LINT_EXIT -ne 0 ]; then LINT_RESULT="FAIL"; else LINT_RESULT="PASS"; fi
+else echo "lint: SKIPPED"; LINT_RESULT="SKIPPED"; fi
 
-# format check (optional)
-if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then {COMMANDS.format_check}; else echo "format_check: SKIPPED"; fi
+# format check (optional) — s timeoutem
+if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then
+  timeout 120 {COMMANDS.format_check}
+  FMT_EXIT=$?
+  if [ $FMT_EXIT -eq 124 ]; then echo "TIMEOUT: format_check exceeded 120s"; FMT_RESULT="TIMEOUT"; elif [ $FMT_EXIT -ne 0 ]; then FMT_RESULT="FAIL"; else FMT_RESULT="PASS"; fi
+else echo "format_check: SKIPPED"; FMT_RESULT="SKIPPED"; fi
 ```
+
+> **Timeout (exit 124) v review:** Pokud lint/format_check timeout v review, hodnoť gate jako FAIL (ne REWORK — TIMEOUT je infrastrukturní problém). Vytvoř intake item `intake/review-gate-timeout-{wip_item}.md` a v reportu označ gate jako `TIMEOUT` (odlišně od FAIL).
 
 **Design note:** Review **záměrně nespouští auto-fix** (lint_fix/format). Review je read-only pozorovatel — měří stav kódu, neopravuje ho. Auto-fix je odpovědnost implement (na branchi) a close (na main). Pokud lint_fix/format příkazy chybí v configu a gate selže v task souborech → review vrátí REWORK; implement musí opravit ručně nebo vytvořit intake item pro missing lint_fix command.
 
@@ -200,16 +210,30 @@ Dimenze:
    - zapiš finding severity **CRITICAL**
    - v reportu cituj konkrétní ADR/SPEC + konkrétní změnu v diffu
    - doporuč: buď upravit implementaci, nebo vytvořit nový ADR/SPEC (nepřepisuj accepted bez procesu)
-4) **Kontraktově-citlivé soubory** — pokud diff mění některý z těchto modulů, ověř příslušný kontrakt explicitně:
-   - `recall/injection.py` nebo `recall/pipeline.py` → D0004 (injection-contract) + LLMEM_INJECTION_FORMAT_V1 (active): preamble warning musí zůstat, XML struktura musí odpovídat spec, CDATA wrapping zachován
+4) **Kontraktově-citlivé soubory** — načti `GOVERNANCE.decisions.registry` a `GOVERNANCE.specs.registry` z `{WORK_ROOT}/config.md` a pro KAŽDÝ changed file v diffu zkontroluj, zda spadá do `contract_modules` některého ADR/spec:
+
+   **Postup (deterministický):**
+   ```bash
+   # Získej changed files
+   git diff --name-only {main_branch}...{wip_branch} > /tmp/changed-files.txt
+   # Pro každý soubor zkontroluj proti GOVERNANCE registru v config.md
+   # Pokud soubor matchuje contract_modules některého ADR → ověř ADR compliance
+   # Pokud soubor matchuje contract_modules některého spec → ověř spec compliance
+   ```
+
+   **Mapování (source of truth: `config.md` GOVERNANCE registr):**
+   - `recall/injection.py`, `recall/pipeline.py` → D0004 (injection-contract) + LLMEM_INJECTION_FORMAT_V1 (active): preamble warning musí zůstat, XML struktura musí odpovídat spec, CDATA wrapping zachován
    - `storage/backends/` → LLMEM_QDRANT_SCHEMA_V1 (draft): collection schema, vector params, payload fields
    - `storage/log_jsonl.py` → D0003 (event-sourcing-and-rebuild): JSONL log je immutable (append-only), rebuild musí být možný z logu
-   - `triage/heuristics.py` nebo `triage/patterns.py` → D0001 (secrets-policy) + LLMEM_TRIAGE_HEURISTICS_V1 (draft): masking rules, PII hashing
-   - `models.py` → D0002 (ids-and-idempotency) + LLMEM_DATA_MODEL_V1 (draft): UUIDv7 z content_hash, idempotency_key musí zůstat, field names/types/enums
+   - `triage/heuristics.py`, `triage/patterns.py` → D0001 (secrets-policy) + LLMEM_TRIAGE_HEURISTICS_V1 (draft): masking rules, PII hashing
+   - `models.py` → D0002 (ids-and-idempotency) + LLMEM_DATA_MODEL_V1 (draft): UUIDv7 z content_hash, idempotency_key musí zůstat
    - `api/` → LLMEM_API_V1 (draft): endpoint paths, request/response schema
-   - `recall/scoring.py` nebo `recall/pipeline.py` → LLMEM_RECALL_PIPELINE_V1 (draft): scoring formula, budget algorithm
+   - `recall/scoring.py` → LLMEM_RECALL_PIPELINE_V1 (draft): scoring formula, budget algorithm
+
+   > **Poznámka:** Tento seznam je DUPLICITNÍ k `config.md` GOVERNANCE registru — slouží jako lidsky čitelná reference pro reviewera. Source of truth je vždy `config.md`. Pokud se registry v config změní (nový ADR/spec/modul), je NUTNÉ aktualizovat i tento seznam — fabric-check by měl detekovat drift.
+
    - Porušení `accepted` ADR nebo `active` spec bez odpovídajícího supersede = **CRITICAL**
-   - Porušení `draft` spec = **HIGH** (draft může být upraven, ale musí být vědomé rozhodnutí)
+   - Porušení `draft` spec = **HIGH** (severity dle `GOVERNANCE.specs.draft_enforcement` v config.md)
 
 
 ### 4) Verdikt (jednoznačně)

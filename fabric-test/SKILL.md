@@ -135,7 +135,21 @@ else
 fi
 ```
 
-Pro `test_e2e` analogicky s `timeout 600`.
+Pro `test_e2e` (explicitně):
+```bash
+if [ -n "{COMMANDS.test_e2e}" ] && [ "{COMMANDS.test_e2e}" != "TBD" ]; then
+  timeout 600 {COMMANDS.test_e2e}
+  E2E_EXIT=$?
+  if [ $E2E_EXIT -eq 124 ]; then
+    E2E_RESULT="TIMEOUT"
+    E2E_ROOT_CAUSE="E2E test runner timeout after 600s"
+  elif [ $E2E_EXIT -ne 0 ]; then
+    E2E_RESULT="FAIL"
+  else
+    E2E_RESULT="PASS"
+  fi
+fi
+```
 
 - TIMEOUT se hodnotí jako FAIL s `root_cause: "Test runner timeout after {N}s"`.
 - TIMEOUT NESMÍ být zaměněn za normální FAIL (jiný root cause, jiná remediace).

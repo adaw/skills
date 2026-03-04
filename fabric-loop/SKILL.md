@@ -433,9 +433,11 @@ Pokud kdykoliv nastavíš `state.error` nebo vytvoříš CRITICAL intake (kontra
 | close | pokud existuje další READY task v Task Queue → implement; jinak docs |
 | docs | check |
 | check | archive |
-| archive | vision *(nový cyklus / nový sprint)* |
+| archive | vision *(nový cyklus / nový sprint)* — **ale v `loop=auto`:** `tick()` po archive provede work-status check → pokud není práce → `idle` (loop boundary) |
 
 > `phase` je pomocná (orientation/planning/implementation/closing), ale **step** je zdroj pravdy pro dispatch.
+>
+> **Clarifikace post-archive v auto mode:** Po `archive` tick() rozhodne deterministicky: (a) pokud existuje práce (pending intake / backlog) → `step=vision` (nový sprint cyklus pokračuje), (b) pokud není práce → `step=idle` (loop boundary, orchestrátor skončí OK). Nikdy není stav, kdy archive přejde na vision a loop neví, jestli má pokračovat — `tick --run-mode auto` to řeší v jednom atomickém kroku.
 
 **Poznámka (multi-task sprint / single-piece flow):** Fáze IMPLEMENTACE se opakuje **per task**. Po `review=CLEAN` jde orchestrátor na `close`, kde se task **merge-ne** (a WIP se resetuje). Teprve potom se vybere další READY task z `Task Queue`.
 
@@ -446,7 +448,7 @@ Countery jsou **persistované v backlog item metadata** (ne in-memory). Tím př
 Při dispatchování implement/test/review, orchestrátor:
 1. Načte backlog item `{WORK_ROOT}/backlog/{wip_item}.md`
 2. Přečte frontmatter klíče `test_fail_count` a `rework_count` (default 0 pokud chybí)
-3. Po tiku aktualizuje hodnotu v backlog itemu
+3. Po tiku — pokud verdict vyžaduje inkrement — aktualizuje hodnotu v backlog itemu (viz explicitní kód níže)
 
 Klíče v backlog item frontmatter (přidej pokud chybí):
 ```yaml
@@ -454,9 +456,75 @@ test_fail_count: 0    # inkrementuje fabric-loop po test FAIL
 rework_count: 0       # inkrementuje fabric-loop po review REWORK
 ```
 
-- **test_fail_count**: Inkrementuj při `test → FAIL → implement`. Pokud `test_fail_count >= max_rework_iters` (default 3) → STOP + set `state.error = "test_fail_count exceeded"` + vytvoř intake item. Neposílej zpět na implement — task je nestabilní.
-- **rework_count**: Inkrementuj při `review → REWORK → implement`. Pokud `rework_count >= max_rework_iters` → review by měl vrátit REDESIGN (viz fabric-review pravidla). Orchestrátor to enforceuje: pokud `rework_count >= max_rework_iters` a review vrátí REWORK místo REDESIGN → přepiš na REDESIGN a zaloguj override.
-- **Reset:** Oba countery se resetují na 0 při změně `wip_item` (nový task) nebo po úspěšném `close`.
+#### Kdy a jak inkrementovat (explicitní kód)
+
+**Po tick() pro step=test**, pokud tick vrátil next_step=implement (tzn. test FAIL):
+```bash
+# Přečti aktuální counter
+CURRENT=$(grep 'test_fail_count:' {WORK_ROOT}/backlog/{wip_item}.md | awk '{print $2}')
+CURRENT=${CURRENT:-0}
+NEW=$((CURRENT + 1))
+# Zapiš zpět do backlog item frontmatter
+sed -i "s/^test_fail_count:.*/test_fail_count: $NEW/" {WORK_ROOT}/backlog/{wip_item}.md || echo "WARN: counter increment failed for test_fail_count"
+# Limit check
+if [ $NEW -ge {SPRINT.max_rework_iters} ]; then
+  # STOP — task je nestabilní
+  # Nastav state.error a vytvoř intake item
+  echo "STOP: test_fail_count ($NEW) >= max_rework_iters ({SPRINT.max_rework_iters})"
+fi
+```
+
+**Po tick() pro step=review**, pokud tick vrátil next_step=implement (tzn. review REWORK):
+```bash
+# Přečti aktuální counter
+CURRENT=$(grep 'rework_count:' {WORK_ROOT}/backlog/{wip_item}.md | awk '{print $2}')
+CURRENT=${CURRENT:-0}
+NEW=$((CURRENT + 1))
+# Zapiš zpět do backlog item frontmatter
+sed -i "s/^rework_count:.*/rework_count: $NEW/" {WORK_ROOT}/backlog/{wip_item}.md || echo "WARN: counter increment failed for rework_count"
+```
+
+**Poznámka:** Inkrement se provádí VŽDY v fabric-loop, NIKDY v sub-skillech. Sub-skilly (fabric-test, fabric-review) pouze generují reporty s verdikty. Loop čte verdikty a aktualizuje countery.
+
+- **test_fail_count**: Inkrementuj při `test → FAIL → implement` (viz kód výše). Pokud `test_fail_count >= max_rework_iters` (default 3) → STOP + set `state.error = "test_fail_count exceeded"` + vytvoř intake item. Neposílej zpět na implement — task je nestabilní.
+- **rework_count**: Inkrementuj při `review → REWORK → implement` (viz kód výše). Pokud `rework_count >= max_rework_iters` → review by měl vrátit REDESIGN (viz fabric-review pravidla). Orchestrátor to enforceuje: pokud `rework_count >= max_rework_iters` a review vrátí REWORK místo REDESIGN → přepiš na REDESIGN a zaloguj override.
+
+#### Kdy resetovat countery (explicitní)
+
+Reset obou counterů na 0 nastává ve **dvou** situacích:
+1. **Nový task**: Když fabric-loop vybere nový `wip_item` z Task Queue (tzn. změní se `state.wip_item`), přepíše `test_fail_count: 0` a `rework_count: 0` v novém backlog itemu.
+2. **Po úspěšném close**: Když `fabric-close` dokončí merge a gates PASS, fabric-loop resetuje countery v backlog itemu (nezávisle na tom, že task je DONE — pro audit trail).
+
+Kdo provádí reset: **fabric-loop** (ne fabric-close, ne fabric-implement). Reset se provádí PŘED prvním dispatch na nový task, tzn. PŘED prvním implement tickem.
+
+#### Explicitní reset kód (povinný)
+
+**Při výběru nového tasku** (fabric-loop, před prvním implement dispatch):
+```bash
+# Ensure countery existují a jsou na 0 v novém backlog itemu
+WIP_FILE="{WORK_ROOT}/backlog/{NEW_WIP_ITEM}.md"
+if grep -q 'test_fail_count:' "$WIP_FILE"; then
+  sed -i "s/^test_fail_count:.*/test_fail_count: 0/" "$WIP_FILE"
+else
+  # Přidej do frontmatter (před uzavírací ---)
+  sed -i '/^---$/!b; N; s/\n---$/\ntest_fail_count: 0\n---/' "$WIP_FILE"
+fi
+if grep -q 'rework_count:' "$WIP_FILE"; then
+  sed -i "s/^rework_count:.*/rework_count: 0/" "$WIP_FILE"
+else
+  sed -i '/^---$/!b; N; s/\n---$/\nrework_count: 0\n---/' "$WIP_FILE"
+fi
+```
+
+**Po úspěšném close** (fabric-loop, po close tick):
+```bash
+# Reset counterů pro archivační audit trail
+DONE_FILE="{WORK_ROOT}/backlog/{CLOSED_WIP_ITEM}.md"
+sed -i "s/^test_fail_count:.*/test_fail_count: 0/" "$DONE_FILE" 2>/dev/null || echo "WARN: counter reset failed for test_fail_count in $DONE_FILE"
+sed -i "s/^rework_count:.*/rework_count: 0/" "$DONE_FILE" 2>/dev/null || echo "WARN: counter reset failed for rework_count in $DONE_FILE"
+```
+
+**Error handling pro sed:** Pokud `sed -i` selže (permission, locked file), vypiš WARNING (zachytí run report) a pokračuj — counter na 0 je default a systém degraduje gracefully (counter check používá `${CURRENT:-0}`).
 
 ### Auto-fix scope (clarifikace)
 
@@ -584,7 +652,14 @@ Pokud `review` report říká `Verdict: REDESIGN`:
 - `fabric-loop` resetuje WIP: `git checkout main`, `state.wip_item = null`, `state.wip_branch = null`
 - Branch se **nesmaže** (zůstává jako reference pro budoucí redesign)
 - `fabric-loop` nastaví next step = `close` — `fabric-close` přeskočí merge (WIP=null) a pokračuje na docs
-- Pokud existuje další READY task v Task Queue → pokračuje na implement; jinak docs→check→archive
+
+**Explicitní přechod po REDESIGN close:**
+Po close (s WIP=null, REDESIGN carry-over):
+- `tick --completed close` zkontroluje Task Queue ve sprint plánu
+- Pokud existuje další READY task → next step = `implement` (fabric-loop vybere nový task, resetuje countery, nastaví nový WIP)
+- Pokud žádný READY task → next step = `docs` → pokračuje normálně docs→check→archive
+- Toto je identické chování jako při normálním close (viz dispatch tabulka: "close → pokud existuje další READY task → implement; jinak docs")
+- REDESIGN task se objeví jako carry-over v close sprint summary reportu
 
 
 ---
@@ -629,5 +704,18 @@ Před návratem (po posledním tiku RUN cyklu):
 - žádný infinite loop: počet tiků ≤ `MAX_LOOPS × steps_per_loop` (typicky ≤ 50)
 - po-dispatch kontrakt splněn pro každý dispatchnutý krok (minimální výstupy ověřeny)
 - pokud došlo k REDESIGN → backlog item je BLOCKED a WIP resetován
+- pokud `AUDIT=1` → pro každý dispatchnutý krok existuje audit report `reports/audit-{step}-*.md`
+- countery (`test_fail_count`, `rework_count`) v backlog itemu odpovídají skutečnému počtu FAIL/REWORK cyklů (cross-check s protokolem)
 
 Pokud ne → FAIL + zapiš `state.error` s detailním popisem a STOP.
+
+## Concurrency (single-instance assumption)
+
+Fabric-loop předpokládá **single-instance** operaci — v jednu chvíli smí běžet **nejvýše jeden** orchestrátor pro daný `{WORK_ROOT}`. Concurrent přístup není podporován a způsobí:
+- race conditions na `state.md` (dva loopy přepisují step/wip)
+- dvojitý merge do main (data corruption)
+- counter inkonsistence (test_fail_count / rework_count)
+
+**Detekce (best-effort):** Na začátku RUN zkontroluj `{WORK_ROOT}/logs/protocol.jsonl` — pokud poslední záznam je `event: start` pro `fabric-loop` BEZ odpovídajícího `event: end` a `last_tick_at` je < 10 minut → zaloguj WARNING „possible concurrent instance" do run reportu. Toto NENÍ lock — pouze upozornění.
+
+**Prevence:** Leží na uživateli / CI — nespouštět dva RUN cykly současně.
