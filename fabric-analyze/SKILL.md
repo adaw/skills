@@ -143,6 +143,13 @@ Každý task musí mít:
 - Pokud má task otevřené otázky → ponech `status: DRAFT` a `Task Queue Status = DESIGN`.
 - Pokud je vše jasné → `status: READY` a `Task Queue Status = READY`.
 
+**DŮLEŽITÉ: Synchronizace statusu.**  Kdykoli změníš status tasku (DESIGN → READY nebo naopak), aktualizuj **všechna tři místa**:
+1. Per-task analýza (`{ANALYSES_ROOT}/{task_id}-analysis.md`, frontmatter `status:`)
+2. Sprint plan Task Queue (`sprints/sprint-{N}.md`, sloupec `Status`)
+3. **Backlog item** (`backlog/{task_id}.md`, frontmatter `status:`)
+
+Pokud některé z těchto míst neaktualizuješ, `fabric-implement` uvidí nekonzistentní stav a task přeskočí.
+
 ### 5) Aktualizuj sprint plan deterministicky
 
 Preferuj `plan-apply` (ne ruční edit), aby byl diff čistý:
