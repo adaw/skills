@@ -140,10 +140,22 @@ if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then {COMMANDS.li
 if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then {COMMANDS.format_check}; else echo "format_check: SKIPPED"; fi
 ```
 
-Pokud gate failne:
-- Verdikt = `REWORK`
-- do reportu napiš „Gate failed“ + první příčina
-- STOP (neprováděj hluboký review, dokud gates nejsou čisté)
+Pokud gate failne, **rozliš zdroj chyby**:
+
+1. Zjisti, zda lint/format chyby jsou v souborech **změněných tímto taskem** (diff):
+   ```bash
+   git diff --name-only {main_branch}...{wip_branch} > /tmp/task-files.txt
+   ```
+   Porovnej chybové soubory z lint/format výstupu s task-files.
+
+2. **Chyba v diff (task soubory)** → Verdikt = `REWORK`. Do reportu napiš „Gate failed in task files” + konkrétní soubory a chyby.
+
+3. **Chyba jen v pre-existing souborech (mimo diff)** → Verdikt = **CLEAN** (neblokuj task kvůli cizím chybám). Do reportu zapiš gate jako `PASS (pre-existing issues ignored)` a vytvoř intake item `intake/review-pre-existing-lint-{wip_item}.md` se seznamem pre-existing chyb.
+
+4. **Chyba v obou** → Verdikt = `REWORK` (task soubory musí být čisté). Do reportu rozliš task vs pre-existing findings.
+
+Pokud verdikt = REWORK kvůli gate fail:
+- STOP (neprováděj hluboký review, dokud gates v task souborech nejsou čisté)
 
 ### 2) Zjisti změny (diff)
 

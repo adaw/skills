@@ -165,6 +165,8 @@ Použij `{WORK_ROOT}/templates/intake.md`:
 
 ## Self-check
 
-- max 8 intake items
+- report existuje v `{WORK_ROOT}/reports/generate-{YYYY-MM-DD}.md`
+- report obsahuje: seznam vygenerovaných items, zdůvodnění, dedup evidence
+- max 8 intake items (ne více)
 - každý item má evidence + doporučenou akci
-- report existuje
+- žádný item neduplikuje existující backlog entry (dedup ověření)

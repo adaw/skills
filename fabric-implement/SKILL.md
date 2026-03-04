@@ -14,7 +14,7 @@ Implementovat **jednu** backlog položku (Task/Bug/Chore/Spike) podle `Task Queu
 Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
 
 - `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-implement" --event start`
-- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-implement" --event end --status OK --report "{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}.md"`
+- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-implement" --event end --status OK --report "{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md"`
 
 Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 - loguj `--event error --status ERROR` a dej krátké `--message` (1 věta).
@@ -55,7 +55,7 @@ Volitelné:
   - `wip_item`
   - `wip_branch`
 
-- `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}.md` (vytvoř jako kopii `{WORK_ROOT}/templates/report.md`; shrň změny, test evidence, commit hash, otevřený PR/Review)
+- `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md` (vytvoř jako kopii `{WORK_ROOT}/templates/report.md`; shrň změny, test evidence, commit hash, otevřený PR/Review)
 
 ---
 
@@ -232,6 +232,24 @@ Pokud lint nebo format check failne a config má příslušný fix příkaz, **s
 
 Auto-fix smí proběhnout **max 1×** per gate per implement run. Pokud po auto-fixu gate stále failne → oprav manuálně (v rámci stejného tasku).
 
+#### Separace pre-existing fixů (povinné)
+
+Pokud auto-fix opravil soubory, rozliš, které změny patří k tasku a které jsou pre-existing:
+
+```bash
+# zjisti, které soubory opravil auto-fix, ale NEJSOU v diff tasku
+git diff --name-only {main_branch}...HEAD > /tmp/task-files.txt
+git diff --name-only > /tmp/autofix-files.txt
+# soubory v autofix ale ne v task-files = pre-existing
+```
+
+Pokud existují pre-existing fixy (soubory mimo diff tasku):
+- commitni je **separátně** před task commitem:
+  ```bash
+  git add <pre-existing-files>
+  git commit -m "chore: auto-fix pre-existing lint/format"
+  ```
+
 Pokud něco selže:
 - neopouštěj branch
 - oprav (v rámci stejného tasku)
@@ -241,6 +259,8 @@ Pokud něco selže:
 
 Commit message musí obsahovat ID:
 - `feat({id}): ...` nebo `fix({id}): ...`
+
+Commituj jen soubory patřící k tasku (pre-existing fixy už byly commitnuty zvlášť):
 
 ```bash
 git add -A
@@ -261,7 +281,7 @@ Zapiš do `{WORK_ROOT}/state.md`:
 
 ### 8) Implement report (evidence)
 
-Vytvoř `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}.md` jako kopii `{WORK_ROOT}/templates/report.md` a vyplň:
+Vytvoř `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md` jako kopii `{WORK_ROOT}/templates/report.md` a vyplň:
 
 - Summary: co bylo dodáno (1–3 odrážky)
 - Inputs: `{WORK_ROOT}/analyses/...` a backlog item
@@ -281,6 +301,6 @@ Před návratem:
 - working tree čistý (`git status` nic)
 - `COMMANDS.test` PASS
 - backlog item aktualizovaný (branch/status/updated)
-- implement report existuje v `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}.md`
+- implement report existuje v `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md`
 
 Pokud ne → FAIL + vytvoř intake item `intake/implement-selfcheck-failed-{id}.md`.

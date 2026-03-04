@@ -129,5 +129,7 @@ Pro každé finding s CRITICAL/HIGH (a vybrané MEDIUM):
 
 ## Self-check
 
-- report existuje
+- report existuje v `{WORK_ROOT}/reports/architect-{YYYY-MM-DD}.md`
+- report obsahuje: Component map, Coupling/layering analýzu, Debt hotspots, Security assessment
 - každé CRITICAL/HIGH finding má buď intake item, nebo explicitní zdůvodnění proč ne
+- počet intake items: 3–7 (ne 0, ne 20+)

@@ -117,5 +117,7 @@ Do těla:
 
 ## Self-check
 
-- report existuje
+- report existuje v `{WORK_ROOT}/reports/gap-{YYYY-MM-DD}.md`
+- report obsahuje: Vision↔Backlog gaps, Backlog↔Code gaps, Code↔Tests gaps, Docs drift, Security/Operational gaps
 - každé CRITICAL/HIGH gap má buď intake item, nebo explicitní vysvětlení proč ne
+- počet intake items: 3–10

@@ -149,6 +149,30 @@ Pro každý MERGEABLE task v pořadí:
    ```
 
 6. Pokud gates FAIL:
+
+   **6a) Pokus o auto-fix (max 1×, jen pro lint/format):**
+   Pokud selhaly lint nebo format_check (ne test), zkus auto-fix před revertem:
+
+   ```bash
+   # lint auto-fix (pokud lint failnul a lint_fix existuje)
+   if [ -n "{COMMANDS.lint_fix}" ] && [ "{COMMANDS.lint_fix}" != "TBD" ]; then {COMMANDS.lint_fix}; fi
+
+   # format auto-fix (pokud format_check failnul a format existuje)
+   if [ -n "{COMMANDS.format}" ] && [ "{COMMANDS.format}" != "TBD" ]; then {COMMANDS.format}; fi
+   ```
+
+   Pokud auto-fix opravil něco, commitni a znovu spusť všechny gates:
+   ```bash
+   git add -A && git commit -m "chore({id}): auto-fix lint/format on main"
+   {COMMANDS.lint}
+   {COMMANDS.format_check}
+   {COMMANDS.test}
+   ```
+
+   Pokud po auto-fixu všechny gates PASS → pokračuj krokem 7 (úspěch).
+   Pokud stále FAIL (nebo selhaly testy, ne jen lint/format) → pokračuj revertem níže.
+
+   **6b) Revert (pokud auto-fix nepomohl nebo selhaly testy):**
    - **NEPOUŽÍVEJ** `git reset --hard` ani force push.
    - rollback proveď přes **revert commit** (zachová historii main):
      ```bash
@@ -160,7 +184,7 @@ Pro každý MERGEABLE task v pořadí:
        git revert --no-edit "$MERGE_COMMIT"
      fi
      ```
-   - Pokud revert FAIL (konflikty):  
+   - Pokud revert FAIL (konflikty):
      vytvoř intake item `intake/close-revert-conflict-{id}.md` (zahrň `git status` + konfliktové soubory), nastav `state.error` a **STOP**.
    - Po úspěšném revertu znovu spusť `{COMMANDS.test}` (main musí zůstat green). Pokud to FAIL, nastav `state.error` a **STOP**.
    - vytvoř intake item `intake/close-merge-failed-{id}.md` s výpisem failu + odkazem na revert commit
@@ -173,10 +197,12 @@ Pro každý MERGEABLE task v pořadí:
      - `merge_commit: {SHA}`
      - `status: DONE`
      - `updated: {YYYY-MM-DD}`
-   - (volitelné) smaž branch:
+   - **smaž feature branch** (povinné — zabraňuje hromadění stale branches):
      ```bash
-     git branch -D {branch} || true
+     git branch -d {branch} 2>/dev/null || true
+     git push origin --delete {branch} 2>/dev/null || true
      ```
+     Poznámka: `-d` (ne `-D`) = safe delete (odmítne smazat nemerged branch). Remote delete je best-effort (může selhat bez push práv — to je OK, zapiš do reportu).
 
 > Poznámka: Když má projekt CI, je vhodné po merge udělat `git push origin main` (pokud má agent práva). Pokud ne, aspoň to uveď v reportu jako next action.
 

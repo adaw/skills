@@ -108,5 +108,7 @@ Pokud chybí aspoň 2 z těchto věcí: metrics, non-goals, constraints, priorit
 
 ## Self-check
 
-- report existuje
-- pokud jsou zásadní díry ve vizi, existuje intake item
+- report existuje v `{WORK_ROOT}/reports/vision-{YYYY-MM-DD}.md`
+- report obsahuje: Purpose/Mission, Pillars, Quality gate výsledky, Risks
+- pokud chybí ≥2 quality gates (metrics, non-goals, constraints, priority ordering) → intake item existuje
+- pokud existují sub-vize → jsou zmíněné v reportu (konflikty/alignment)

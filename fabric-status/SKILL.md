@@ -176,5 +176,7 @@ Start 100:
 
 ## Self-check
 
-- report existuje
-- obsahuje explicitní PASS/FAIL/UNKNOWN pro tests + lint + format
+- report existuje v `{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md`
+- report obsahuje: Health score, Key signals (Tests/Lint/Format/Backlog/Docs), Risks radar
+- každý signal má explicitní hodnotu: PASS / FAIL / UNKNOWN / SKIPPED
+- pokud COMMANDS.lint nebo format_check je TBD → intake item existuje

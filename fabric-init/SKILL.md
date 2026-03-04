@@ -87,22 +87,40 @@ Cíl: aby další fáze nemusely hádat test/lint/format příkazy a aby `fabric
 A) **Makefile**
 - pokud existuje `Makefile` a obsahuje target `test:` → `COMMANDS.test = "make test"`
 - pokud existuje `lint:` → `COMMANDS.lint = "make lint"`
+- pokud existuje `lint-fix:` / `lint_fix:` → `COMMANDS.lint_fix = "make <target>"`
 - pokud existuje `format-check:` / `fmt-check:` / `format_check:` → `COMMANDS.format_check = "make <target>"`
+- pokud existuje `format:` / `fmt:` → `COMMANDS.format = "make <target>"`
 
 B) **Node.js (`package.json`)**
 - vyber package manager podle lockfile (`pnpm-lock.yaml`→pnpm, `yarn.lock`→yarn, jinak npm)
 - pokud `scripts.test` existuje → `COMMANDS.test = "<pm> test"`
 - pokud `scripts.lint` existuje → `COMMANDS.lint = "<pm> run lint"`
+- pokud `scripts.lint:fix` nebo `scripts.lint-fix` existuje → `COMMANDS.lint_fix = "<pm> run <script>"`
 - pokud `scripts.format:check` nebo `scripts.format-check` existuje → `COMMANDS.format_check = "<pm> run <script>"`
+- pokud `scripts.format` existuje → `COMMANDS.format = "<pm> run format"`
 
 C) **Python**
 - pokud existuje `pyproject.toml` nebo převaha `*.py` → `COMMANDS.test = "python -m pytest"`
-- pokud v `pyproject.toml` najdeš `ruff` → `COMMANDS.lint = "python -m ruff check ."` a `COMMANDS.format_check = "python -m ruff format --check ."`
-- jinak pokud najdeš `black` → `COMMANDS.format_check = "python -m black --check ."`
+- pokud v `pyproject.toml` najdeš `ruff`:
+  - `COMMANDS.lint = "python -m ruff check ."`
+  - `COMMANDS.lint_fix = "python -m ruff check --fix ."`
+  - `COMMANDS.format_check = "python -m ruff format --check ."`
+  - `COMMANDS.format = "python -m ruff format ."`
+- jinak pokud najdeš `black`:
+  - `COMMANDS.format_check = "python -m black --check ."`
+  - `COMMANDS.format = "python -m black ."`
 
 D) **Go / Rust (pokud detekováno)**
-- `go.mod` → `COMMANDS.test = "go test ./..."` a `COMMANDS.format_check = "test -z \"$(gofmt -l .)\""`
-- `Cargo.toml` → `COMMANDS.test = "cargo test"`, `COMMANDS.lint = "cargo clippy -- -D warnings"`, `COMMANDS.format_check = "cargo fmt -- --check"`
+- `go.mod`:
+  - `COMMANDS.test = "go test ./..."`
+  - `COMMANDS.format_check = "test -z \"$(gofmt -l .)\""`
+  - `COMMANDS.format = "gofmt -w ."`
+- `Cargo.toml`:
+  - `COMMANDS.test = "cargo test"`
+  - `COMMANDS.lint = "cargo clippy -- -D warnings"`
+  - `COMMANDS.lint_fix = "cargo clippy --fix --allow-dirty -- -D warnings"`
+  - `COMMANDS.format_check = "cargo fmt -- --check"`
+  - `COMMANDS.format = "cargo fmt"`
 
 ### Evidence
 
