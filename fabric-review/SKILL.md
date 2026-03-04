@@ -200,28 +200,35 @@ Dimenze:
 **Důležité:** Verdikt musí být parsovatelný. Do reportu napiš řádek přesně ve tvaru:
 - `Verdict: CLEAN`
 - nebo `Verdict: REWORK`
+- nebo `Verdict: REDESIGN`
 
 
 - `CLEAN` pokud:
-  - gates PASS
+  - gates PASS (nebo pre-existing only)
   - žádné CRITICAL findings
   - test evidence existuje a je PASS (nebo je v reportu vysvětleno proč ne)
 
 - `REWORK` pokud:
-  - gates fail
-  - nebo existuje alespoň 1 CRITICAL finding
+  - gates fail v task souborech
+  - nebo existuje alespoň 1 CRITICAL finding, který je opravitelný v rámci současného přístupu
+
+- `REDESIGN` pokud:
+  - CRITICAL finding vyžaduje zásadní změnu přístupu (jiná architektura, nový ADR/spec)
+  - nebo task porušuje accepted ADR / active spec a nelze to vyřešit drobnou úpravou
+  - nebo 3× REWORK na stejném tasku nepomohl (max_rework_iters dosažen — viz rework counter check)
 
 ### Finding severity taxonomy
 
 Každý individual finding musí mít severity:
 
-- **CRITICAL** — blokuje merge: security issue, data corruption risk, testy nevalidují AC, breaking change bez docs, ambiguous behavior
+- **CRITICAL** — blokuje merge: security issue, data corruption risk, testy nevalidují AC, breaking change bez docs, ambiguous behavior, porušení ADR/spec
 - **HIGH** — měl by se opravit před merge: chybějící error handling pro hlavní flow, netestovaný edge case pro core logic, performance regrese
 - **MEDIUM** — doporučeno opravit, neblokuje: naming, minor refactor, chybějící doc komentář, neoptimální ale funkční řešení
 - **LOW** — nice-to-have: stylistické, preference, minor improvements
 
 Verdikt pravidla:
-- ≥1 CRITICAL → `REWORK`
+- ≥1 CRITICAL (opravitelný) → `REWORK`
+- ≥1 CRITICAL (vyžaduje redesign) → `REDESIGN`
 - ≥3 HIGH bez CRITICAL → `REWORK` (akumulace)
 - Jen MEDIUM/LOW → `CLEAN` (findings zapiš do reportu jako doporučení)
 

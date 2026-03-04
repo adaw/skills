@@ -146,6 +146,9 @@ Pro každý MERGEABLE task v pořadí:
    # test (required)
    if [ "{COMMANDS.test}" = "TBD" ] || [ -z "{COMMANDS.test}" ]; then echo "test: NOT CONFIGURED (configure COMMANDS.test)"; exit 2; fi
    {COMMANDS.test}
+
+   # e2e test (optional — spusť pokud existuje a není TBD)
+   if [ -n "{COMMANDS.test_e2e}" ] && [ "{COMMANDS.test_e2e}" != "TBD" ]; then {COMMANDS.test_e2e}; else echo "test_e2e: SKIPPED"; fi
    ```
 
 6. Pokud gates FAIL:
