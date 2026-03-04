@@ -8,7 +8,7 @@ Logika:
 - Jinak → skip (rychlé)
 
 Použití:
-  python skills/fabric-init/tools/ensure_venv.py [--repo-root .] [--venv .venv] [--quiet]
+  python skills/fabric-init/tools/ensure_venv.py [--repo-root .] [--dep-root <path>] [--venv .venv] [--quiet]
 """
 from __future__ import annotations
 import argparse
@@ -137,12 +137,14 @@ def ensure_venv(
     venv_path: Path,
     quiet: bool,
     *,
+    dep_root: Path | None = None,
     stderr_progress: bool = False,
 ) -> bool:
     def log(msg: str) -> None:
         _log(msg, quiet, force_stderr=stderr_progress)
 
-    dep_files = find_dep_files(repo_root)
+    dep_root = dep_root or repo_root
+    dep_files = find_dep_files(dep_root)
     current_hash = hash_files(*dep_files) if dep_files else "no-deps"
 
     venv_python = _venv_bin(venv_path, "python")
@@ -187,15 +189,15 @@ def ensure_venv(
     if has_pyproject:
         log("[ensure_venv] Installing pyproject.toml deps...")
         extras = ".[dev]" if _has_dev_extras(repo_root / "pyproject.toml") else "."
-        rc = run([str(pip), "install", "-e", extras], repo_root, quiet)
+        rc = run([str(pip), "install", "-e", extras], dep_root, quiet)
     elif has_requirements:
         log("[ensure_venv] Installing requirements.txt...")
-        rc = run([str(pip), "install", "-r", "requirements.txt"], repo_root, quiet)
+        rc = run([str(pip), "install", "-r", "requirements.txt"], dep_root, quiet)
         if rc == 0 and (repo_root / "requirements-dev.txt").exists():
-            rc = run([str(pip), "install", "-r", "requirements-dev.txt"], repo_root, quiet)
+            rc = run([str(pip), "install", "-r", "requirements-dev.txt"], dep_root, quiet)
     elif has_setup:
         log("[ensure_venv] Installing setup.py/setup.cfg via pip install -e ...")
-        rc = run([str(pip), "install", "-e", "."], repo_root, quiet)
+        rc = run([str(pip), "install", "-e", "."], dep_root, quiet)
     else:
         log("[ensure_venv] No dep files found — empty venv created")
         rc = 0
@@ -214,8 +216,9 @@ def ensure_venv(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ensure project venv is up to date")
-    parser.add_argument("--repo-root", default=".", help="Path to repo root")
-    parser.add_argument("--venv", default=".venv", help="Venv directory name/path")
+    parser.add_argument("--repo-root", default=".", help="Path to repo root (base for venv path)")
+    parser.add_argument("--dep-root", default=None, help="Dependency root (pyproject/requirements). Defaults to repo-root.")
+    parser.add_argument("--venv", default=".venv", help="Venv directory name/path (relative to repo-root unless absolute)")
     parser.add_argument("--quiet", action="store_true", help="Suppress output")
     parser.add_argument("--json", dest="json_out", action="store_true", help="JSON output")
     args = parser.parse_args()
@@ -224,6 +227,7 @@ def main() -> None:
         args.quiet = True
 
     repo_root = Path(args.repo_root).resolve()
+    dep_root = Path(args.dep_root).resolve() if args.dep_root else repo_root
     venv_path = Path(args.venv) if Path(args.venv).is_absolute() else repo_root / args.venv
 
     lock_path = venv_path.parent / (venv_path.name + ".lock")
@@ -234,6 +238,7 @@ def main() -> None:
                 repo_root,
                 venv_path,
                 args.quiet,
+                dep_root=dep_root,
                 stderr_progress=args.json_out,
             )
     except RuntimeError as exc:
@@ -244,6 +249,7 @@ def main() -> None:
         print(json.dumps({
             "status": "updated" if updated else "ok",
             "venv": str(venv_path),
+            "dep_root": str(dep_root),
             "repo_root": str(repo_root),
         }))
 

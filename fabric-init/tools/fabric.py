@@ -818,11 +818,31 @@ def run_command(repo_root: Path, work_root: Path, cfg: Dict[str, Any], key: str,
             venv_dir = str(env_cfg.get("venv") or env_cfg.get("venv_dir") or venv_dir)
         venv_path = (repo_root / venv_dir) if not Path(venv_dir).is_absolute() else Path(venv_dir)
 
-        looks_python = any((repo_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"))
+        
+        paths = get_paths_block(cfg)
+        code_root = resolve_rel(repo_root, paths.get("CODE_ROOT", "goden/"))
+
+        dep_root = repo_root
+        if not any((repo_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg")):
+            if any((code_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg")):
+                dep_root = code_root
+
+        looks_python = any((dep_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"))
         if looks_python or venv_path.exists():
             ensure_script = Path(__file__).resolve().parent / "ensure_venv.py"
-            ensure_cmd = [sys.executable, str(ensure_script), "--repo-root", str(repo_root), "--venv", str(venv_dir), "--json"]
+            ensure_cmd = [
+                sys.executable,
+                str(ensure_script),
+                "--repo-root",
+                str(repo_root),
+                "--dep-root",
+                str(dep_root),
+                "--venv",
+                str(venv_dir),
+                "--json",
+            ]
             ensure_proc = subprocess.run(ensure_cmd, cwd=str(repo_root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
 
             with log_path.open("w", encoding="utf-8") as f:
                 f.write("=== ensure_venv ===\n")
@@ -873,6 +893,10 @@ def run_command(repo_root: Path, work_root: Path, cfg: Dict[str, Any], key: str,
 def snapshot_status(repo_root: Path, cfg: Dict[str, Any], out_path: Path, tail_lines: int) -> Dict[str, Any]:
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     code_root = resolve_rel(repo_root, paths.get("CODE_ROOT", "goden/"))
     test_root = resolve_rel(repo_root, paths.get("TEST_ROOT", "tests/"))
     docs_root = resolve_rel(repo_root, paths.get("DOCS_ROOT", "docs/"))
@@ -948,6 +972,10 @@ def apply_plan(repo_root: Path, cfg: Dict[str, Any], plan_path: Path) -> Dict[st
 
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     templates_dir = resolve_rel(repo_root, paths.get("TEMPLATES_ROOT", f"{paths.get('WORK_ROOT','fabric/').rstrip('/')}/templates/"))
     state_path = work_root / "state.md"
@@ -1089,11 +1117,31 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
             venv_dir = str(env_cfg.get("venv") or env_cfg.get("venv_dir") or venv_dir)
         venv_path = (repo_root / venv_dir) if not Path(venv_dir).is_absolute() else Path(venv_dir)
 
-        looks_python = any((repo_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"))
+        
+        paths = get_paths_block(cfg)
+        code_root = resolve_rel(repo_root, paths.get("CODE_ROOT", "goden/"))
+
+        dep_root = repo_root
+        if not any((repo_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg")):
+            if any((code_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg")):
+                dep_root = code_root
+
+        looks_python = any((dep_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"))
         if looks_python or venv_path.exists():
             ensure_script = Path(__file__).resolve().parent / "ensure_venv.py"
-            ensure_cmd = [sys.executable, str(ensure_script), "--repo-root", str(repo_root), "--venv", str(venv_dir), "--json"]
+            ensure_cmd = [
+                sys.executable,
+                str(ensure_script),
+                "--repo-root",
+                str(repo_root),
+                "--dep-root",
+                str(dep_root),
+                "--venv",
+                str(venv_dir),
+                "--json",
+            ]
             ensure_proc = subprocess.run(ensure_cmd, cwd=str(repo_root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
             if ensure_proc.returncode == 0:
                 venv_status = "created" if "updated" in (ensure_proc.stdout or "") else "ok"
             else:
@@ -1133,6 +1181,10 @@ def cmd_backlog_scan(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     items = parse_backlog_items(backlog_dir, include_done=args.include_done) if backlog_dir.exists() else []
     data = {"schema": "fabric.backlog_scan.v1", "created_at": now_iso_utc(), "count": len(items), "items": items, "stats": backlog_stats(items)}
@@ -1151,6 +1203,10 @@ def cmd_backlog_validate(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     items: List[Tuple[Path, Dict[str, Any]]] = []
 
@@ -1191,6 +1247,10 @@ def cmd_backlog_normalize(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     today = today_date()
 
@@ -1225,6 +1285,10 @@ def cmd_intake_scan(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     intake_dir = work_root / "intake"
     items = parse_intake_items(intake_dir, include_done=args.include_done) if intake_dir.exists() else []
     data = {"schema": "fabric.intake_scan.v1", "created_at": now_iso_utc(), "count": len(items), "items": items}
@@ -1244,6 +1308,10 @@ def cmd_intake_new(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     templates_dir = resolve_rel(repo_root, paths.get("TEMPLATES_ROOT", "fabric/templates/"))
     state_path = work_root / "state.md"
 
@@ -1313,6 +1381,10 @@ def cmd_work_status(args: argparse.Namespace) -> int:
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
 
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+
     backlog_dir = work_root / "backlog"
     intake_dir = work_root / "intake"
 
@@ -1322,14 +1394,24 @@ def cmd_work_status(args: argparse.Namespace) -> int:
     def _st(it: Dict[str, Any]) -> str:
         return str(it.get("status", "UNKNOWN"))
 
-    work_count = sum(1 for it in backlog_items if _st(it) not in ("DONE", "BLOCKED"))
-    blocked_count = sum(1 for it in backlog_items if _st(it) == "BLOCKED")
-    done_count = sum(1 for it in backlog_items if _st(it) == "DONE")
+
+    def _in_scope(it: Dict[str, Any]) -> bool:
+        return _within_tier(it.get("tier"), eff_tier_max)
+
+    total_work = sum(1 for it in backlog_items if _st(it) not in ("DONE", "BLOCKED"))
+    total_blocked = sum(1 for it in backlog_items if _st(it) == "BLOCKED")
+    total_done = sum(1 for it in backlog_items if _st(it) == "DONE")
+
+    work_count = sum(1 for it in backlog_items if _in_scope(it) and _st(it) not in ("DONE", "BLOCKED"))
+    blocked_count = sum(1 for it in backlog_items if _in_scope(it) and _st(it) == "BLOCKED")
+    done_count = sum(1 for it in backlog_items if _in_scope(it) and _st(it) == "DONE")
 
     # Include a small, deterministic sample of blocked items for reporting / escalation.
     blocked_items_preview: List[Dict[str, Any]] = []
     for it in backlog_items:
         if _st(it) == "BLOCKED":
+            if eff_tier_max is not None and not _within_tier(it.get("tier"), eff_tier_max):
+                continue
             blocked_items_preview.append({
                 "id": it.get("id"),
                 "title": it.get("title"),
@@ -1355,12 +1437,15 @@ def cmd_work_status(args: argparse.Namespace) -> int:
         "schema": "fabric.work_status.v1",
         "created_at": now_iso_utc(),
         "status": status,
+        "goal": goal,
+        "goal_tier_max": eff_tier_max,
         "intake_pending": intake_pending,
         "backlog": {
             "count": len(backlog_items),
             "work": work_count,
             "blocked": blocked_count,
             "done": done_count,
+            "totals": {"work": total_work, "blocked": total_blocked, "done": total_done},
             "stats": backlog_stats(backlog_items),
             "blocked_items": blocked_items_preview,
         },
@@ -1381,6 +1466,10 @@ def cmd_backlog_index(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     items = parse_backlog_items(backlog_dir, include_done=False) if backlog_dir.exists() else []
     idx = generate_backlog_index(work_root, items)
@@ -1516,6 +1605,10 @@ def cmd_backlog_set(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     state_path = work_root / "state.md"
     state: Dict[str, Any] = {}
@@ -1539,6 +1632,10 @@ def cmd_state_read(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
     data = state_read(state_path)
     if args.json_out:
@@ -1555,6 +1652,10 @@ def cmd_state_patch(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
     state: Dict[str, Any] = {}
     if state_path.exists():
@@ -1577,6 +1678,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     res = run_command(repo_root, work_root, cfg, args.key, tail_lines=args.tail)
     out = asdict(res)
     print(json.dumps(out, indent=2, ensure_ascii=False))
@@ -1597,6 +1702,10 @@ def cmd_gate_test(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     templates_dir = resolve_rel(repo_root, paths.get("TEMPLATES_ROOT", "fabric/templates/"))
     state_path = work_root / "state.md"
 
@@ -1756,6 +1865,10 @@ def cmd_run_start(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
 
     run_id = generate_run_id()
@@ -1781,6 +1894,10 @@ def cmd_report_new(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     templates_dir = resolve_rel(repo_root, paths.get("TEMPLATES_ROOT", "fabric/templates/"))
     state_path = work_root / "state.md"
 
@@ -2041,6 +2158,10 @@ def cmd_report_index(args: argparse.Namespace) -> int:
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
 
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+
     entries = _scan_reports(repo_root, work_root, include_archive=args.include_archive)
     out = (work_root / "reports" / "report-index.json") if not args.out else (repo_root / args.out).resolve()
     if not is_within(out, repo_root):
@@ -2101,6 +2222,10 @@ def cmd_report_latest(args: argparse.Namespace) -> int:
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
 
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+
     entries = _scan_reports(repo_root, work_root, include_archive=args.include_archive)
     latest = _latest_report(entries, kind=args.kind, item_id=args.item_id, run_id=args.run_id, sprint=args.sprint)
     if not latest:
@@ -2129,6 +2254,10 @@ def cmd_reports_validate(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
 
     schema_reports = ((cfg.get("SCHEMA") or {}).get("reports") if isinstance(cfg.get("SCHEMA"), dict) else None) or "fabric.report.v1"
     strict = bool(args.strict)
@@ -2210,6 +2339,10 @@ def cmd_contract_check(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
     state: Dict[str, Any] = {}
     if state_path.exists():
@@ -2279,6 +2412,10 @@ def cmd_run_report(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
 
     state: Dict[str, Any] = {}
@@ -2377,6 +2514,10 @@ def cmd_evidence_pack(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
 
     # Load state for context.
     state_path = work_root / "state.md"
@@ -2518,7 +2659,93 @@ def _default_next_step(cfg: Dict[str, Any], step: str) -> str:
     return seq[(i + 1) % len(seq)]
 
 
-def _compute_work_status(work_root: Path) -> Dict[str, Any]:
+
+_TIER_RE = re.compile(r"^T(\d+)$", re.IGNORECASE)
+
+def _tier_num(tier: Any) -> Optional[int]:
+    """Parse tier string like T0/T1... into integer. Unknown/None -> None."""
+    if tier is None:
+        return None
+    if isinstance(tier, (int, float)):
+        return int(tier)
+    s = str(tier).strip()
+    m = _TIER_RE.match(s)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except Exception:
+        return None
+
+
+def _within_tier(tier: Any, tier_max: Optional[str]) -> bool:
+    """Return True if `tier` is within tier_max. If tier_max is None, always True.
+
+    Safety rule: unknown tier counts as within scope (so we don't silently ignore work).
+    """
+    if tier_max is None:
+        return True
+    max_n = _tier_num(tier_max)
+    if max_n is None:
+        # If tier_max itself is invalid, treat as no filter.
+        return True
+    n = _tier_num(tier)
+    if n is None:
+        return True
+    return n <= max_n
+
+
+def _resolve_tier_max(cfg: Dict[str, Any], goal: Optional[str], tier_max: Optional[str]) -> Optional[str]:
+    """Resolve effective tier_max from explicit tier_max or goal mapping in config.
+
+    Precedence:
+    1) explicit --tier-max
+    2) RUN.goals[goal].tier_max (or GOALS[goal].tier_max)
+    3) if goal looks like a tier (T0/T1/...), accept it directly
+    4) unknown goal -> None (no filter)
+    """
+    if tier_max:
+        return str(tier_max).strip()
+    if not goal:
+        return None
+    g = str(goal).strip()
+    if not g:
+        return None
+    # Direct tier (T0, T1, ...)
+    if _TIER_RE.match(g):
+        return g.upper()
+
+    gk = g.lower()
+    run_cfg = cfg.get("RUN") if isinstance(cfg.get("RUN"), dict) else {}
+    goals = None
+    if isinstance(run_cfg, dict) and isinstance(run_cfg.get("goals"), dict):
+        goals = run_cfg.get("goals")
+    elif isinstance(cfg.get("GOALS"), dict):
+        goals = cfg.get("GOALS")
+    if isinstance(goals, dict) and gk in goals:
+        entry = goals.get(gk)
+        if isinstance(entry, dict):
+            tm = entry.get("tier_max") if entry.get("tier_max") is not None else entry.get("max_tier")
+        else:
+            tm = entry
+        if tm is None:
+            return None
+        s = str(tm).strip()
+        if not s or s.lower() == "null":
+            return None
+        if _TIER_RE.match(s):
+            return s.upper()
+    # Built-in fallback goals (only used if config has no mapping)
+    if gk == "mvp":
+        return "T0"
+    if gk == "t1":
+        return "T1"
+    if gk == "release":
+        return None
+    return None
+
+
+def _compute_work_status(work_root: Path, *, tier_max: Optional[str] = None) -> Dict[str, Any]:
     backlog_dir = work_root / "backlog"
     intake_dir = work_root / "intake"
     backlog_items = parse_backlog_items(backlog_dir, include_done=False) if backlog_dir.exists() else []
@@ -2527,24 +2754,43 @@ def _compute_work_status(work_root: Path) -> Dict[str, Any]:
     def _st(it: Dict[str, Any]) -> str:
         return str(it.get("status", "UNKNOWN"))
 
-    work_count = sum(1 for it in backlog_items if _st(it) not in ("DONE", "BLOCKED"))
-    blocked_count = sum(1 for it in backlog_items if _st(it) == "BLOCKED")
+    # Totals (all tiers)
+    total_work = sum(1 for it in backlog_items if _st(it) not in ("DONE", "BLOCKED"))
+    total_blocked = sum(1 for it in backlog_items if _st(it) == "BLOCKED")
+
+    # In-scope (tier filter)
+    in_scope_work = sum(1 for it in backlog_items if _within_tier(it.get("tier"), tier_max) and _st(it) not in ("DONE", "BLOCKED"))
+    in_scope_blocked = sum(1 for it in backlog_items if _within_tier(it.get("tier"), tier_max) and _st(it) == "BLOCKED")
+
     intake_pending = len(intake_items)
-    if intake_pending > 0 or work_count > 0:
+
+    if intake_pending > 0 or in_scope_work > 0:
         status = "work"
-    elif blocked_count > 0:
+    elif in_scope_blocked > 0:
         status = "blocked"
     else:
         status = "none"
-    return {"status": status, "intake_pending": intake_pending, "backlog_work": work_count, "backlog_blocked": blocked_count}
+
+    return {
+        "status": status,
+        "goal_tier_max": tier_max,
+        "intake_pending": intake_pending,
+        "backlog_work": in_scope_work,
+        "backlog_blocked": in_scope_blocked,
+        "backlog_work_total": total_work,
+        "backlog_blocked_total": total_blocked,
+    }
 
 
-def _blocked_items(work_root: Path) -> List[Dict[str, Any]]:
+
+def _blocked_items(work_root: Path, *, tier_max: Optional[str] = None) -> List[Dict[str, Any]]:
     backlog_dir = work_root / "backlog"
     items = parse_backlog_items(backlog_dir, include_done=False) if backlog_dir.exists() else []
     blocked: List[Dict[str, Any]] = []
     for it in items:
         if str(it.get("status")) != "BLOCKED":
+            continue
+        if not _within_tier(it.get("tier"), tier_max):
             continue
         blocked.append(
             {
@@ -2559,12 +2805,12 @@ def _blocked_items(work_root: Path) -> List[Dict[str, Any]]:
     return blocked
 
 
-def _write_blocker_report(repo_root: Path, work_root: Path, state: Dict[str, Any], reason: str) -> Path:
+def _write_blocker_report(repo_root: Path, work_root: Path, state: Dict[str, Any], reason: str, *, tier_max: Optional[str] = None) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
     run_id = state.get("run_id") if isinstance(state.get("run_id"), str) and state.get("run_id") else "NO-RUN"
     out = work_root / "reports" / f"blocker-{stamp}-{run_id}.md"
     ensure_dir(out.parent)
-    blocked = _blocked_items(work_root)
+    blocked = _blocked_items(work_root, tier_max=tier_max)
     created_at = now_iso_utc()
 
     lines: List[str] = []
@@ -2625,6 +2871,10 @@ def cmd_tick(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
     state = state_read(state_path) if state_path.exists() else {}
 
@@ -2636,6 +2886,10 @@ def cmd_tick(args: argparse.Namespace) -> int:
     run_cfg = cfg.get("RUN") if isinstance(cfg.get("RUN"), dict) else {}
     idle_step = (run_cfg.get("idle_step") if isinstance(run_cfg.get("idle_step"), str) else "idle")
 
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+
     completed = args.completed
     now_iso = now_iso_utc()
 
@@ -2643,6 +2897,10 @@ def cmd_tick(args: argparse.Namespace) -> int:
     next_step: Optional[str] = None
     reason: str = ""
     gating: Dict[str, Any] = {}
+    if eff_tier_max is not None:
+        gating["goal_tier_max"] = eff_tier_max
+    if goal is not None:
+        gating["goal"] = goal
 
     # Idle tick: decide whether to wake up.
     if not completed:
@@ -2651,13 +2909,13 @@ def cmd_tick(args: argparse.Namespace) -> int:
             payload = {"schema": "fabric.tick.v1", "noop": True, "reason": "missing --completed"}
             print(json.dumps(payload, indent=2, ensure_ascii=False))
             return 0
-        ws = _compute_work_status(work_root)
+        ws = _compute_work_status(work_root, tier_max=eff_tier_max)
         gating["work_status"] = ws
         if ws["status"] == "work":
             next_step = _lifecycle_sections(cfg).get("orientation", ["vision"])[0]
             reason = "idle->orientation (work detected)"
         elif ws["status"] == "blocked":
-            rep = _write_blocker_report(repo_root, work_root, state, reason="BLOCKED_ONLY (idle tick): all remaining backlog work is BLOCKED")
+            rep = _write_blocker_report(repo_root, work_root, state, reason="BLOCKED_ONLY (idle tick): all remaining backlog work is BLOCKED", tier_max=eff_tier_max)
             patch["error"] = f"BLOCKED_ONLY: see {safe_relpath(rep, repo_root)}"
             next_step = idle_step
             reason = "idle (blocked)"
@@ -2772,11 +3030,23 @@ def cmd_tick(args: argparse.Namespace) -> int:
                                     break
                             statuses[tid] = st
                         remaining = len([tid for tid in task_ids if statuses.get(tid) != "DONE"])
-                        # Choose first READY
+                        # Choose first READY (optionally constrained by tier_max)
                         for tid in task_ids:
-                            if statuses.get(tid) == "READY":
-                                next_ready = tid
-                                break
+                            if statuses.get(tid) != "READY":
+                                continue
+                            if eff_tier_max is not None:
+                                # Load tier for constraint check
+                                tier_val = ""
+                                cand = [backlog_dir / f"{tid}.md", backlog_dir / "done" / f"{tid}.md"]
+                                for cp in cand:
+                                    if cp.exists():
+                                        fm = parse_frontmatter(read_text(cp)) or {}
+                                        tier_val = str(fm.get("tier") or "")
+                                        break
+                                if tier_val and not _within_tier(tier_val, eff_tier_max):
+                                    continue
+                            next_ready = tid
+                            break
             except Exception:
                 next_ready = None
 
@@ -2790,13 +3060,13 @@ def cmd_tick(args: argparse.Namespace) -> int:
                 reason = "close -> docs (no READY tasks)"
 
         if completed == "prio" and run_mode == "auto":
-            ws = _compute_work_status(work_root)
+            ws = _compute_work_status(work_root, tier_max=eff_tier_max)
             gating["work_status"] = ws
             if ws["status"] == "work":
                 next_step = "sprint"
                 reason = "auto guard: work -> sprint"
             elif ws["status"] == "blocked":
-                rep = _write_blocker_report(repo_root, work_root, state, reason="BLOCKED_ONLY (auto guard after prio)")
+                rep = _write_blocker_report(repo_root, work_root, state, reason="BLOCKED_ONLY (auto guard after prio)", tier_max=eff_tier_max)
                 patch["error"] = f"BLOCKED_ONLY: see {safe_relpath(rep, repo_root)}"
                 next_step = idle_step
                 reason = "auto guard: blocked -> idle+error"
@@ -2817,13 +3087,13 @@ def cmd_tick(args: argparse.Namespace) -> int:
             patch["wip_branch"] = None
 
             if run_mode == "auto":
-                ws = _compute_work_status(work_root)
+                ws = _compute_work_status(work_root, tier_max=eff_tier_max)
                 gating["work_status"] = ws
                 if ws["status"] == "work":
                     next_step = _lifecycle_sections(cfg).get("orientation", ["vision"])[0]
                     reason = "auto guard after archive: work -> new cycle"
                 elif ws["status"] == "blocked":
-                    rep = _write_blocker_report(repo_root, work_root, state, reason="BLOCKED_ONLY (auto guard after archive)")
+                    rep = _write_blocker_report(repo_root, work_root, state, reason="BLOCKED_ONLY (auto guard after archive)", tier_max=eff_tier_max)
                     patch["error"] = f"BLOCKED_ONLY: see {safe_relpath(rep, repo_root)}"
                     next_step = idle_step
                     reason = "auto guard after archive: blocked -> idle+error"
@@ -2909,6 +3179,10 @@ def cmd_sprint_next(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     state_path = work_root / "state.md"
 
@@ -3055,6 +3329,10 @@ def cmd_archive_sprint(args: argparse.Namespace) -> int:
     _cfg_path, cfg = load_config(repo_root, Path(args.config).resolve() if args.config else None)
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
+
+    goal = args.goal if hasattr(args, "goal") else None
+    tier_max = args.tier_max if hasattr(args, "tier_max") else None
+    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     done_dir = backlog_dir / "done"
     reports_dir = work_root / "reports"
@@ -3256,6 +3534,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_intake_new)
 
     p = sub.add_parser("work-status", help="Summarize whether there is actionable work to do (intake/backlog).")
+    p.add_argument("--goal", default=None, help="Optional goal name (resolved via RUN.goals) or direct tier (T0/T1/...).")
+    p.add_argument("--tier-max", default=None, help="Optional max tier (T0/T1/...) to scope what counts as remaining work.")
     p.add_argument("--json-out", default=None)
     p.set_defaults(func=cmd_work_status)
 
@@ -3347,6 +3627,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("tick", help="Advance state deterministically after a step completes.")
     p.add_argument("--completed", default=None, help="Completed step name. If omitted and state.step is idle, performs idle tick.")
     p.add_argument("--run-mode", default="fixed", help="fixed|auto (affects prio/archive guards).")
+    p.add_argument("--goal", default=None, help="Optional goal name (resolved via RUN.goals) or direct tier (T0/T1/...).")
+    p.add_argument("--tier-max", default=None, help="Optional max tier (T0/T1/...) to scope done-condition checks.")
     p.set_defaults(func=cmd_tick)
 
     p = sub.add_parser("sprint-next", help="Inspect current sprint plan and report next actionable task.")

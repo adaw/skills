@@ -106,8 +106,19 @@ RUN:
   max_loops_default: 1      # when no loop=... is provided
   max_loops_clamp: [1, 50]  # clamp for loop=<N>
   auto_max_loops: 100       # hard cap for loop=auto to prevent infinite loops
-  max_ticks_per_loop: 25    # safety cap inside a single loop
+  max_ticks_per_loop: 25    # safety cap inside a single loop (auto-mode may raise this based on sprint size + rework limits)
   idle_step: idle           # sentinel step meaning "no actionable work"
+
+  # Optional goal-aware stopping condition (used by fabric-loop and deterministic tooling)
+  # goal maps -> tier_max, and work-status/tick can scope what counts as "remaining work".
+  default_goal: release
+  goals:
+    mvp:
+      tier_max: T0
+    t1:
+      tier_max: T1
+    release:
+      tier_max: null
 
 # Deterministic IO contracts. Used by `fabric.py contract-check` and recommended in `fabric-loop`.
 # Keep these conservative: existence checks only.
