@@ -140,6 +140,8 @@ if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then {COMMANDS.li
 if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then {COMMANDS.format_check}; else echo "format_check: SKIPPED"; fi
 ```
 
+**Design note:** Review **záměrně nespouští auto-fix** (lint_fix/format). Review je read-only pozorovatel — měří stav kódu, neopravuje ho. Auto-fix je odpovědnost implement (na branchi) a close (na main). Pokud lint_fix/format příkazy chybí v configu a gate selže v task souborech → review vrátí REWORK; implement musí opravit ručně nebo vytvořit intake item pro missing lint_fix command.
+
 Pokud gate failne, **rozliš zdroj chyby**:
 
 1. Zjisti, zda lint/format chyby jsou v souborech **změněných tímto taskem** (diff):
@@ -187,18 +189,22 @@ Dimenze:
 
 #### R8 Compliance — konkrétně (povinné)
 
-1) Otevři `decisions/INDEX.md` a identifikuj `accepted` ADR (nebo ty, které jsou zmíněné v analýze tasku).
-2) Otevři `specs/INDEX.md` a identifikuj `active` specs (nebo ty, které jsou zmíněné v analýze tasku).
+1) Otevři `decisions/INDEX.md` a identifikuj **všechny `accepted` ADR** (ne jen ty zmíněné v analýze — analýza může opomenout závislost).
+2) Otevři `specs/INDEX.md` a identifikuj **`active` specs** a **`draft` specs** (draft specs nejsou enforced jako CRITICAL, ale porušení je HIGH finding).
 3) Pokud diff zavádí změnu, která **odporuje accepted ADR** nebo **porušuje active spec**:
    - zapiš finding severity **CRITICAL**
    - v reportu cituj konkrétní ADR/SPEC + konkrétní změnu v diffu
    - doporuč: buď upravit implementaci, nebo vytvořit nový ADR/SPEC (nepřepisuj accepted bez procesu)
 4) **Kontraktově-citlivé soubory** — pokud diff mění některý z těchto modulů, ověř příslušný kontrakt explicitně:
-   - `recall/injection.py` nebo `recall/pipeline.py` → D0004 (injection-contract) + LLMEM_INJECTION_FORMAT_V1: preamble warning musí zůstat, XML struktura musí odpovídat spec, CDATA wrapping zachován
-   - `storage/backends/` → LLMEM_QDRANT_SCHEMA_V1: collection schema, vector params, payload fields
-   - `triage/heuristics.py` nebo `triage/patterns.py` → D0001 (secrets-policy) + LLMEM_TRIAGE_HEURISTICS_V1: masking rules, PII hashing
-   - `models.py` → LLMEM_DATA_MODEL_V1: field names, types, enums
-   - Porušení kontraktu bez odpovídajícího ADR supersede = **CRITICAL**
+   - `recall/injection.py` nebo `recall/pipeline.py` → D0004 (injection-contract) + LLMEM_INJECTION_FORMAT_V1 (active): preamble warning musí zůstat, XML struktura musí odpovídat spec, CDATA wrapping zachován
+   - `storage/backends/` → LLMEM_QDRANT_SCHEMA_V1 (draft): collection schema, vector params, payload fields
+   - `storage/log_jsonl.py` → D0003 (event-sourcing-and-rebuild): JSONL log je immutable (append-only), rebuild musí být možný z logu
+   - `triage/heuristics.py` nebo `triage/patterns.py` → D0001 (secrets-policy) + LLMEM_TRIAGE_HEURISTICS_V1 (draft): masking rules, PII hashing
+   - `models.py` → D0002 (ids-and-idempotency) + LLMEM_DATA_MODEL_V1 (draft): UUIDv7 z content_hash, idempotency_key musí zůstat, field names/types/enums
+   - `api/` → LLMEM_API_V1 (draft): endpoint paths, request/response schema
+   - `recall/scoring.py` nebo `recall/pipeline.py` → LLMEM_RECALL_PIPELINE_V1 (draft): scoring formula, budget algorithm
+   - Porušení `accepted` ADR nebo `active` spec bez odpovídajícího supersede = **CRITICAL**
+   - Porušení `draft` spec = **HIGH** (draft může být upraven, ale musí být vědomé rozhodnutí)
 
 
 ### 4) Verdikt (jednoznačně)

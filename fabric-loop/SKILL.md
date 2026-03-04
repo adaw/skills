@@ -428,7 +428,7 @@ Pokud kdykoliv nastavíš `state.error` nebo vytvoříš CRITICAL intake (kontra
 | sprint | analyze |
 | analyze | implement |
 | implement | test |
-| test | pokud FAIL → implement; pokud PASS → review |
+| test | pokud PASS → review; pokud FAIL → implement (test_fail_count++) |
 | review | pokud CLEAN → close; pokud REWORK → implement; pokud REDESIGN → close (BLOCKED) |
 | close | pokud existuje další READY task v Task Queue → implement; jinak docs |
 | docs | check |
@@ -438,6 +438,24 @@ Pokud kdykoliv nastavíš `state.error` nebo vytvoříš CRITICAL intake (kontra
 > `phase` je pomocná (orientation/planning/implementation/closing), ale **step** je zdroj pravdy pro dispatch.
 
 **Poznámka (multi-task sprint / single-piece flow):** Fáze IMPLEMENTACE se opakuje **per task**. Po `review=CLEAN` jde orchestrátor na `close`, kde se task **merge-ne** (a WIP se resetuje). Teprve potom se vybere další READY task z `Task Queue`.
+
+### Countery a limity (per task)
+
+Orchestrátor udržuje pro aktuální WIP task dva in-memory countery (reset při změně wip_item):
+
+- **test_fail_count**: Inkrementuj při `test → FAIL → implement`. Pokud `test_fail_count >= max_rework_iters` (default 3) → STOP + set `state.error = "test_fail_count exceeded"` + vytvoř intake item. Neposílej zpět na implement — task je nestabilní.
+- **rework_count**: Inkrementuj při `review → REWORK → implement`. Pokud `rework_count >= max_rework_iters` → review by měl vrátit REDESIGN (viz fabric-review pravidla). Orchestrátor to enforceuje: pokud `rework_count >= max_rework_iters` a review vrátí REWORK místo REDESIGN → přepiš na REDESIGN a zaloguj override.
+
+### Auto-fix scope (clarifikace)
+
+Auto-fix (`lint_fix`, `format`) se spouští **max 1× per gate per skill run**. Across rework cycles se může spustit vícekrát — to je záměr: každý implement run je čistý pokus. Celkový počet auto-fix pokusů per task je bounded `max_rework_iters` (default 3). Auto-fix nikdy neopakuje po timeoutu.
+
+### Verdict parsing (kanonický formát)
+
+`tick()` parsuje verdikty z reportů takto:
+- **test report:** Hledá řádek `Result: PASS` nebo `Result: FAIL` (case-insensitive). Fallback: frontmatter `result:` YAML klíč. Pokud ani jedno → error.
+- **review report:** Hledá řádek `Verdict: CLEAN|REWORK|REDESIGN` (case-insensitive). Fallback: frontmatter `verdict:` YAML klíč. Pokud ani jedno → error.
+- Při error (unparseable report): `state.error = "unparseable {step} report"` + STOP.
 
 
 ---

@@ -245,6 +245,17 @@ git diff --name-only > /tmp/autofix-files.txt
 # soubory v autofix ale ne v task-files = pre-existing
 ```
 
+**Error handling:** Pokud `git diff` vrátí chybu (detached HEAD, corrupted index, merge conflict):
+- zaloguj chybu do implement reportu
+- fallback: commitni VŠECHNY auto-fix změny jako pre-existing (bezpečnější než riskovat smíchání)
+- vytvoř intake item `intake/implement-git-diff-error-{date}.md`
+
+Pokud working tree je dirty z neočekávaného důvodu (uncommitted changes před auto-fixem):
+- stashni existující změny: `git stash`
+- spusť auto-fix
+- proveď separaci
+- pop stash: `git stash pop`
+
 Pokud existují pre-existing fixy (soubory mimo diff tasku):
 - commitni je **separátně** před task commitem:
   ```bash

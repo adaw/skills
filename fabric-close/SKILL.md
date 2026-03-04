@@ -137,18 +137,18 @@ Pro každý MERGEABLE task v pořadí:
    ```bash
    # lint (optional)
    if [ "{COMMANDS.lint}" = "TBD" ]; then echo "lint: TBD (configure COMMANDS.lint)"; exit 2; fi
-   if [ -n "{COMMANDS.lint}" ]; then {COMMANDS.lint}; else echo "lint: SKIPPED"; fi
+   if [ -n "{COMMANDS.lint}" ]; then timeout 120 {COMMANDS.lint}; else echo "lint: SKIPPED"; fi
 
-   # format_check (optional)
+   # format_check (optional) — s timeoutem
    if [ "{COMMANDS.format_check}" = "TBD" ]; then echo "format_check: TBD (configure COMMANDS.format_check)"; exit 2; fi
-   if [ -n "{COMMANDS.format_check}" ]; then {COMMANDS.format_check}; else echo "format_check: SKIPPED"; fi
+   if [ -n "{COMMANDS.format_check}" ]; then timeout 120 {COMMANDS.format_check}; else echo "format_check: SKIPPED"; fi
 
-   # test (required)
+   # test (required) — s timeoutem
    if [ "{COMMANDS.test}" = "TBD" ] || [ -z "{COMMANDS.test}" ]; then echo "test: NOT CONFIGURED (configure COMMANDS.test)"; exit 2; fi
-   {COMMANDS.test}
+   timeout 300 {COMMANDS.test}
 
-   # e2e test (optional — spusť pokud existuje a není TBD)
-   if [ -n "{COMMANDS.test_e2e}" ] && [ "{COMMANDS.test_e2e}" != "TBD" ]; then {COMMANDS.test_e2e}; else echo "test_e2e: SKIPPED"; fi
+   # e2e test (optional — spusť pokud existuje a není TBD) — s timeoutem
+   if [ -n "{COMMANDS.test_e2e}" ] && [ "{COMMANDS.test_e2e}" != "TBD" ]; then timeout 600 {COMMANDS.test_e2e}; else echo "test_e2e: SKIPPED"; fi
    ```
 
 6. Pokud gates FAIL:

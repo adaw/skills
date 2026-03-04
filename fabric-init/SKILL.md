@@ -317,18 +317,18 @@ Vytvoř report `{WORK_ROOT}/reports/init-{YYYY-MM-DD}.md`:
 
 ---
 
-## Checklist (self-verify)
+## Self-check
 
-Po initu musí existovat:
-- `{WORK_ROOT}/state.md`
-- `{WORK_ROOT}/vision.md`
-- `{WORK_ROOT}/backlog.md`
-- `{WORK_ROOT}/backlog/`
-- `{WORK_ROOT}/intake/`
-- `{WORK_ROOT}/reports/`
-- `{WORK_ROOT}/sprints/`
-- `{WORK_ROOT}/analyses/`
-- `{WORK_ROOT}/templates/`
-- `{VISIONS_ROOT}/`
+Před návratem ověř:
+- `{WORK_ROOT}/state.md` existuje a má parsovatelný YAML blok
+- `{WORK_ROOT}/vision.md` existuje (i placeholder)
+- `{WORK_ROOT}/backlog.md` existuje
+- Všechny povinné adresáře existují: `backlog/`, `intake/`, `reports/`, `sprints/`, `analyses/`, `templates/`, `decisions/`, `specs/`, `reviews/`, `logs/`, `archive/`
+- `{VISIONS_ROOT}/` existuje
+- Všechny `TEMPLATES_REQUIRED` soubory existují v `{WORK_ROOT}/templates/`
+- `COMMANDS.test` není `TBD` (pokud je → STOP, nelze bezpečně pokračovat)
+- `COMMANDS.lint` a `COMMANDS.format_check` nejsou `TBD` (mohou být `""` = vypnuto)
+- Init report existuje v `{WORK_ROOT}/reports/init-{YYYY-MM-DD}.md`
+- `validate_fabric.py --workspace` PASS (nebo warnings only)
 
 Pokud něco chybí → zapiš do init reportu jako CRITICAL + vytvoř intake item.
