@@ -37,6 +37,7 @@ Aplikovat jen **bezpečné** automatické opravy (idempotentní) a vše ostatní
 - `{WORK_ROOT}/backlog/*.md`
 - `{WORK_ROOT}/sprints/*.md`
 - `{WORK_ROOT}/templates/*.md`
+- `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` (pro vision-fit lint)
 - `{CODE_ROOT}/`, `{TEST_ROOT}/`, `{DOCS_ROOT}/` (existence + volitelné commands)
 
 ---
@@ -111,6 +112,23 @@ Ne-safe (→ intake + WARNING/CRITICAL):
 - chybějící `id` nebo `title`
 - `schema` existuje, ale je **jiný** než očekávaný (drift)
 - nevalidní status/type/tier/effort
+
+### 3.1) Vision-fit lint (backlog ↔ vize)
+
+Cíl: zabránit tomu, aby se backlog stal „košem na všechno“.
+
+Pro každý backlog item (mimo `done/`):
+- načti `tier` a `linked_vision_goal` (pokud existuje)
+
+Pravidla:
+- pokud `tier` je `T0` nebo `T1` a `linked_vision_goal` chybí nebo je prázdné:
+  - vytvoř intake item `{WORK_ROOT}/intake/check-missing-vision-link-{id}.md`
+  - do něj napiš: co chybí (goal/pillar), a návrh: doplnit `linked_vision_goal` nebo snížit tier
+  - reportuj jako WARNING (neblokuje to okamžitě běh, ale musí se to řešit)
+
+- pokud `linked_vision_goal` je vyplněné, ale **neobjevuje se** ani v `{WORK_ROOT}/vision.md` ani v `{VISIONS_ROOT}/*.md`:
+  - vytvoř intake item `{WORK_ROOT}/intake/check-unknown-vision-link-{id}.md`
+  - reportuj WARNING („vision drift / překlep / chybí sub-vize“)
 
 ### 4) Backlog index sync
 

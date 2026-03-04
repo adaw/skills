@@ -32,11 +32,11 @@ Bez kvalitní vize se backlog rozpadne na náhodnou práci.
 
 - `{WORK_ROOT}/config.md`
 - `{WORK_ROOT}/vision.md` — core vize (purpose, pillars, principles, constraints)
-- `{VISIONS_ROOT}/*.md` — sub-vize a rozšíření (God Mode, ekonomika, architektonické vize, roadmap detaily...)
+- `{VISIONS_ROOT}/*.md` — sub-vize a rozšíření (ekonomika, bezpečnost, governance, architektonické vize, roadmap detaily…)
 
 ### Vztah core vision ↔ sub-vize
 
-`vision.md` je **kořenový dokument** — definuje proč, co a jak. Sub-vize v `{VISIONS_ROOT}/` **rozvíjejí** jednotlivé pilíře nebo koncepty do hloubky. Core vision.md by měl na sub-vize odkazovat (`→ viz visions/god-mode.md`). Sub-vize NESMÍ odporovat core vizi — pokud je rozpor, je to finding do reportu.
+`vision.md` je **kořenový dokument** — definuje proč, co a jak. Sub-vize v `{VISIONS_ROOT}/` **rozvíjejí** jednotlivé pilíře nebo koncepty do hloubky. Core `vision.md` by měl na sub-vize odkazovat (PŘÍKLAD: `→ viz {VISIONS_ROOT}/<tema>.md`). Sub-vize NESMÍ odporovat core vizi — pokud je rozpor, je to finding do reportu.
 
 ---
 

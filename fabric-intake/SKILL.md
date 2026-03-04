@@ -34,6 +34,7 @@ Výsledek musí být:
 - `{WORK_ROOT}/intake/*.md` (kanonicky podle `{WORK_ROOT}/templates/intake.md`)
 - `{WORK_ROOT}/backlog/*.md` (kvůli deduplikaci)
 - `{WORK_ROOT}/templates/*.md`
+- `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` (pro přiřazení intake/backlog položek k vizi; povinné pro T0/T1)
 
 ---
 
@@ -55,6 +56,12 @@ Výsledek musí být:
 3. Každý backlog item MUSÍ mít YAML frontmatter dle config schema (id/title/type/tier/status/effort/created/source/prio…).
 4. `prio` z intake je vždy jen start (`0`). Finální PRIO počítá `fabric-prio`.
 5. Pokud intake je nejasný → vytvoř backlog item se statusem `IDEA` a otázkami v sekci „Open questions“.
+6. Každý backlog item musí mít `linked_vision_goal`:
+   - pokud jde přiřadit → vyplň (nejlépe přesný název pilíře/goal z vize)
+   - pokud nejde přiřadit → nech prázdné, ale:
+     - nastav `status: IDEA`
+     - a nedovol Tier vyšší než T2 (aby se „mimo vizi“ práce nedostala do top queue)
+   - pro T0/T1 je prázdné `linked_vision_goal` vždy WARNING a musí vzniknout „Open question“ / následný intake k doplnění vize
 
 ---
 
@@ -84,6 +91,7 @@ ops:
       status: "IDEA"
       effort: "M"
       source: "intake"
+      linked_vision_goal: "<goal-or-empty>"
       created: "{YYYY-MM-DD}"
       updated: "{YYYY-MM-DD}"
   - op: fs.move
@@ -143,7 +151,23 @@ Před vytvořením backlog itemu:
   - intake přesun do `intake/done/` (důvod: merged/duplicate)
   - pokračuj dalším intake
 
-#### 3.3 Urči Type
+#### 3.3 Vision alignment (povinné)
+
+Z `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md`:
+
+- najdi nejbližší relevantní pilíř/goal/principle pro tento intake item
+- nastav `linked_vision_goal`:
+  - pokud už je ve frontmatter a odpovídá pojmům z vize → ponech
+  - pokud chybí → doplň (krátký string; ideálně přesný název pilíře/goal)
+  - pokud je zjevně mimo vizi → ponech prázdné a přidej do backlog itemu „Open questions: proč to děláme / patří to do vize?“
+
+**Non-goals gate:** pokud intake jasně porušuje `Non-goals` z vize → NEVYTVÁŘEJ backlog item. Přesuň intake do `intake/rejected/` a doplň důvod (cituj non-goal).
+
+Pokud `linked_vision_goal` zůstane prázdné:
+- nastav `status: IDEA`
+- tier clamp: max `T2` (i kdyby raw_priority ukazovalo výš)
+
+#### 3.4 Urči Type
 
 Primárně použij `initial_type`. Pokud chybí, inferuj:
 - pokud popis obsahuje „bug“, „crash“, „fails“ → Bug
@@ -151,7 +175,7 @@ Primárně použij `initial_type`. Pokud chybí, inferuj:
 - pokud jde o „research/unknown“ → Spike
 - jinak Task (default)
 
-#### 3.4 Urči Tier (T0–T3)
+#### 3.5 Urči Tier (T0–T3)
 
 Použij jednoduchou heuristiku:
 - raw_priority 9–10 → T0
@@ -161,7 +185,7 @@ Použij jednoduchou heuristiku:
 
 Pokud `linked_vision_goal` je kritické (výslovně označené ve vision) → posuň o 1 tier výš (max T0).
 
-#### 3.5 Urči Status (IDEA / DESIGN / READY)
+#### 3.6 Urči Status (IDEA / DESIGN / READY)
 
 - `READY`, pokud intake už obsahuje:
   - konkrétní doporučenou akci (co změnit) + hrubý test plan / evidence
@@ -170,7 +194,7 @@ Pokud `linked_vision_goal` je kritické (výslovně označené ve vision) → po
 
 Effort nastav `TBD` (pokud si nejsi jistý), jinak XS/S/M/L.
 
-#### 3.6 Vygeneruj backlog ID (deterministicky)
+#### 3.7 Vygeneruj backlog ID (deterministicky)
 
 Pravidlo:
 - prefix podle typu: `epic-`, `story-`, `task-`, `bug-`, `chore-`, `spike-`
@@ -180,7 +204,7 @@ Pravidlo:
 Příklad:
 - „Add auth middleware“ → `task-add-auth-middleware`
 
-#### 3.7 Vytvoř backlog item soubor
+#### 3.8 Vytvoř backlog item soubor
 
 Vytvoř `{WORK_ROOT}/backlog/{id}.md` podle odpovídající šablony:
 - Epic → `{WORK_ROOT}/templates/epic.md`
@@ -188,7 +212,7 @@ Vytvoř `{WORK_ROOT}/backlog/{id}.md` podle odpovídající šablony:
 - Task/Bug/Chore/Spike → `{WORK_ROOT}/templates/task.md` (změň `type:`)
 
 Vyplň minimálně:
-- `id`, `title`, `type`, `tier`, `status`, `effort`, `created`, `updated`, `source: intake`, `prio: 0`
+- `id`, `title`, `type`, `tier`, `status`, `effort`, `created`, `updated`, `source: intake`, `prio: 0`, `linked_vision_goal`
 - do těla vlož:
   - „Příkaz odemykující“ (1 věta)
   - popis + kontext z intake
@@ -196,7 +220,7 @@ Vyplň minimálně:
   - „Open questions“ pokud status není READY
   - odkaz na intake (provenance)
 
-#### 3.8 Přesuň intake do done/rejected
+#### 3.9 Přesuň intake do done/rejected
 
 Standardně: přesun do `{WORK_ROOT}/intake/done/`.
 

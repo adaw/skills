@@ -12,6 +12,7 @@ source: manual | generate | gap | arch | review | check | intake
 prio: 0
 depends_on: []
 blocked_by: []
+linked_vision_goal: ""
 branch: null
 review_report: null
 merge_commit: null

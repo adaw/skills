@@ -113,7 +113,7 @@ To aktualizuje položky + regeneruje backlog index.
 
 Z `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` vytáhni:
 - pillars, goals, success metrics (z core vize i sub-vizí)
-- pokud backlog item explicitně odkazuje na goal/pillar, zvyšuje to Impact
+- pokud backlog item explicitně odkazuje na goal/pillar (preferovaně přes `linked_vision_goal` ve frontmatter), zvyšuje to Impact
 
 ### 2) Načti backlog items
 
@@ -137,7 +137,7 @@ Ignoruj:
 - `README*`
 
 Pro každý item načti YAML:
-- `id`, `title`, `type`, `tier`, `status`, `effort`, `prio` (stávající), `depends_on`, `blocked_by`
+- `id`, `title`, `type`, `tier`, `status`, `effort`, `prio` (stávající), `depends_on`, `blocked_by`, `linked_vision_goal`
 
 Pokud chybí `title` nebo `type` → vytvoř intake item `intake/prio-schema-missing-{id}.md` a dej itemu PRIO=0 (dokud se neopraví).
 
@@ -150,7 +150,12 @@ Pokud chybí `title` nebo `type` → vytvoř intake item `intake/prio-schema-mis
   - T2: 4
   - T3: 2
 - Bug/Security hotfix může dostat +1 až +2
-- Pokud item mapuje přímo na vision goal: +1
+- Pokud item mapuje přímo na vision goal (např. `linked_vision_goal` není prázdné): +1
+
+**Vision-fit gate (aby backlog neujížděl mimo směr):**
+- Pokud `tier` je `T0` nebo `T1` a `linked_vision_goal` je prázdné → penalizuj Impact o `-3` (min 0) a vytvoř intake item:
+  - `{WORK_ROOT}/intake/prio-missing-vision-link-{id}.md`
+  - do něj napiš: „Doplňte/ověřte napojení backlog itemu na vizi (goal/pillar) nebo snižte tier/archivujte.“
 
 **Urgency (0–10)**
 - BLOCKED blocker pro T0 chain: 9–10
@@ -203,6 +208,7 @@ Seřaď:
   - effort odhad z TBD
   - items se schématem mimo kontrakt
   - items bez AC (readiness penalty)
+  - T0/T1 items bez `linked_vision_goal` (vision-fit gate)
 - Doporučení pro sprint planning (např. „vyber prvních 5 READY tasks“)
 
 ---
