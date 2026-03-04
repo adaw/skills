@@ -125,7 +125,32 @@ Pro každý MERGEABLE task v pořadí:
    - pokud je lokální: `git show-ref --verify refs/heads/{branch}`
    - pokud není, ale je remote: `git checkout -b {branch} origin/{branch}`
 
-4. Squash merge (s conflict detection):
+4. Pre-merge divergence check (povinné):
+   ```bash
+   # Ověř, že branch je based on current main (ne na stale main)
+   MERGE_BASE=$(git merge-base {main_branch} {branch})
+   MAIN_HEAD=$(git rev-parse {main_branch})
+   if [ "$MERGE_BASE" != "$MAIN_HEAD" ]; then
+     echo "WARN: branch {branch} diverged from {main_branch} (merge-base: $MERGE_BASE, main HEAD: $MAIN_HEAD)"
+     # Pokus o rebase (safe — na feature branch, ne na main)
+     git checkout {branch}
+     git rebase {main_branch}
+     REBASE_EXIT=$?
+     if [ $REBASE_EXIT -ne 0 ]; then
+       git rebase --abort
+       echo "ERROR: rebase failed for {branch}, marking as carry-over"
+       git checkout {main_branch}
+       # Vytvoř intake item (povinné — evidence pro carry-over)
+       # intake/close-rebase-failed-{id}.md s: branch name, merge-base, rebase error
+       # Označ jako CARRY-OVER (reason: branch diverged, rebase conflict)
+       # Aktualizuj sprint summary report (carry-over tabulka)
+       # Přeskoč na další task (continue, ne break)
+     fi
+     git checkout {main_branch}
+   fi
+   ```
+
+5. Squash merge (s conflict detection):
    ```bash
    git merge --squash {branch}
    MERGE_EXIT=$?
@@ -133,12 +158,28 @@ Pro každý MERGEABLE task v pořadí:
      echo "ERROR: squash merge conflict for {branch}"
      # Vyčisti conflict stav
      git merge --abort 2>/dev/null || git reset --merge
+     # Verifikace čistého working tree po abort (povinné)
+     if [ -n "$(git status --porcelain)" ]; then
+       echo "WARN: dirty working tree after merge abort, cleaning"
+       git checkout -- .
+       git clean -fd
+     fi
      # Označ jako carry-over
      # Vytvoř intake item
      echo "Carry-over: merge conflict, needs manual resolution"
      # NEPOKRAČUJ na commit — přeskoč na další task
    fi
+   # Commit s exit code kontrolou
    git commit -m "feat({id}): {title} (sprint {N})"
+   COMMIT_EXIT=$?
+   if [ $COMMIT_EXIT -ne 0 ]; then
+     echo "ERROR: commit failed after squash merge (exit $COMMIT_EXIT)"
+     # Vyčisti stav
+     git reset HEAD 2>/dev/null
+     # Označ jako carry-over (reason: commit failed)
+     # Vytvoř intake item intake/close-commit-failed-{id}.md
+     # Přeskoč na další task
+   fi
    ```
 
    **Squash conflict handling:** Pokud `git merge --squash` selže (exit ≠ 0):
@@ -148,7 +189,7 @@ Pro každý MERGEABLE task v pořadí:
    - Označ task jako CARRY-OVER (reason: squash merge conflict)
    - **Nepokračuj** na commit / quality gates — přeskoč na další MERGEABLE task
    - Tím se zajistí, že merge conflict jednoho tasku nezablokuje celý sprint
-5. Spusť quality gates na main (bezpečně, podle `QUALITY.mode`):
+6. Spusť quality gates na main (bezpečně, podle `QUALITY.mode`):
    - **Poznámka:** v `bootstrap` režimu mohou být `lint` / `format_check` vypnuté (`""`) → ber jako `SKIPPED`.
      Ve `strict` režimu musí být nakonfigurované (nesmí být `""` ani `TBD`).
 
@@ -192,13 +233,15 @@ Pro každý MERGEABLE task v pořadí:
    # lint auto-fix (pokud lint failnul a lint_fix existuje) — s timeoutem
    if [ -n "{COMMANDS.lint_fix}" ] && [ "{COMMANDS.lint_fix}" != "TBD" ]; then
      timeout 120 {COMMANDS.lint_fix}
-     if [ $? -eq 124 ]; then echo "TIMEOUT: lint_fix on main"; fi
+     LINTFIX_EXIT=$?
+     if [ $LINTFIX_EXIT -eq 124 ]; then echo "TIMEOUT: lint_fix on main"; GATE_RESULT="TIMEOUT"; fi
    fi
 
    # format auto-fix (pokud format_check failnul a format existuje) — s timeoutem
    if [ -n "{COMMANDS.format}" ] && [ "{COMMANDS.format}" != "TBD" ]; then
      timeout 120 {COMMANDS.format}
-     if [ $? -eq 124 ]; then echo "TIMEOUT: format on main"; fi
+     FMTFIX_EXIT=$?
+     if [ $FMTFIX_EXIT -eq 124 ]; then echo "TIMEOUT: format on main"; GATE_RESULT="TIMEOUT"; fi
    fi
    ```
 
@@ -215,12 +258,12 @@ Pro každý MERGEABLE task v pořadí:
    **Regression detekce:** Pokud auto-fix způsobil NOVÉ selhání (testy FAILily po auto-fixu, ale ne před ním):
    - Revertni auto-fix commit: `git revert --no-edit HEAD`
    - Vytvoř intake item `intake/close-autofix-regression-{date}.md` s diff pre/post
-   - Pokračuj revertem merge commitu (6b)
+   - Pokračuj revertem merge commitu (7b)
 
-   Pokud po auto-fixu všechny gates PASS → pokračuj krokem 7 (úspěch).
+   Pokud po auto-fixu všechny gates PASS → pokračuj krokem 8 (úspěch).
    Pokud stále FAIL (stejné chyby jako před auto-fixem) → pokračuj revertem níže.
 
-   **6b) Revert (pokud auto-fix nepomohl nebo selhaly testy):**
+   **7b) Revert (pokud auto-fix nepomohl nebo selhaly testy):**
    - **NEPOUŽÍVEJ** `git reset --hard` ani force push.
    - rollback proveď přes **revert commit** (zachová historii main):
      ```bash
@@ -242,7 +285,7 @@ Pro každý MERGEABLE task v pořadí:
    - označ task jako carry-over (reason: merge gates failed)
    - pokračuj dalším taskem (nesmí to zablokovat celý sprint)
 
-7. Pokud gates PASS:
+8. Pokud gates PASS:
    - získej commit SHA: `SHA=$(git rev-parse HEAD)`
    - aktualizuj backlog item:
      - `merge_commit: {SHA}`
@@ -295,13 +338,13 @@ Po KAŽDÉM merge aktualizuj tento soubor:
 - **Quality evidence** (jaké commands běžely, PASS/FAIL)
 - **Summary** + **Next** — přepiš aktuální stav
 
-### 6) Reset WIP (doporučeno)
+### 7) Reset WIP (povinné)
 
-Po uzavření sprintu nastav ve `{WORK_ROOT}/state.md`:
+Po uzavření každého tasku (merge PASS nebo carry-over) nastav ve `{WORK_ROOT}/state.md`:
 - `wip_item: null`
 - `wip_branch: null`
 
-> Nesahej na `phase/step`.
+> Nesahej na `phase/step`. WIP reset je **mandatory** — fabric-loop předpokládá, že po close je WIP čistý pro výběr dalšího tasku.
 
 ---
 

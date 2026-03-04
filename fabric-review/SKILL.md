@@ -298,10 +298,10 @@ python skills/fabric-init/tools/fabric.py report-new \
 3) Do backlog itemu doplň (preferovaně přes apply plan výše):
    - `review_report: "reports/review-{wip_item}-{YYYY-MM-DD}-{run_id}.md"`
    - `updated: {YYYY-MM-DD}`
-   - `status:`
+   - `status:` (fabric-review nastaví předběžně; fabric-loop je autoritativní owner a může přepsat)
      - `CLEAN` → `DONE`
      - `REWORK` → `IN_PROGRESS`
-     - `REDESIGN` → typicky `BLOCKED` + vytvoř follow‑up v intake
+     - `REDESIGN` → `BLOCKED` (fabric-loop ověří a potvrdí; pokud review nenastaví, loop nastaví sám)
 
 ---
 

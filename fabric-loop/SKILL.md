@@ -359,8 +359,9 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
    ```
 
    - `tick` řeší všechny guardy:
-     - po `test` čte poslední test report (vyžaduje `Result: PASS|FAIL`)
+     - po `test` čte poslední test report (vyžaduje `Result: PASS|FAIL|TIMEOUT`)
      - po `review` čte poslední review report (vyžaduje `verdict: CLEAN|REWORK|REDESIGN` nebo `Verdict:`)
+     - po `analyze` kontroluje Task Queue — pokud je prázdná (0 tasks) → next step = `docs` (přeskoč implement)
      - po `close` rozhodne mezi `implement` vs `docs` podle sprint plánu
      - po `prio` a po `archive` v `RUN_MODE=auto` umí spadnout do `idle`
       - po `archive` incrementuje `state.sprint` a tím uzavírá loop
@@ -426,7 +427,7 @@ Pokud kdykoliv nastavíš `state.error` nebo vytvoříš CRITICAL intake (kontra
 | intake | prio |
 | prio | sprint |
 | sprint | analyze |
-| analyze | implement |
+| analyze | implement — **guard:** pokud Task Queue ve sprint plánu je prázdná (0 tasks po analýze) → přeskoč na `docs` (sprint bez implementačních položek). Vytvoř intake item `intake/loop-empty-task-queue-sprint-{N}.md`. |
 | implement | test |
 | test | pokud PASS → review; pokud FAIL → implement (test_fail_count++) |
 | review | pokud CLEAN → close; pokud REWORK → implement; pokud REDESIGN → close (BLOCKED) |
@@ -533,8 +534,12 @@ Auto-fix (`lint_fix`, `format`) se spouští **max 1× per gate per skill run**.
 ### Verdict parsing (kanonický formát)
 
 `tick()` parsuje verdikty z reportů takto:
-- **test report:** Hledá řádek `Result: PASS` nebo `Result: FAIL` (case-insensitive). Fallback: frontmatter `result:` YAML klíč. Pokud ani jedno → error.
+- **test report:** Hledá řádek `Result: PASS` nebo `Result: FAIL` nebo `Result: TIMEOUT` (case-insensitive). Fallback: frontmatter `result:` YAML klíč. Pokud ani jedno → error.
+  - `PASS` → next step = review
+  - `FAIL` → next step = implement (+ counter increment)
+  - `TIMEOUT` → hodnoť jako FAIL (next step = implement, counter increment), ALE: vytvoř intake item `intake/loop-test-timeout-{wip_item}.md` s doporučením identifikovat pomalé testy. V run reportu označ jako `TIMEOUT` (odlišně od FAIL pro root cause analýzu).
 - **review report:** Hledá řádek `Verdict: CLEAN|REWORK|REDESIGN` (case-insensitive). Fallback: frontmatter `verdict:` YAML klíč. Pokud ani jedno → error.
+  - Pokud review report obsahuje gate výsledek `TIMEOUT` (lint/format timeout): hodnoť jako REWORK (infrastrukturní problém, ne code quality). Vytvoř intake item pokud ještě neexistuje.
 - Při error (unparseable report): `state.error = "unparseable {step} report"` + STOP.
 
 

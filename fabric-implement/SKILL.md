@@ -194,7 +194,8 @@ Pokud baseline selže:
 
 #### 3.1) Governance compliance (VERIFY-FIRST)
 
-- Otevři `{ANALYSES_ROOT}/{id}-analysis.md` a najdi sekci **Constraints**.
+- Pokud `{ANALYSES_ROOT}/{id}-analysis.md` **neexistuje**: zaloguj WARNING do implement reportu ("analysis missing, governance check skipped") a pokračuj bez governance ověření. Vytvoř intake item `intake/implement-missing-analysis-{id}.md` (jednorázově, pokud ještě neexistuje).
+- Pokud analýza **existuje**: otevři `{ANALYSES_ROOT}/{id}-analysis.md` a najdi sekci **Constraints**.
 - Pro každé uvedené `ADR-*` a `SPEC-*`:
   - otevři odpovídající soubor v `{WORK_ROOT}/decisions/` nebo `{WORK_ROOT}/specs/`
   - explicitně ověř, že plánovaná implementace tyto kontrakty **neporuší**.
