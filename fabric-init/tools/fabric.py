@@ -1077,6 +1077,34 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     repo_root = find_repo_root(Path(args.repo_root) if args.repo_root else Path.cwd())
     cfg_path = Path(args.config).resolve() if args.config else None
     summary = ensure_workspace_skeleton(repo_root, cfg_path, create_vision_stub=args.create_vision_stub)
+
+    # Best-effort venv creation: if the project looks like Python, ensure .venv exists
+    # so that subsequent steps (status, gate-test, snapshot-status) can run commands immediately.
+    venv_status = "skipped"
+    try:
+        _cfg_path, cfg = load_config(repo_root, cfg_path)
+        env_cfg = cfg.get("ENV") or {}
+        venv_dir = ".venv"
+        if isinstance(env_cfg, dict):
+            venv_dir = str(env_cfg.get("venv") or env_cfg.get("venv_dir") or venv_dir)
+        venv_path = (repo_root / venv_dir) if not Path(venv_dir).is_absolute() else Path(venv_dir)
+
+        looks_python = any((repo_root / f).exists() for f in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"))
+        if looks_python or venv_path.exists():
+            ensure_script = Path(__file__).resolve().parent / "ensure_venv.py"
+            ensure_cmd = [sys.executable, str(ensure_script), "--repo-root", str(repo_root), "--venv", str(venv_dir), "--json"]
+            ensure_proc = subprocess.run(ensure_cmd, cwd=str(repo_root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if ensure_proc.returncode == 0:
+                venv_status = "created" if "updated" in (ensure_proc.stdout or "") else "ok"
+            else:
+                venv_status = f"error (rc={ensure_proc.returncode})"
+                if ensure_proc.stderr:
+                    venv_status += f": {ensure_proc.stderr.strip()[:200]}"
+    except Exception as e:
+        venv_status = f"error: {e}"
+
+    summary["venv"] = venv_status
+
     if args.out_json:
         out = (repo_root / args.out_json).resolve()
         if not is_within(out, repo_root):
