@@ -17,7 +17,7 @@ description: "Close the current sprint: merge approved task branches into main (
 Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
 
 - `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-close" --event start`
-- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-close" --event end --status OK --report "{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md"`
+- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-close" --event end --status OK --report "{WORK_ROOT}/reports/close-{wip_item}-{YYYY-MM-DD}-{run_id}.md"`
 
 Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 - loguj `--event error --status ERROR` a dej krátké `--message` (1 věta).
@@ -40,12 +40,14 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 ## Výstupy
 
-- `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md`
+- **Per-task:** `{WORK_ROOT}/reports/close-{wip_item}-{YYYY-MM-DD}-{run_id}.md` *(pro každý mergovaný task — NESMÍ se přepisovat)*
+- **Sprint summary:** `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md` *(aktualizuj po každém close — append-only tabulky, přepiš jen Summary/Next)*
 - aktualizované backlog items:
   - `merge_commit`
   - `status: DONE`
   - `updated`
-- regenerovaný `{WORK_ROOT}/backlog.md`
+- regenerovaný `{WORK_ROOT}/backlog.md` *(po každém merge, ne jen na konci)*
+- aktualizovaný `{WORK_ROOT}/sprints/sprint-{N}.md` (Task Queue statusy → DONE)
 - (doporučeno) reset `state.wip_item` + `state.wip_branch` na null
 
 ---
@@ -178,21 +180,38 @@ Pro každý MERGEABLE task v pořadí:
 
 > Poznámka: Když má projekt CI, je vhodné po merge udělat `git push origin main` (pokud má agent práva). Pokud ne, aspoň to uveď v reportu jako next action.
 
-### 4) Regeneruj backlog index
+### 4) Regeneruj backlog index (po KAŽDÉM merge)
 
-- Aktualizuj `{WORK_ROOT}/backlog.md` skenem backlog itemů (mimo done/)
-- DONE items mohou zůstat v backlog/ do `archive` kroku, nebo je může archive přesunout do `backlog/done/`
+Deterministicky:
+```bash
+python skills/fabric-init/tools/fabric.py backlog-index
+```
 
-### 5) Close report
+Tím se `{WORK_ROOT}/backlog.md` synchronizuje se skutečným stavem backlog items. Nečekej na konec sprintu — **regeneruj po každém merge**, aby byl backlog.md vždy aktuální.
 
-Vytvoř `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md` dle `{WORK_ROOT}/templates/close-report.md`:
+### 5) Per-task close report (povinné)
 
-- Summary
-- Completed & merged (s commit sha)
-- Carry-over (důvod + next action)
-- Not started
-- Blocked
-- Quality evidence (jaké commands běžely, PASS/FAIL)
+Pro KAŽDÝ mergovaný task vytvoř **samostatný** report:
+
+`{WORK_ROOT}/reports/close-{wip_item}-{YYYY-MM-DD}-{run_id}.md`
+
+Obsah:
+- Task ID, title, branch, merge commit SHA
+- Quality evidence (test PASS/FAIL, lint PASS/FAIL/SKIPPED)
+- Carry-over: ne (pokud DONE) nebo důvod
+
+> **NESMÍŠ přepisovat existující per-task close report.** Každý task = 1 soubor. To zajišťuje kompletní audit trail.
+
+### 6) Sprint summary report (append-only)
+
+`{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md` dle `{WORK_ROOT}/templates/close-report.md`:
+
+Po KAŽDÉM merge aktualizuj tento soubor:
+- **Completed & Merged** — tabulka (append řádek pro nový task)
+- **Carry-over** — aktualizuj zbývající tasky
+- **Not started** / **Blocked**
+- **Quality evidence** (jaké commands běžely, PASS/FAIL)
+- **Summary** + **Next** — přepiš aktuální stav
 
 ### 6) Reset WIP (doporučeno)
 

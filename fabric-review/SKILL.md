@@ -247,15 +247,34 @@ python skills/fabric-init/tools/fabric.py report-new \
 
 > Skeleton reportu nepiš ručně — používej template `review-summary.md`.
 
-## Checklist (co musí být v reportu)
-- R1–R8 (skóre + konkrétní nálezy)
-- CRITICAL findings (pokud existují)
-- Suggested next step
+## Checklist (co musí být v reportu — vše povinné)
+
+- **Per-dimension R1–R8 tabulka** — VŽDY, i pro triviální změny. Minimální formát:
+
+  ```markdown
+  | Dim | Score | Findings |
+  |-----|-------|----------|
+  | R1 Correctness | 5/5 | No issues |
+  | R2 Security | 5/5 | No issues |
+  | R3 Performance | 5/5 | No issues |
+  | R4 Reliability | 5/5 | No issues |
+  | R5 Testability | 5/5 | No issues |
+  | R6 Maintainability | 5/5 | No issues |
+  | R7 Documentation | 5/5 | No issues |
+  | R8 Compliance | 5/5 | No ADR/spec conflicts |
+  ```
+
+- **CRITICAL/HIGH findings** — pokud existují, vypiš konkrétně (soubor, řádek, důvod)
+- **Verdict** — explicitně: `Verdict: CLEAN` nebo `Verdict: REWORK`
+- **Suggested next step** — 1 věta
+
+> **Zkrácený review ("All 5/5, no findings") je skill violation.** I pro triviální change musíš uvést R1–R8 tabulku, aby bylo jasné, že jsi každou dimenzi reálně prověřil.
 
 ---
 
 ## Self-check
 
 - review report exists
+- **R1–R8 tabulka je přítomna** (ne jen souhrnné "All 5/5")
 - backlog item has `review_report`
 - verdict is explicit (CLEAN/REWORK/REDESIGN)

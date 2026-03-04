@@ -102,12 +102,13 @@ python skills/fabric-init/tools/fabric.py run test_e2e --tail 200
    - Pro každý failing test zapiš:
      - `test_name`, `file:line`, `error_type`, zkrácený `message` (max 3 řádky)
    - Pokud FAIL count > 20, zapiš jen top 10 + „… and {N} more"
-6. Doplň report (volitelné, ale doporučené):
+6. Doplň report (**povinné** — NESMÍ zůstat prázdné):
    - přidej structured failures (viz krok 5)
    - pokud FAIL: napiš *nejpravděpodobnější root cause* + *next action*
-   - pokud PASS: napiš 1 větu „co testy pokrývaly“
+   - pokud PASS: napiš **minimálně 1–2 věty** shrnutí: kolik testů, co pokrývají, jaké moduly/soubory byly testovány
+   - **Notes sekce NESMÍ být prázdná** — `gate-test` vytvoří skeleton, ale ty MUSÍŠ doplnit interpretaci
 
-> **Poznámka:** `gate-test` report vytvoří automaticky. Ty jen doplňuješ interpretaci.
+> **Poznámka:** `gate-test` report vytvoří automaticky. Ty **musíš** doplnit interpretaci — prázdný Notes/Failures je skill violation.
 
 ---
 
@@ -120,4 +121,6 @@ Použij `{WORK_ROOT}/templates/test-report.md` (vytvořeno přes `report-new`).
 ## Self-check
 
 - report existuje v `{WORK_ROOT}/reports/`
+- **Notes sekce je neprázdná** (alespoň 1 věta)
 - pokud FAIL, report obsahuje aspoň 1 jasný root cause nebo next action
+- pokud PASS, report říká kolik testů prošlo a co pokrývaly
