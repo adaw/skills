@@ -41,10 +41,34 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 - `state.wip_item` musí být vyplněné
 - `COMMANDS.test` musí být vyplněné a nesmí být `TBD`
+- `state.wip_branch` musí existovat jako git branch
 
 Pokud není splněno:
 - vytvoř intake item `intake/test-missing-wip-or-commands.md`
 - FAIL
+
+### File & branch existence checks (povinné)
+
+```bash
+WIP_ITEM=$(python skills/fabric-init/tools/fabric.py state-get --field wip_item 2>/dev/null)
+WIP_BRANCH=$(python skills/fabric-init/tools/fabric.py state-get --field wip_branch 2>/dev/null)
+
+# 1. wip_item musí mít backlog soubor
+if [ ! -f "{WORK_ROOT}/backlog/${WIP_ITEM}.md" ]; then
+  echo "STOP: backlog file missing for wip_item=$WIP_ITEM"
+  python skills/fabric-init/tools/fabric.py intake-new --source "test" --slug "missing-backlog-file" \
+    --title "Backlog file not found: backlog/${WIP_ITEM}.md"
+  exit 1
+fi
+
+# 2. wip_branch musí existovat v git
+if ! git rev-parse --verify "$WIP_BRANCH" >/dev/null 2>&1; then
+  echo "STOP: branch $WIP_BRANCH does not exist in git"
+  python skills/fabric-init/tools/fabric.py intake-new --source "test" --slug "missing-branch" \
+    --title "Git branch not found: $WIP_BRANCH"
+  exit 1
+fi
+```
 
 > `COMMANDS.test_e2e` je volitelné:
 > - `""` nebo `TBD` = nespouštěj
@@ -79,7 +103,7 @@ python skills/fabric-init/tools/fabric.py run test_e2e --tail 200
 2. Checkoutni branch (bez změn):
    ```bash
    git status --porcelain
-   git checkout {branch}
+   git checkout "${branch}"
    ```
    Pokud working tree není čistý → FAIL (testy musí běžet na čistém stavu)
 3. Spusť testy deterministicky:

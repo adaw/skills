@@ -56,18 +56,54 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 - `state.wip_item` a `state.wip_branch` musí existovat
 - `COMMANDS.lint` a `COMMANDS.format_check` nesmí být `TBD` *(prázdné = vypnuto)*
+- test report pro `wip_item` musí existovat (temporal dependency: test → review)
 
 Pokud chybí → vytvoř intake item `intake/review-missing-wip-or-commands.md` a FAIL.
+
+### File & branch existence checks (povinné)
+
+```bash
+WIP_ITEM=$(python skills/fabric-init/tools/fabric.py state-get --field wip_item 2>/dev/null)
+WIP_BRANCH=$(python skills/fabric-init/tools/fabric.py state-get --field wip_branch 2>/dev/null)
+
+# 1. backlog soubor musí existovat
+if [ ! -f "{WORK_ROOT}/backlog/${WIP_ITEM}.md" ]; then
+  echo "STOP: backlog file missing for wip_item=$WIP_ITEM"
+  python skills/fabric-init/tools/fabric.py intake-new --source "review" --slug "missing-backlog-file" \
+    --title "Backlog file not found: backlog/${WIP_ITEM}.md"
+  exit 1
+fi
+
+# 2. branch musí existovat v git
+if ! git rev-parse --verify "$WIP_BRANCH" >/dev/null 2>&1; then
+  echo "STOP: branch $WIP_BRANCH does not exist in git"
+  python skills/fabric-init/tools/fabric.py intake-new --source "review" --slug "missing-branch" \
+    --title "Git branch not found: $WIP_BRANCH"
+  exit 1
+fi
+
+# 3. test report musí existovat (temporal: implement→test→review)
+LATEST_TEST_REPORT=$(ls -t {WORK_ROOT}/reports/test-${WIP_ITEM}-*.md 2>/dev/null | head -1)
+if [ -z "$LATEST_TEST_REPORT" ]; then
+  echo "STOP: no test report found for wip_item=$WIP_ITEM — run fabric-test first"
+  python skills/fabric-init/tools/fabric.py intake-new --source "review" --slug "missing-test-report" \
+    --title "Test report missing for ${WIP_ITEM} — temporal dependency violated"
+  exit 1
+fi
+```
 
 ### Rework counter check
 
 Načti `rework_count` z backlog item metadata (persisted counter, nastavuje fabric-loop):
 ```bash
 # Preferuj persisted counter z backlog item frontmatter
-REWORK_COUNT=$(grep 'rework_count:' {WORK_ROOT}/backlog/{wip_item}.md | awk '{print $2}')
+REWORK_COUNT=$(grep 'rework_count:' "{WORK_ROOT}/backlog/${wip_item}.md" | awk '{print $2}')
+REWORK_COUNT=${REWORK_COUNT:-0}
+# Numeric validation (viz config.md VALIDATION.counter_validation)
+if ! echo "$REWORK_COUNT" | grep -qE '^[0-9]+$'; then REWORK_COUNT=0; echo "WARN: non-numeric rework_count, reset to 0"; fi
 # Fallback: počet existujících review reportů (méně spolehlivé — soubory mohou být smazány/archivovány)
-if [ -z "$REWORK_COUNT" ]; then
-  REWORK_COUNT=$(ls {WORK_ROOT}/reports/review-{wip_item}-*.md 2>/dev/null | wc -l)
+if [ "$REWORK_COUNT" -eq 0 ]; then
+  REWORK_COUNT=$(ls "{WORK_ROOT}/reports/review-${wip_item}-"*.md 2>/dev/null | wc -l)
 fi
 ```
 
@@ -136,7 +172,7 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/plans/review-plan-{
 Na branchi:
 
 ```bash
-git checkout {wip_branch}
+git checkout "${wip_branch}"
 
 # lint (optional) — s timeoutem, aby review nikdy nehangoval
 if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then

@@ -68,6 +68,49 @@ V uživatelském triggeru (promptu) hledej tyto tokeny (case-insensitive). Pokud
 
 **Stop dřív než vyčerpáš limit, pokud nastane STOP/CRITICAL** (např. `state.error`, kontrakt breach, missing config/commands). V režimu `loop=auto` skonči také tehdy, když se systém dostane do `state.step=idle`.
 
+#### Explicitní parsovací kód (povinný)
+
+```bash
+# Parsuj parametry z user promptu (case-insensitive)
+USER_PROMPT="$1"
+
+# LOOP parameter
+LOOP_RAW=$(echo "$USER_PROMPT" | grep -oiE 'loop=[a-z0-9]+' | head -1 | cut -d= -f2)
+if [ -z "$LOOP_RAW" ]; then
+  MAX_LOOPS=1; RUN_MODE="fixed"
+elif echo "$LOOP_RAW" | grep -qiE '^auto$'; then
+  MAX_LOOPS=100; RUN_MODE="auto"  # hard cap from config RUN.auto_max_loops
+elif echo "$LOOP_RAW" | grep -qE '^[0-9]+$'; then
+  MAX_LOOPS=$LOOP_RAW
+  # Clamp to [1, 50]
+  [ "$MAX_LOOPS" -lt 1 ] && MAX_LOOPS=1
+  [ "$MAX_LOOPS" -gt 50 ] && MAX_LOOPS=50
+  RUN_MODE="fixed"
+else
+  echo "WARN: invalid loop value '$LOOP_RAW', using default loop=1"
+  MAX_LOOPS=1; RUN_MODE="fixed"
+fi
+
+# GOAL parameter
+GOAL_RAW=$(echo "$USER_PROMPT" | grep -oiE 'goal=[a-z0-9]+' | head -1 | cut -d= -f2)
+if [ -z "$GOAL_RAW" ]; then
+  GOAL="release"  # default from config RUN.default_goal
+elif echo "$GOAL_RAW" | grep -qiE '^(mvp|t1|release|T[0-3])$'; then
+  GOAL=$(echo "$GOAL_RAW" | tr 'A-Z' 'a-z')
+else
+  echo "WARN: unknown goal '$GOAL_RAW', falling back to 'release'"
+  GOAL="release"
+fi
+
+# AUDIT parameter
+AUDIT_RAW=$(echo "$USER_PROMPT" | grep -oiE 'audit(=[a-z0-9]+)?' | head -1)
+if echo "$AUDIT_RAW" | grep -qiE '(=1|=true|=yes|=on|^audit$)'; then
+  AUDIT=1
+else
+  AUDIT=0
+fi
+```
+
 #### GOAL (tier scope)
 - Pokud token `goal=<...>` chybí, použij `RUN.default_goal` z configu (default `release`).
 - Pokud goal neexistuje v `RUN.goals` a zároveň není ve tvaru `T<digit>`, považuj ho za `release` (no filter) a zaloguj warning do run reportu.
@@ -398,6 +441,13 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
      echo "WARN: state-get failed (exit $STATE_GET_EXIT), treating as null"
      RUN_ID=""
    fi
+   # Validate existing run_id format (YYYY-MM-DD-N)
+   if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+     if ! echo "$RUN_ID" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]+$'; then
+       echo "WARN: invalid run_id format '$RUN_ID', regenerating"
+       RUN_ID=""
+     fi
+   fi
    if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
      # Nový run — generuj run_id
      SEQ=$(ls {WORK_ROOT}/reports/run-*.md 2>/dev/null | wc -l)
@@ -434,6 +484,7 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
    ```
 
 8) Pokud `AUDIT=1`: proveď **audit provedeného skillu** (po každém ticku).
+   > **Poznámka:** Audit logika je INLINE v fabric-loop (ne separátní skill). Audit se provádí jako součást tick algoritmu — contract-check + reports-validate + counter cross-check + audit report zápis. Toto je záměr: audit musí proběhnout atomicky PO každém dispatch a PŘED pokračováním na další tick.
 
 **Kdo generuje:** Audit report generuje **fabric-loop** (orchestrátor), NE sub-skilly. Sub-skilly (implement, test, review, close) generují své vlastní reporty; fabric-loop nad nimi provádí nezávislý audit.
 
@@ -558,9 +609,10 @@ rework_count: 0       # inkrementuje fabric-loop po review REWORK
 
 **Po tick() pro step=test**, pokud tick vrátil next_step=implement (tzn. test FAIL):
 ```bash
-# Přečti aktuální counter
-CURRENT=$(grep 'test_fail_count:' {WORK_ROOT}/backlog/{wip_item}.md | awk '{print $2}')
+# Přečti aktuální counter (s numerickou validací — viz config.md VALIDATION.counter_validation)
+CURRENT=$(grep 'test_fail_count:' "{WORK_ROOT}/backlog/${wip_item}.md" | awk '{print $2}')
 CURRENT=${CURRENT:-0}
+if ! echo "$CURRENT" | grep -qE '^[0-9]+$'; then CURRENT=0; echo "WARN: non-numeric test_fail_count, reset to 0"; fi
 NEW=$((CURRENT + 1))
 # Zapiš zpět do backlog item frontmatter
 sed -i "s/^test_fail_count:.*/test_fail_count: $NEW/" {WORK_ROOT}/backlog/{wip_item}.md || echo "WARN: counter increment failed for test_fail_count"
@@ -574,9 +626,10 @@ fi
 
 **Po tick() pro step=review**, pokud tick vrátil next_step=implement (tzn. review REWORK):
 ```bash
-# Přečti aktuální counter
-CURRENT=$(grep 'rework_count:' {WORK_ROOT}/backlog/{wip_item}.md | awk '{print $2}')
+# Přečti aktuální counter (s numerickou validací)
+CURRENT=$(grep 'rework_count:' "{WORK_ROOT}/backlog/${wip_item}.md" | awk '{print $2}')
 CURRENT=${CURRENT:-0}
+if ! echo "$CURRENT" | grep -qE '^[0-9]+$'; then CURRENT=0; echo "WARN: non-numeric rework_count, reset to 0"; fi
 NEW=$((CURRENT + 1))
 # Zapiš zpět do backlog item frontmatter
 sed -i "s/^rework_count:.*/rework_count: $NEW/" {WORK_ROOT}/backlog/{wip_item}.md || echo "WARN: counter increment failed for rework_count"
@@ -837,12 +890,17 @@ if ls $INTAKE_PATTERN 1>/dev/null 2>&1; then
 else
   # Vytvoř nový intake item
   python skills/fabric-init/tools/fabric.py intake-new --source "$SKILL" --slug "$SLUG" --title "$TITLE"
+  INTAKE_EXIT=$?
+  if [ $INTAKE_EXIT -ne 0 ]; then
+    echo "WARN: intake-new failed (exit $INTAKE_EXIT) — logging to run report, continuing"
+  fi
 fi
 ```
 
 **Pravidla:**
 - Deduplication je na úrovni `{skill}-{slug}` (date/id se ignoruje).
 - Pokud existující intake item má status `processed` nebo `rejected`, nový SE VYTVOŘÍ (opakující se problém po fixu).
+- `intake-new` exit codes: 0 = úspěch, 1 = chyba (disk/permission), 2 = duplicitní (already exists). Exit 2 je OK (dedup guard v tool), exit 1 vyžaduje WARN log.
 - Pokud existující intake item má status `new` nebo `pending`, nový se NEVYTVOŘÍ (čeká na zpracování).
 - Toto platí pro VŠECHNY skilly — implement, test, review, close, loop, check.
 
@@ -911,12 +969,28 @@ Před návratem (po posledním tiku RUN cyklu):
   if [ -n "$WIP_ITEM" ] && [ "$WIP_ITEM" != "null" ]; then
     AUTOFIX_COUNT=$(grep 'autofix_count:' {WORK_ROOT}/backlog/$WIP_ITEM.md | awk '{print $2}')
     AUTOFIX_COUNT=${AUTOFIX_COUNT:-0}
+    if ! echo "$AUTOFIX_COUNT" | grep -qE '^[0-9]+$'; then AUTOFIX_COUNT=0; echo "WARN: non-numeric autofix_count, treating as 0"; fi
     # Spočítej skutečné auto-fix commity na branchi
     ACTUAL_AUTOFIX=$(git log --oneline --grep="chore.*auto-fix" {main_branch}..HEAD 2>/dev/null | wc -l)
     if [ "${AUTOFIX_COUNT}" -ne "$ACTUAL_AUTOFIX" ]; then
       echo "WARN: autofix_count mismatch — persisted=$AUTOFIX_COUNT, actual=$ACTUAL_AUTOFIX"
     fi
   fi
+  ```
+- Cross-sprint prio invariant (při carry-over): pokud task přechází do dalšího sprintu, `prio` field je stale (nebyl re-kalkulován od posledního `fabric-prio`). Self-check zaloguje WARNING:
+  ```bash
+  # Cross-sprint prio staleness check (po close, pokud existují carry-over tasks)
+  SPRINT_N=$(grep 'sprint:' {WORK_ROOT}/state.md | awk '{print $2}')
+  for ITEM_FILE in {WORK_ROOT}/backlog/*.md; do
+    ITEM_STATUS=$(grep 'status:' "$ITEM_FILE" | head -1 | awk '{print $2}')
+    if [ "$ITEM_STATUS" != "DONE" ] && [ "$ITEM_STATUS" != "BLOCKED" ]; then
+      ITEM_UPDATED=$(grep 'updated:' "$ITEM_FILE" | awk '{print $2}')
+      SPRINT_STARTED=$(grep 'sprint_started:' {WORK_ROOT}/state.md | awk '{print $2}')
+      if [ -n "$SPRINT_STARTED" ] && [ "$ITEM_UPDATED" \< "$SPRINT_STARTED" ]; then
+        echo "WARN: backlog item $(basename $ITEM_FILE) has stale prio (updated=$ITEM_UPDATED, sprint started=$SPRINT_STARTED)"
+      fi
+    fi
+  done
   ```
 
 Pokud ne → FAIL + zapiš `state.error` s detailním popisem a STOP.
@@ -931,3 +1005,173 @@ Fabric-loop předpokládá **single-instance** operaci — v jednu chvíli smí 
 **Detekce (best-effort):** Na začátku RUN zkontroluj `{WORK_ROOT}/logs/protocol.jsonl` — pokud poslední záznam je `event: start` pro `fabric-loop` BEZ odpovídajícího `event: end` a `last_tick_at` je < 10 minut → zaloguj WARNING „possible concurrent instance" do run reportu. Toto NENÍ lock — pouze upozornění.
 
 **Prevence:** Leží na uživateli / CI — nespouštět dva RUN cykly současně.
+
+---
+
+## State Diagram (textual)
+
+```
+idle ──→ vision → status → architect → gap → generate → intake → prio
+                                                                    │
+  ┌─────────────────────────────────────────────────────────────────┘
+  v
+sprint → analyze ──→ implement → test → review ──┐
+                          ^                       │
+                          │   REWORK (max 3×)     │
+                          └───────────────────────┘
+                                                  │ CLEAN
+                                                  v
+                     close → docs → check → archive → idle (loop boundary)
+
+REDESIGN flow (explicit):
+  review ──REDESIGN──→ backlog.status=BLOCKED
+                     → state.wip_item=null, state.wip_branch=null
+                     → if another READY task exists → implement (new task)
+                     → if no READY tasks → close → docs → check → archive → idle
+
+Error states:
+  ANY_STEP ──error──→ state.error set → STOP (if intentional) or RETRY (if crash)
+  RETRY ──fail──→ intake item + STOP
+
+Counter-bounded termination:
+  test FAIL:    test_fail_count++ → if >= max_rework_iters → STOP
+  review REWORK: rework_count++  → if >= max_rework_iters → REDESIGN override → BLOCKED
+  review REDESIGN: → task BLOCKED, WIP reset, skip to close (or next task)
+```
+
+---
+
+## Crash Recovery Algorithm (explicitní)
+
+```bash
+# Krok 1: Načti error
+STATE_ERROR=$(python skills/fabric-init/tools/fabric.py state-get --field error 2>/dev/null)
+FAILED_STEP=$(python skills/fabric-init/tools/fabric.py state-get --field step 2>/dev/null)
+
+# Krok 2: Kategorizuj (intentional vs crash)
+STATE_ERROR_TRIMMED=$(echo "$STATE_ERROR" | sed 's/^[[:space:]]*//')
+INTENTIONAL_PATTERN="^(BLOCKED_ONLY:|STOP:|test_fail_count exceeded|rework_count exceeded|config_drift:)"
+
+if echo "$STATE_ERROR_TRIMMED" | grep -qE "$INTENTIONAL_PATTERN"; then
+  echo "Intentional STOP — no retry, ESCALATE"
+  # Zapiš do run reportu + STOP
+  exit 0
+fi
+
+# Krok 3: Zkontroluj, zda výstup existuje (false alarm detection)
+EXPECTED_OUTPUT=$(python skills/fabric-init/tools/fabric.py contract-check --step "$FAILED_STEP" --dry-run 2>/dev/null)
+CONTRACT_EXIT=$?
+if [ $CONTRACT_EXIT -eq 0 ]; then
+  echo "Output exists despite error — false alarm, clearing error"
+  python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"error": null}'
+  # Pokračuj normálně
+  exit 0
+fi
+
+# Krok 4: Retry (max 1×)
+RETRY_FLAG="{WORK_ROOT}/logs/.retry-${FAILED_STEP}-$(date +%Y-%m-%d)"
+if [ -f "$RETRY_FLAG" ]; then
+  echo "Already retried $FAILED_STEP today — ESCALATE"
+  python skills/fabric-init/tools/fabric.py evidence-pack --label "crash-${FAILED_STEP}"
+  python skills/fabric-init/tools/fabric.py intake-new --source "loop" --slug "crash-retry-exhausted" \
+    --title "Crash retry exhausted for ${FAILED_STEP}: ${STATE_ERROR_TRIMMED}"
+  exit 1
+fi
+touch "$RETRY_FLAG"
+echo "Retrying $FAILED_STEP (attempt 1/1)"
+python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"error": null}'
+# Dispatch same step again (fabric-loop tick continues normally)
+```
+
+---
+
+## YAML Mid-Write Crash Recovery
+
+`state.md` je kritický soubor. Pokud se zápis přeruší uprostřed (process kill, disk full):
+
+```bash
+# Na začátku každého RUN — validace state.md integrity:
+python skills/fabric-init/tools/fabric.py state-read 2>/dev/null
+STATE_READ_EXIT=$?
+if [ $STATE_READ_EXIT -ne 0 ]; then
+  echo "CRITICAL: state.md corrupted or unreadable (exit $STATE_READ_EXIT)"
+  # Pokus o obnovu z posledního protokolu
+  LAST_GOOD_STATE=$(grep '"event":"end"' {WORK_ROOT}/logs/protocol.jsonl 2>/dev/null | tail -1 | python -c "import sys,json; d=json.load(sys.stdin); print(d.get('state_snapshot',''))" 2>/dev/null)
+  if [ -n "$LAST_GOOD_STATE" ]; then
+    echo "Restoring state.md from last protocol snapshot"
+    echo "$LAST_GOOD_STATE" > {WORK_ROOT}/state.md
+    # Re-validate
+    python skills/fabric-init/tools/fabric.py state-read 2>/dev/null || {
+      echo "FATAL: state.md recovery failed — manual intervention required"
+      exit 2
+    }
+  else
+    echo "FATAL: no protocol snapshot available — manual intervention required"
+    exit 2
+  fi
+fi
+```
+
+**Prevence:** `fabric.py state-patch` používá atomic write (write to temp + rename), takže k partial write dochází jen při fatálním OS/disk selhání.
+
+---
+
+## Manual Intervention Procedure
+
+Pokud se orchestrátor zasekne (state.error nastavený, opakované STOP, nekonvergence):
+
+1. **Diagnostika:**
+   ```bash
+   # Přečti aktuální stav
+   cat {WORK_ROOT}/state.md
+   # Zkontroluj posledních 10 protokolových záznamů
+   tail -10 {WORK_ROOT}/logs/protocol.jsonl | python -m json.tool
+   # Zkontroluj poslední reporty
+   ls -lt {WORK_ROOT}/reports/ | head -10
+   ```
+
+2. **Reset error a pokračuj:**
+   ```bash
+   python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"error": null}'
+   # Pak spusť: Načti a proveď skills/fabric-loop/SKILL.md
+   ```
+
+3. **Přeskoč zaseklý step:**
+   ```bash
+   # Nastav step na další v sekvenci (viz LIFECYCLE v config.md)
+   python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"step": "<NEXT_STEP>", "last_completed": "<STUCK_STEP>", "error": null}'
+   ```
+
+4. **Reset celého sprintu (destruktivní):**
+   ```bash
+   python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"step": "idle", "phase": "idle", "wip_item": null, "wip_branch": null, "error": null, "run_id": null}'
+   ```
+
+5. **Eskalace:** Pokud nic nepomáhá, vytvořte intake item manuálně:
+   ```bash
+   python skills/fabric-init/tools/fabric.py intake-new --source "manual" --slug "stuck-orchestrator" \
+     --title "Orchestrator stuck — manual intervention needed"
+   ```
+
+---
+
+## Failure Mode Catalog
+
+| Failure Mode | Detection | Recovery | Severity |
+|---|---|---|---|
+| Test fails repeatedly (≥max_rework_iters) | test_fail_count counter | STOP + intake item | CRITICAL |
+| Review REWORK loop (≥max_rework_iters) | rework_count counter | REDESIGN override → task BLOCKED | CRITICAL |
+| Merge conflict during close | git merge --squash exit ≠ 0 | Abort + carry-over + intake | HIGH |
+| Branch diverged from main | merge-base ≠ main HEAD | Rebase on feature branch; if fail → carry-over | HIGH |
+| Detached HEAD | git rev-parse --abbrev-ref = "HEAD" | Recovery: checkout main → recreate branch | HIGH |
+| state.md corrupted (YAML unparseable) | state-read exit ≠ 0 | Restore from protocol.jsonl snapshot | CRITICAL |
+| Contract-check fails | contract-check exit ≠ 0 | state.error + STOP + intake | CRITICAL |
+| Auto-fix introduces regression | PRE_FIX_TEST=PASS, POST_FIX_TEST≠PASS | git checkout -- . (revert) | HIGH |
+| Git fetch timeout (network) | timeout 60 exit = 124 | WARN + continue with local state | LOW |
+| Governance drift (config vs snapshot) | governance-check exit ≠ 0 | intake item + continue | HIGH |
+| Counter mismatch (persisted vs actual) | Cross-check in self-check | WARN in run report | HIGH |
+| intake-new tool fails | intake-new exit ≠ 0 | WARN + log to run report + continue | LOW |
+| Concurrent instance detected | protocol.jsonl start without end | WARN only (no lock) | LOW |
+| State.error set (intentional STOP) | ERROR_TAXONOMY prefix match | No retry → intake + STOP | CRITICAL |
+| State.error set (crash/failure) | No ERROR_TAXONOMY prefix | Retry 1×; if fail again → escalate + STOP | HIGH |
+| Lint/format TBD in strict mode | Precondition check | intake item + FAIL | CRITICAL |

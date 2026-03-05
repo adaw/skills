@@ -74,6 +74,7 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 - `COMMANDS.lint` nesmí být `TBD` *(prázdné = vypnuto v bootstrap režimu)*
 - `COMMANDS.format_check` nesmí být `TBD` *(prázdné = vypnuto v bootstrap režimu)*
 - sprint plán musí existovat a mít `## Task Queue`
+- pro každý task určený k merge: review report musí existovat na disku (temporal: review → close)
 
 Pokud `QUALITY.mode` je `strict`:
 - `COMMANDS.lint` a `COMMANDS.format_check` NESMÍ být prázdné (`""`).
@@ -82,6 +83,47 @@ Pokud `QUALITY.mode` je `strict`:
 Pokud preconditions nejsou splněny:
 - vytvoř intake item `intake/close-missing-config-or-sprint.md`
 - FAIL
+
+### Per-task file existence checks (povinné, v merge loop)
+
+```bash
+# Pro každý task v Task Queue s verdiktem CLEAN:
+TASK_ID="..."  # z iterace přes Task Queue
+
+# 1. backlog soubor musí existovat
+if [ ! -f "{WORK_ROOT}/backlog/${TASK_ID}.md" ]; then
+  echo "SKIP: backlog file missing for $TASK_ID — carry-over"
+  continue
+fi
+
+# 2. review report musí existovat na disku (temporal: implement→test→review→close)
+REVIEW_REPORT=$(grep 'review_report:' "{WORK_ROOT}/backlog/${TASK_ID}.md" | awk '{print $2}')
+if [ -z "$REVIEW_REPORT" ] || [ ! -f "{WORK_ROOT}/${REVIEW_REPORT}" ]; then
+  echo "SKIP: review report missing for $TASK_ID — carry-over"
+  continue
+fi
+
+# 3. branch musí existovat
+TASK_BRANCH=$(grep 'branch:' "{WORK_ROOT}/backlog/${TASK_ID}.md" | awk '{print $2}')
+if [ -z "$TASK_BRANCH" ] || [ "$TASK_BRANCH" = "null" ]; then
+  echo "SKIP: no branch for $TASK_ID — carry-over"
+  continue
+fi
+if ! git rev-parse --verify "$TASK_BRANCH" >/dev/null 2>&1; then
+  echo "SKIP: branch $TASK_BRANCH not found for $TASK_ID — carry-over"
+  continue
+fi
+
+# 4. depends_on check: všechny závislosti musí být DONE
+DEPENDS=$(grep 'depends_on:' "{WORK_ROOT}/backlog/${TASK_ID}.md" | sed 's/depends_on://' | tr -d '[],' | xargs)
+for DEP in $DEPENDS; do
+  DEP_STATUS=$(grep 'status:' "{WORK_ROOT}/backlog/${DEP}.md" 2>/dev/null | awk '{print $2}')
+  if [ "$DEP_STATUS" != "DONE" ]; then
+    echo "SKIP: dependency $DEP not DONE (status=$DEP_STATUS) for $TASK_ID — carry-over"
+    continue 2
+  fi
+done
+```
 
 ---
 
@@ -140,7 +182,7 @@ Pro každý MERGEABLE task v pořadí:
 1. Připrav main:
    ```bash
    timeout 60 git fetch --all --prune || { echo "WARN: git fetch failed/timeout"; GATE_RESULT="FETCH_FAIL"; }
-   git checkout {main_branch}
+   git checkout "${main_branch}"
    CHECKOUT_EXIT=$?
    if [ $CHECKOUT_EXIT -ne 0 ]; then echo "ERROR: cannot checkout main"; exit 1; fi
    git pull --ff-only
@@ -152,47 +194,52 @@ Pro každý MERGEABLE task v pořadí:
    PRE=$(git rev-parse HEAD)
    ```
 3. Ujisti se, že branch existuje:
-   - pokud je lokální: `git show-ref --verify refs/heads/{branch}`
-   - pokud není, ale je remote: `git checkout -b {branch} origin/{branch}`
+   - pokud je lokální: `git show-ref --verify "refs/heads/${branch}"`
+   - pokud není, ale je remote: `git checkout -b "${branch}" "origin/${branch}"`
 
 4. Pre-merge divergence check (povinné):
    ```bash
    # Ověř, že branch je based on current main (ne na stale main)
-   MERGE_BASE=$(git merge-base {main_branch} {branch})
-   MAIN_HEAD=$(git rev-parse {main_branch})
+   MERGE_BASE=$(git merge-base "${main_branch}" "${branch}")
+   MAIN_HEAD=$(git rev-parse "${main_branch}")
    if [ "$MERGE_BASE" != "$MAIN_HEAD" ]; then
-     echo "WARN: branch {branch} diverged from {main_branch} (merge-base: $MERGE_BASE, main HEAD: $MAIN_HEAD)"
+     echo "WARN: branch ${branch} diverged from ${main_branch} (merge-base: $MERGE_BASE, main HEAD: $MAIN_HEAD)"
      # Pokus o rebase (safe — na feature branch, ne na main)
-     git checkout {branch}
-     git rebase {main_branch}
+     git checkout "${branch}"
+     git rebase "${main_branch}"
      REBASE_EXIT=$?
      if [ $REBASE_EXIT -ne 0 ]; then
        git rebase --abort
-       echo "ERROR: rebase failed for {branch}, marking as carry-over"
-       git checkout {main_branch}
+       echo "ERROR: rebase failed for ${branch}, marking as carry-over"
+       git checkout "${main_branch}"
        # Vytvoř intake item (povinné — evidence pro carry-over)
        # intake/close-rebase-failed-{id}.md s: branch name, merge-base, rebase error
        # Označ jako CARRY-OVER (reason: branch diverged, rebase conflict)
        # Aktualizuj sprint summary report (carry-over tabulka)
        # Přeskoč na další task (continue, ne break)
      fi
-     git checkout {main_branch}
+     git checkout "${main_branch}"
    fi
    ```
 
 5. Squash merge (s conflict detection):
    ```bash
-   git merge --squash {branch}
+   git merge --squash "${branch}"
    MERGE_EXIT=$?
    if [ $MERGE_EXIT -ne 0 ]; then
      echo "ERROR: squash merge conflict for {branch}"
      # Vyčisti conflict stav
-     git merge --abort 2>/dev/null || git reset --merge
+     git merge --abort 2>/dev/null || git reset --merge 2>/dev/null
      # Verifikace čistého working tree po abort (povinné)
      if [ -n "$(git status --porcelain)" ]; then
        echo "WARN: dirty working tree after merge abort, cleaning"
-       git checkout -- .
-       git clean -fd
+       git checkout -- . 2>/dev/null
+       git clean -fd 2>/dev/null
+       # Third fallback: if still dirty, hard reset to pre-merge HEAD (safe — we saved PRE)
+       if [ -n "$(git status --porcelain)" ]; then
+         echo "WARN: cleanup failed, resetting to pre-merge HEAD ($PRE)"
+         git reset --hard "$PRE"
+       fi
      fi
      # Označ jako carry-over
      # Vytvoř intake item
@@ -200,7 +247,7 @@ Pro každý MERGEABLE task v pořadí:
      # NEPOKRAČUJ na commit — přeskoč na další task
    fi
    # Commit s exit code kontrolou
-   git commit -m "feat({id}): {title} (sprint {N})"
+   git commit -m "feat(${id}): ${title} (sprint ${N})"
    COMMIT_EXIT=$?
    if [ $COMMIT_EXIT -ne 0 ]; then
      echo "ERROR: commit failed after squash merge (exit $COMMIT_EXIT)"
@@ -282,7 +329,7 @@ Pro každý MERGEABLE task v pořadí:
 
    Pokud auto-fix opravil něco, commitni a znovu spusť všechny gates:
    ```bash
-   git add -A && git commit -m "chore({id}): auto-fix lint/format on main"
+   git add -A && git commit -m "chore(${id}): auto-fix lint/format on main"
    CLOSE_AUTOFIX_DONE=1  # Nastav flag po úspěšném auto-fix commitu
    # Zapamatuj si PRE auto-fix test výsledek pro regression detekci
    PRE_FIX_TEST_RESULT="${GATE_RESULT}"  # PASS/FAIL/TIMEOUT z pre-autofix gates
@@ -343,8 +390,8 @@ Pro každý MERGEABLE task v pořadí:
      ```
    - **smaž feature branch** (povinné — zabraňuje hromadění stale branches):
      ```bash
-     git branch -d {branch} 2>/dev/null || true
-     git push origin --delete {branch} 2>/dev/null || true
+     git branch -d "${branch}" 2>/dev/null || true
+     git push origin --delete "${branch}" 2>/dev/null || true
      ```
      Poznámka: `-d` (ne `-D`) = safe delete (odmítne smazat nemerged branch).
 

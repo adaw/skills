@@ -62,7 +62,17 @@ Volitelné:
 ## Preconditions (fail fast)
 
 1. `{CODE_ROOT}/` musí existovat.
-2. V configu musí být vyplněno:
+2. Backlog item soubor musí existovat na disku:
+   ```bash
+   TASK_ID="..."  # z state.wip_item nebo vybraný z Task Queue
+   if [ ! -f "{WORK_ROOT}/backlog/${TASK_ID}.md" ]; then
+     echo "STOP: backlog file not found: backlog/${TASK_ID}.md"
+     python skills/fabric-init/tools/fabric.py intake-new --source "implement" --slug "missing-backlog-file" \
+       --title "Backlog file not found: backlog/${TASK_ID}.md"
+     exit 1
+   fi
+   ```
+3. V configu musí být vyplněno:
 
 - `COMMANDS.test` (**povinné**; nesmí být `TBD` ani prázdné)
 - `COMMANDS.lint` (volitelné; `""` = vypnuto, `TBD` = konfigurační chyba)
@@ -158,15 +168,15 @@ Git kroky:
 ```bash
 git status --porcelain
 timeout 60 git fetch --all --prune || echo "WARN: git fetch failed/timeout (network?), continuing with local state"
-git checkout {main_branch}
+git checkout "${main_branch}"
 git pull --ff-only || echo "WARN: pull failed, using local main"
-git checkout -b {branch_name} || git checkout {branch_name}
+git checkout -b "${branch_name}" || git checkout "${branch_name}"
 # Pokud oba failnou (branch smazán po předchozím close, ale backlog item má stale branch:):
 CHECKOUT_EXIT=$?
 if [ $CHECKOUT_EXIT -ne 0 ]; then
-  echo "WARN: branch {branch_name} not found, creating fresh from {main_branch}"
-  git checkout {main_branch}
-  git checkout -b {branch_name}
+  echo "WARN: branch ${branch_name} not found, creating fresh from ${main_branch}"
+  git checkout "${main_branch}"
+  git checkout -b "${branch_name}"
 fi
 ```
 
@@ -177,10 +187,10 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [ "$CURRENT_BRANCH" = "HEAD" ] || [ "$CURRENT_BRANCH" != "{branch_name}" ]; then
   echo "WARN: detached HEAD or wrong branch ($CURRENT_BRANCH), attempting recovery"
   # Recovery: checkout main, pak znovu vytvoř/checkout branch
-  git checkout {main_branch} 2>/dev/null
-  git checkout -b {branch_name} 2>/dev/null || git checkout {branch_name} 2>/dev/null
+  git checkout "${main_branch}" 2>/dev/null
+  git checkout -b "${branch_name}" 2>/dev/null || git checkout "${branch_name}" 2>/dev/null
   # Ověř znovu
-  if [ "$(git rev-parse --abbrev-ref HEAD)" != "{branch_name}" ]; then
+  if [ "$(git rev-parse --abbrev-ref HEAD)" != "${branch_name}" ]; then
     echo "ERROR: detached HEAD recovery failed"
     # Vytvoř intake item intake/implement-detached-head-{date}.md
     exit 1
