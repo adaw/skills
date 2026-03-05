@@ -161,13 +161,30 @@ timeout 60 git fetch --all --prune || echo "WARN: git fetch failed/timeout (netw
 git checkout {main_branch}
 git pull --ff-only || echo "WARN: pull failed, using local main"
 git checkout -b {branch_name} || git checkout {branch_name}
+# Pokud oba failnou (branch smazán po předchozím close, ale backlog item má stale branch:):
+CHECKOUT_EXIT=$?
+if [ $CHECKOUT_EXIT -ne 0 ]; then
+  echo "WARN: branch {branch_name} not found, creating fresh from {main_branch}"
+  git checkout {main_branch}
+  git checkout -b {branch_name}
+fi
 ```
 
 **Post-checkout validace (povinné):**
 ```bash
 # Ověř, že nejsme v detached HEAD
-if [ "$(git rev-parse --abbrev-ref HEAD)" != "{branch_name}" ]; then
-  echo "ERROR: detached HEAD or checkout failed"; exit 1
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$CURRENT_BRANCH" = "HEAD" ] || [ "$CURRENT_BRANCH" != "{branch_name}" ]; then
+  echo "WARN: detached HEAD or wrong branch ($CURRENT_BRANCH), attempting recovery"
+  # Recovery: checkout main, pak znovu vytvoř/checkout branch
+  git checkout {main_branch} 2>/dev/null
+  git checkout -b {branch_name} 2>/dev/null || git checkout {branch_name} 2>/dev/null
+  # Ověř znovu
+  if [ "$(git rev-parse --abbrev-ref HEAD)" != "{branch_name}" ]; then
+    echo "ERROR: detached HEAD recovery failed"
+    # Vytvoř intake item intake/implement-detached-head-{date}.md
+    exit 1
+  fi
 fi
 # Pokud branch existuje na remote, synchronizuj
 if git ls-remote --heads origin {branch_name} | grep -q {branch_name}; then
@@ -182,12 +199,14 @@ Pokud working tree není čistý → FAIL (nejdřív vyřeš).
 - Přečti `{WORK_ROOT}/backlog/{id}.md` (AC + dotčené soubory)
 - Pokud existuje `{ANALYSES_ROOT}/{id}-analysis.md`, použij ho jako plán.
 
-Udělej baseline:
+Udělej baseline (s timeoutem):
 ```bash
-{COMMANDS.test}
+timeout 300 {COMMANDS.test}
+BASELINE_EXIT=$?
+if [ $BASELINE_EXIT -eq 124 ]; then echo "TIMEOUT: baseline test exceeded 300s"; fi
 ```
 
-Pokud baseline selže:
+Pokud baseline selže (exit ≠ 0, včetně timeout):
 - nezaváděj nový kód
 - vytvoř intake item `intake/baseline-tests-failing.md` (je to blocker)
 - FAIL
@@ -226,14 +245,27 @@ Spusť quality commands v tomto pořadí:
 - Tests (vždy)
 
 ```bash
-# lint (optional)
-if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then {COMMANDS.lint}; else echo "lint: SKIPPED"; fi
+# lint (optional) — s timeoutem
+if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then
+  timeout 120 {COMMANDS.lint}
+  LINT_EXIT=$?
+  if [ $LINT_EXIT -eq 124 ]; then echo "TIMEOUT: lint exceeded 120s"; LINT_RESULT="TIMEOUT";
+  elif [ $LINT_EXIT -ne 0 ]; then LINT_RESULT="FAIL"; else LINT_RESULT="PASS"; fi
+else echo "lint: SKIPPED"; LINT_RESULT="SKIPPED"; fi
 
-# format check (optional)
-if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then {COMMANDS.format_check}; else echo "format_check: SKIPPED"; fi
+# format check (optional) — s timeoutem
+if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then
+  timeout 120 {COMMANDS.format_check}
+  FMT_EXIT=$?
+  if [ $FMT_EXIT -eq 124 ]; then echo "TIMEOUT: format_check exceeded 120s"; FMT_RESULT="TIMEOUT";
+  elif [ $FMT_EXIT -ne 0 ]; then FMT_RESULT="FAIL"; else FMT_RESULT="PASS"; fi
+else echo "format_check: SKIPPED"; FMT_RESULT="SKIPPED"; fi
 
-# tests (required)
-{COMMANDS.test}
+# tests (required) — s timeoutem
+timeout 300 {COMMANDS.test}
+TEST_EXIT=$?
+if [ $TEST_EXIT -eq 124 ]; then echo "TIMEOUT: test exceeded 300s"; TEST_RESULT="TIMEOUT";
+elif [ $TEST_EXIT -ne 0 ]; then TEST_RESULT="FAIL"; else TEST_RESULT="PASS"; fi
 ```
 
 #### Auto-fix (pokud gates failnou)
@@ -246,6 +278,56 @@ Pokud lint nebo format check failne a config má příslušný fix příkaz, **s
 Pokud lint/format fail a příslušný fix příkaz **je prázdný** (`""`) → auto-fix není možný. Vytvoř intake item `intake/implement-recommend-lint-fix-command.md` (jednorázově, jen pokud ještě neexistuje) a oprav chyby manuálně.
 
 Auto-fix smí proběhnout **max 1×** per gate per implement run. Pokud po auto-fixu gate stále failne → oprav manuálně (v rámci stejného tasku).
+
+**Persisted auto-fix counter (idempotence guard pro re-run):**
+```bash
+# Přečti auto-fix counter z backlog itemu (přežije re-run)
+AUTOFIX_COUNT=$(grep 'autofix_count:' {WORK_ROOT}/backlog/{id}.md | awk '{print $2}')
+AUTOFIX_COUNT=${AUTOFIX_COUNT:-0}
+if [ "$AUTOFIX_COUNT" -ge 1 ]; then
+  echo "SKIP: auto-fix already ran for this task (autofix_count=$AUTOFIX_COUNT)"
+  # Nepokouš se znovu — auto-fix je idempotentní jen 1×
+else
+  # Spusť auto-fix (viz kód níže)
+  # Po úspěšném auto-fixu inkrementuj counter:
+  NEW_COUNT=$((AUTOFIX_COUNT + 1))
+  sed -i "s/^autofix_count:.*/autofix_count: $NEW_COUNT/" {WORK_ROOT}/backlog/{id}.md \
+    || echo "WARN: autofix_count increment failed"
+fi
+```
+Counter se resetuje na 0 při výběru nového tasku (fabric-loop, spolu s test_fail_count a rework_count).
+
+**Bounds check across rework cykly:** `autofix_count >= 1` → SKIP auto-fix v KAŽDÉM dalším implement runu pro stejný task. Toto znamená, že auto-fix proběhne maximálně 1× per task (ne per gate per run, ale per CELÝ task lifecycle). Pokud auto-fix nepomohl v prvním runu, v rework cyklech se nepokouší znovu — opravuj manuálně. Hard cap: `autofix_count` je bounded `max_rework_iters` (default 3) protože nový task resetuje counter.
+
+#### Regression detection po auto-fixu (povinné)
+
+Po spuštění auto-fix příkazu a PŘED opakovaným gate checkem ověř, že auto-fix NEZHORŠIL stav:
+
+```bash
+# 1. Zapamatuj si pre-autofix test výsledek
+PRE_FIX_TEST_RESULT="$TEST_RESULT"  # PASS nebo FAIL z předchozího gate runu
+
+# 2. Spusť auto-fix (lint_fix nebo format)
+timeout 120 {COMMANDS.lint_fix}
+AUTOFIX_EXIT=$?
+if [ $AUTOFIX_EXIT -eq 124 ]; then echo "TIMEOUT: auto-fix"; fi
+
+# 3. Spusť testy PŘED opakovaným gate checkem
+timeout 300 {COMMANDS.test}
+POST_FIX_TEST_EXIT=$?
+if [ $POST_FIX_TEST_EXIT -eq 124 ]; then POST_FIX_TEST="TIMEOUT";
+elif [ $POST_FIX_TEST_EXIT -ne 0 ]; then POST_FIX_TEST="FAIL"; else POST_FIX_TEST="PASS"; fi
+
+# 4. Regression check: pokud testy předtím PASS a teď FAIL → revert auto-fix
+if [ "$PRE_FIX_TEST_RESULT" = "PASS" ] && [ "$POST_FIX_TEST" != "PASS" ]; then
+  echo "REGRESSION: auto-fix broke tests, reverting"
+  git checkout -- .
+  # Vytvoř intake item pro manuální řešení
+  # intake/implement-autofix-regression-{date}.md
+fi
+```
+
+> **Proč:** Auto-fix (lint_fix, format) může zavést nekompatibilní změny (např. import re-ordering, trailing comma v multiline). Regression detection zabraňuje tichému zhoršení.
 
 #### Separace pre-existing fixů (povinné)
 

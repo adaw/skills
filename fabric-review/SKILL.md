@@ -177,7 +177,7 @@ Pokud verdikt = REWORK kvůli gate fail:
 ### 2) Zjisti změny (diff)
 
 ```bash
-git fetch --all --prune
+timeout 60 git fetch --all --prune || echo "WARN: git fetch failed/timeout"
 git diff --stat {main_branch}...{wip_branch}
 git diff {main_branch}...{wip_branch}
 ```
@@ -230,7 +230,26 @@ Dimenze:
    - `api/` → LLMEM_API_V1 (draft): endpoint paths, request/response schema
    - `recall/scoring.py` → LLMEM_RECALL_PIPELINE_V1 (draft): scoring formula, budget algorithm
 
-   > **Poznámka:** Tento seznam je DUPLICITNÍ k `config.md` GOVERNANCE registru — slouží jako lidsky čitelná reference pro reviewera. Source of truth je vždy `config.md`. Pokud se registry v config změní (nový ADR/spec/modul), je NUTNÉ aktualizovat i tento seznam — fabric-check by měl detekovat drift.
+   > **Kanonický zdroj:** `config.md` GOVERNANCE registr je JEDINÝ source of truth. Tento seznam je odvozený snapshot pro rychlou referenci. Při review POVINNĚ načti aktuální registr z config.md a automaticky ověř drift:
+   > ```bash
+   > # Automatický governance drift check (POVINNÉ na začátku R8)
+   > # Primární: deterministický tool
+   > python skills/fabric-init/tools/fabric.py governance-check --verify-snapshot
+   > GOV_EXIT=$?
+   > if [ $GOV_EXIT -eq 127 ]; then
+   >   # Tool neexistuje — fallback na manuální grep
+   >   echo "WARN: governance-check tool not found, using manual grep"
+   >   grep -A 3 'contract_modules:' {WORK_ROOT}/config.md > /tmp/gov-config.txt
+   >   # Manuální porovnání s R8 snapshot — pokud se liší, vytvoř intake
+   > elif [ $GOV_EXIT -ne 0 ]; then
+   >   echo "WARN: governance snapshot drift detected"
+   >   python skills/fabric-init/tools/fabric.py intake-new \
+   >     --source "review" --slug "governance-drift" \
+   >     --title "R8 snapshot differs from config.md GOVERNANCE registry"
+   > fi
+   > # Výsledek: Pokračuj VŽDY s daty z config.md (ne snapshot)
+   > ```
+   > Tento check je **mandatory** — přeskočení je skill violation.
 
    - Porušení `accepted` ADR nebo `active` spec bez odpovídajícího supersede = **CRITICAL**
    - Porušení `draft` spec = **HIGH** (severity dle `GOVERNANCE.specs.draft_enforcement` v config.md)

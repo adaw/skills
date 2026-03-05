@@ -348,10 +348,17 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
 5) Ověř kontrakt výstupů deterministicky:
 
    ```bash
-   python skills/fabric-init/tools/fabric.py contract-check --step "<COMPLETED_STEP>"
+   python skills/fabric-init/tools/fabric.py contract-check --step “<COMPLETED_STEP>”
+   CONTRACT_EXIT=$?
+   if [ $CONTRACT_EXIT -ne 0 ]; then
+     echo “STOP: contract-check FAIL for step $COMPLETED_STEP (exit $CONTRACT_EXIT)”
+     python skills/fabric-init/tools/fabric.py state-patch --fields-json “{\”error\”: \”STOP: contract-check FAIL — $COMPLETED_STEP\”}”
+     # Vytvoř intake item
+     python skills/fabric-init/tools/fabric.py intake-new --source “loop” --slug “contract-breach-$COMPLETED_STEP” \
+       --title “Contract check failed for $COMPLETED_STEP”
+     exit 1
+   fi
    ```
-
-   Pokud kontrakt neprojde → **STOP + ESCALATE** (viz „Crash recovery“).
 6) Deterministicky posuň stav jedním příkazem (gating + next step + patch state):
 
    ```bash
@@ -376,6 +383,40 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
    - **idle:** idle
 7) Zapiš odkaz na hlavní run report do `{WORK_ROOT}/reports/run-{run_id}.md` (append-only).
 
+   **run_id mechanismus:** `--ensure-run-id` flag zajistí, že:
+   - Pokud `state.run_id` EXISTUJE (nastavený z předchozího tick v tomto runu) → použij ho (append do stejného run reportu).
+   - Pokud `state.run_id` je `null` (nový run) → vygeneruj nový `run_id` (formát: `{YYYY-MM-DD}-{sekvence}`), zapiš ho do `state.run_id` a vytvoř nový run report.
+   - Sub-skilly (implement, test, review, close) NEPOUŽÍVAJÍ run_id přímo — run report je zodpovědnost fabric-loop, ne sub-skillů. Sub-skilly píší vlastní reporty (test-*.md, review-*.md atd.) a fabric-loop na ně odkazuje v run reportu.
+   - `run_id` se resetuje na `null` při `state.step = idle` (nový cyklus = nový run).
+
+   **Explicitní kód pro run_id lifecycle:**
+   ```bash
+   # Na začátku každého tick cyklu (krok 2):
+   RUN_ID=$(python skills/fabric-init/tools/fabric.py state-get --field run_id 2>/dev/null)
+   STATE_GET_EXIT=$?
+   if [ $STATE_GET_EXIT -ne 0 ]; then
+     echo "WARN: state-get failed (exit $STATE_GET_EXIT), treating as null"
+     RUN_ID=""
+   fi
+   if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+     # Nový run — generuj run_id
+     SEQ=$(ls {WORK_ROOT}/reports/run-*.md 2>/dev/null | wc -l)
+     RUN_ID="$(date +%Y-%m-%d)-$((SEQ + 1))"
+     python skills/fabric-init/tools/fabric.py state-patch --fields-json "{\"run_id\": \"$RUN_ID\"}"
+     PATCH_EXIT=$?
+     if [ $PATCH_EXIT -ne 0 ]; then
+       echo "WARN: state-patch run_id failed (exit $PATCH_EXIT), continuing with local RUN_ID"
+     fi
+   fi
+
+   # Po archive (přechod do idle) — reset run_id:
+   python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"run_id": null}'
+   RESET_EXIT=$?
+   if [ $RESET_EXIT -ne 0 ]; then
+     echo "WARN: run_id reset failed (exit $RESET_EXIT) — next run will reuse stale run_id"
+   fi
+   ```
+
    Deterministicky (povinné):
 
    ```bash
@@ -394,22 +435,72 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
 
 8) Pokud `AUDIT=1`: proveď **audit provedeného skillu** (po každém ticku).
 
-Cíl auditu: ověřit, že se stalo to, co se mělo stát, že výstupy jsou konzistentní, a že nevznikl drift.
+**Kdo generuje:** Audit report generuje **fabric-loop** (orchestrátor), NE sub-skilly. Sub-skilly (implement, test, review, close) generují své vlastní reporty; fabric-loop nad nimi provádí nezávislý audit.
 
-Deterministické minimum (vždy):
+**Kdy:** Po KAŽDÉM úspěšném ticku (krok 6), PŘED zápisem do run reportu (krok 7). Pokud tick selhal (non-zero), audit se neprovádí (state.error je nastavený, následuje STOP).
+
+**Cíl auditu:** Ověřit, že se stalo to, co se mělo stát, že výstupy jsou konzistentní, a že nevznikl drift.
+
+**Deterministické minimum (vždy):**
 ```bash
+# reports-validate je subcommand fabric.py — validuje:
+# 1. YAML frontmatter parsovatelný (schema/kind/date povinné)
+# 2. Report naming matchuje CONTRACTS.outputs pattern
+# 3. Povinné sekce přítomné (Notes nesmí být prázdné pro test/review)
+# 4. Verdict/Result řádek přítomný a parsovatelný (pro test/review reporty)
 python skills/fabric-init/tools/fabric.py reports-validate --strict
+VALIDATE_EXIT=$?
+if [ $VALIDATE_EXIT -ne 0 ]; then
+  echo "WARN: reports-validate failed (exit $VALIDATE_EXIT)"
+fi
 ```
 
-Pak vytvoř audit report (1 soubor na tick), např.:
-- `{WORK_ROOT}/reports/audit-{COMPLETED_STEP}-{YYYY-MM-DD}-{run_id}.md`
+**Audit report** (1 soubor na tick):
+- **Naming:** `{WORK_ROOT}/reports/audit-{COMPLETED_STEP}-{YYYY-MM-DD}-{run_id}.md`
+- **Formát (povinný):**
 
-Doporučený postup:
-1) načti poslední `contract-check` JSON (nebo ho zavolej znovu pro `<COMPLETED_STEP>`),
-2) načti poslední report daného kroku (`fabric.py report-latest --kind "<COMPLETED_STEP>"`),
-3) napiš krátký audit: **PASS/FAIL**, důkazy, rizika, návrhy (a případné intake itemy).
+```markdown
+---
+schema: fabric.audit.v1
+kind: audit-{COMPLETED_STEP}
+date: {YYYY-MM-DD}
+run_id: {run_id}
+wip_item: {wip_item nebo null}
+verdict: PASS|FAIL
+---
 
-**Stop pravidlo:** pokud audit zjistí CRITICAL problém (bezpečnost, porušení decision/spec/vision, rozbitý state/protocol, nebo deterministické validace failují) → nastav `state.error` a **STOP**.
+# Audit: {COMPLETED_STEP}
+
+## Contract check
+{contract-check výstup — PASS/FAIL + detaily}
+
+## Report validation
+{reports-validate výstup — PASS/FAIL}
+
+## Evidence
+- Step report: reports/{step}-{wip_item}-{date}-{run_id}.md
+- State after tick: step={new_step}, phase={new_phase}
+{+ counter cross-check pokud step=test nebo review}
+
+## Risks / Notes
+{krátký komentář — max 3 řádky}
+```
+
+**Postup:**
+1. Zavolej `contract-check --step "<COMPLETED_STEP>"` (nebo přečti JSON z kroku 5)
+2. Zavolej `reports-validate --strict`
+3. Načti poslední report daného kroku (`fabric.py report-latest --kind "<COMPLETED_STEP>"`)
+4. **Counter cross-check** (jen po test/review): přečti `test_fail_count` a `rework_count` z backlog itemu, ověř, že souhlasí s počtem FAIL/REWORK reportů v `reports/`
+5. Napiš audit report s verdiktem PASS/FAIL
+
+**Audit severity taxonomie:** Definována v `config.md AUDIT_SEVERITY` (source of truth). Shrnutí:
+- **CRITICAL** (→ `state.error` + STOP): viz `config.md AUDIT_SEVERITY.CRITICAL.triggers`
+- **HIGH** (→ intake item, pokračuj): viz `config.md AUDIT_SEVERITY.HIGH.triggers`
+- **LOW** (→ poznámka v audit reportu): viz `config.md AUDIT_SEVERITY.LOW.triggers`
+
+**Audit report schema:** Definován v `config.md AUDIT_REPORT_SCHEMA` — povinné YAML frontmatter fields: `schema`, `kind`, `date`, `run_id`, `wip_item`, `verdict`. Povinné sekce: Contract check, Report validation, Evidence, Risks / Notes.
+
+**Stop pravidlo:** pokud audit verdikt = FAIL (aspoň 1 CRITICAL finding) → nastav `state.error = "STOP: audit CRITICAL — {finding_summary}"` a **STOP**. Pokud verdikt = PASS (žádný CRITICAL, jen HIGH/LOW) → zapiš HIGH findings jako intake itemy a pokračuj.
 
 
 
@@ -494,12 +585,33 @@ sed -i "s/^rework_count:.*/rework_count: $NEW/" {WORK_ROOT}/backlog/{wip_item}.m
 **Poznámka:** Inkrement se provádí VŽDY v fabric-loop, NIKDY v sub-skillech. Sub-skilly (fabric-test, fabric-review) pouze generují reporty s verdikty. Loop čte verdikty a aktualizuje countery.
 
 - **test_fail_count**: Inkrementuj při `test → FAIL → implement` (viz kód výše). Pokud `test_fail_count >= max_rework_iters` (default 3) → STOP + set `state.error = "test_fail_count exceeded"` + vytvoř intake item. Neposílej zpět na implement — task je nestabilní.
-- **rework_count**: Inkrementuj při `review → REWORK → implement` (viz kód výše). Pokud `rework_count >= max_rework_iters` → review by měl vrátit REDESIGN (viz fabric-review pravidla). Orchestrátor to enforceuje: pokud `rework_count >= max_rework_iters` a review vrátí REWORK místo REDESIGN → přepiš na REDESIGN a zaloguj override.
+- **rework_count**: Inkrementuj při `review → REWORK → implement` (viz kód výše). Pokud `rework_count >= max_rework_iters` → review by měl vrátit REDESIGN (viz fabric-review pravidla). Orchestrátor to enforceuje explicitně:
+
+```bash
+# REWORK→REDESIGN override (v tick algoritmu, PO inkrementu rework_count)
+REWORK_COUNT=$(grep 'rework_count:' {WORK_ROOT}/backlog/{wip_item}.md | awk '{print $2}')
+REWORK_COUNT=${REWORK_COUNT:-0}
+MAX_ITERS={SPRINT.max_rework_iters}  # default 3
+REVIEW_VERDICT=$(...)  # parsovaný verdict z review reportu
+
+if [ "$REVIEW_VERDICT" = "REWORK" ] && [ "$REWORK_COUNT" -ge "$MAX_ITERS" ]; then
+  echo "OVERRIDE: REWORK→REDESIGN (rework_count $REWORK_COUNT >= max $MAX_ITERS)"
+  REVIEW_VERDICT="REDESIGN"
+  # Zaloguj override do run reportu
+  python skills/fabric-init/tools/fabric.py run-report \
+    --ensure-run-id \
+    --completed "review" \
+    --status "OVERRIDE" \
+    --note "REWORK→REDESIGN override: rework_count $REWORK_COUNT >= max_rework_iters $MAX_ITERS"
+fi
+```
+
+Pokud override nastane, tick pokračuje s `REVIEW_VERDICT=REDESIGN` — tzn. backlog item → BLOCKED, WIP reset, next step = close (viz REDESIGN handling níže).
 
 #### Kdy resetovat countery (explicitní)
 
 Reset obou counterů na 0 nastává ve **dvou** situacích:
-1. **Nový task**: Když fabric-loop vybere nový `wip_item` z Task Queue (tzn. změní se `state.wip_item`), přepíše `test_fail_count: 0` a `rework_count: 0` v novém backlog itemu.
+1. **Nový task**: Když fabric-loop vybere nový `wip_item` z Task Queue (tzn. změní se `state.wip_item`), přepíše `test_fail_count: 0`, `rework_count: 0` a `autofix_count: 0` v novém backlog itemu.
 2. **Po úspěšném close**: Když `fabric-close` dokončí merge a gates PASS, fabric-loop resetuje countery v backlog itemu (nezávisle na tom, že task je DONE — pro audit trail).
 
 Kdo provádí reset: **fabric-loop** (ne fabric-close, ne fabric-implement). Reset se provádí PŘED prvním dispatch na nový task, tzn. PŘED prvním implement tickem.
@@ -526,6 +638,11 @@ if grep -q 'rework_count:' "$WIP_FILE"; then
   sed -i "s/^rework_count:.*/rework_count: 0/" "$WIP_FILE"
 else
   sed -i '/^---$/!b; N; s/\n---$/\nrework_count: 0\n---/' "$WIP_FILE"
+fi
+if grep -q 'autofix_count:' "$WIP_FILE"; then
+  sed -i "s/^autofix_count:.*/autofix_count: 0/" "$WIP_FILE"
+else
+  sed -i '/^---$/!b; N; s/\n---$/\nautofix_count: 0\n---/' "$WIP_FILE"
 fi
 ```
 
@@ -649,7 +766,19 @@ Pokud jakýkoli abort selže → `state.error = "git state inconsistent"` + STOP
 - **Intentional STOP** (prefix `BLOCKED_ONLY:` nebo `STOP:`): Orchestrátor záměrně zastavil (všechno BLOCKED, counter limit, config drift). Recovery: **NE-retry**. Pouze ESCALATE na uživatele.
 - **Crash/failure** (vše ostatní): Neočekávaný problém. Recovery: retry postup níže.
 
-Jak rozlišit: Pokud `state.error` začíná `BLOCKED_ONLY:` nebo `STOP:` nebo `test_fail_count exceeded` → **intentional**, přeskoč retry a rovnou ESCALATE.
+**Kanonický pattern (regex):** Intentional error matchuje prefixy z `config.md ERROR_TAXONOMY.intentional_prefixes`:
+```bash
+# Trim whitespace před pattern match
+STATE_ERROR_TRIMMED=$(echo "$STATE_ERROR" | sed 's/^[[:space:]]*//')
+# Prefixy z config.md ERROR_TAXONOMY (source of truth):
+INTENTIONAL_PATTERN="^(BLOCKED_ONLY:|STOP:|test_fail_count exceeded|rework_count exceeded|config_drift:)"
+if echo "$STATE_ERROR_TRIMMED" | grep -qE "$INTENTIONAL_PATTERN"; then
+  echo "Intentional STOP — no retry, ESCALATE"
+else
+  echo "Crash/failure — retry postup"
+fi
+```
+> **Source of truth:** `config.md` sekce `ERROR_TAXONOMY.intentional_prefixes` definuje kanonický seznam. Tento regex MUSÍ odpovídat config registru. Jakýkoli nový intentional stop MUSÍ přidat prefix do config.md ERROR_TAXONOMY A aktualizovat tento regex.
 
 ### Obecný postup (pro crash/failure errors)
 1. Přečti `state.error` + `step`
@@ -657,7 +786,7 @@ Jak rozlišit: Pokud `state.error` začíná `BLOCKED_ONLY:` nebo `STOP:` nebo `
 3. Zkontroluj, zda existuje výstup, který měl vzniknout
 4. Pokud výstup existuje → error byl false alarm → vyčisti `error` a pokračuj dál
 5. Pokud výstup neexistuje → rerun stejného step (idempotentně), max 1×
-5. Pokud selže znovu → eskalace:
+6. Pokud selže znovu → eskalace:
    - vytvoř evidence pack (ZIP) pro debug:
 
      ```bash
@@ -693,6 +822,29 @@ Po close (s WIP=null, REDESIGN carry-over):
 - Toto je identické chování jako při normálním close (viz dispatch tabulka: "close → pokud existuje další READY task → implement; jinak docs")
 - REDESIGN task se objeví jako carry-over v close sprint summary reportu
 
+
+---
+
+## Intake item deduplication (povinné)
+
+Před vytvořením jakéhokoli intake itemu ověř, zda stejný (nebo ekvivalentní) item už neexistuje:
+
+```bash
+# Pattern: intake/{skill}-{slug}-*.md
+INTAKE_PATTERN="{WORK_ROOT}/intake/{SKILL}-{SLUG}-*.md"
+if ls $INTAKE_PATTERN 1>/dev/null 2>&1; then
+  echo "SKIP: intake item already exists for $SKILL-$SLUG"
+else
+  # Vytvoř nový intake item
+  python skills/fabric-init/tools/fabric.py intake-new --source "$SKILL" --slug "$SLUG" --title "$TITLE"
+fi
+```
+
+**Pravidla:**
+- Deduplication je na úrovni `{skill}-{slug}` (date/id se ignoruje).
+- Pokud existující intake item má status `processed` nebo `rejected`, nový SE VYTVOŘÍ (opakující se problém po fixu).
+- Pokud existující intake item má status `new` nebo `pending`, nový se NEVYTVOŘÍ (čeká na zpracování).
+- Toto platí pro VŠECHNY skilly — implement, test, review, close, loop, check.
 
 ---
 
@@ -737,7 +889,35 @@ Před návratem (po posledním tiku RUN cyklu):
 - po-dispatch kontrakt splněn pro každý dispatchnutý krok (minimální výstupy ověřeny)
 - pokud došlo k REDESIGN → backlog item je BLOCKED a WIP resetován
 - pokud `AUDIT=1` → pro každý dispatchnutý krok existuje audit report `reports/audit-{step}-*.md`
-- countery (`test_fail_count`, `rework_count`) v backlog itemu odpovídají skutečnému počtu FAIL/REWORK cyklů (cross-check s protokolem)
+- countery (`test_fail_count`, `rework_count`) v backlog itemu odpovídají skutečnému počtu FAIL/REWORK cyklů:
+  ```bash
+  # Counter cross-check (povinné pokud wip_item existuje)
+  WIP_ITEM=$(grep 'wip_item:' {WORK_ROOT}/state.md | awk '{print $2}')
+  if [ -n "$WIP_ITEM" ] && [ "$WIP_ITEM" != "null" ]; then
+    FAIL_COUNT=$(grep 'test_fail_count:' {WORK_ROOT}/backlog/$WIP_ITEM.md | awk '{print $2}')
+    REWORK_COUNT=$(grep 'rework_count:' {WORK_ROOT}/backlog/$WIP_ITEM.md | awk '{print $2}')
+    # Spočítej skutečné FAIL reporty
+    ACTUAL_FAILS=$(ls {WORK_ROOT}/reports/test-$WIP_ITEM-*.md 2>/dev/null | while read f; do grep -l 'Result: FAIL\|Result: TIMEOUT' "$f"; done | wc -l)
+    ACTUAL_REWORKS=$(ls {WORK_ROOT}/reports/review-$WIP_ITEM-*.md 2>/dev/null | while read f; do grep -l 'Verdict: REWORK' "$f"; done | wc -l)
+    if [ "${FAIL_COUNT:-0}" -ne "$ACTUAL_FAILS" ] || [ "${REWORK_COUNT:-0}" -ne "$ACTUAL_REWORKS" ]; then
+      echo "WARN: counter mismatch — test_fail_count=$FAIL_COUNT (actual $ACTUAL_FAILS), rework_count=$REWORK_COUNT (actual $ACTUAL_REWORKS)"
+      # Non-blocking WARNING — counter drift je recoverable (graceful degradation)
+    fi
+  fi
+  ```
+- `autofix_count` v backlog itemu odpovídá skutečnému počtu auto-fix commitů:
+  ```bash
+  # Autofix counter cross-check (povinné pokud wip_item existuje)
+  if [ -n "$WIP_ITEM" ] && [ "$WIP_ITEM" != "null" ]; then
+    AUTOFIX_COUNT=$(grep 'autofix_count:' {WORK_ROOT}/backlog/$WIP_ITEM.md | awk '{print $2}')
+    AUTOFIX_COUNT=${AUTOFIX_COUNT:-0}
+    # Spočítej skutečné auto-fix commity na branchi
+    ACTUAL_AUTOFIX=$(git log --oneline --grep="chore.*auto-fix" {main_branch}..HEAD 2>/dev/null | wc -l)
+    if [ "${AUTOFIX_COUNT}" -ne "$ACTUAL_AUTOFIX" ]; then
+      echo "WARN: autofix_count mismatch — persisted=$AUTOFIX_COUNT, actual=$ACTUAL_AUTOFIX"
+    fi
+  fi
+  ```
 
 Pokud ne → FAIL + zapiš `state.error` s detailním popisem a STOP.
 

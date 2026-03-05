@@ -41,7 +41,23 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 ## Výstupy
 
 - **Per-task:** `{WORK_ROOT}/reports/close-{wip_item}-{YYYY-MM-DD}-{run_id}.md` *(pro každý mergovaný task — NESMÍ se přepisovat)*
+  ```bash
+  # Overwrite guard (povinné):
+  CLOSE_REPORT="{WORK_ROOT}/reports/close-{wip_item}-{YYYY-MM-DD}-{run_id}.md"
+  if [ -f "$CLOSE_REPORT" ]; then
+    echo "ERROR: close report already exists: $CLOSE_REPORT (idempotence — skip)"
+  fi
+  ```
 - **Sprint summary:** `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md` *(aktualizuj po každém close — append-only tabulky, přepiš jen Summary/Next)*
+  ```bash
+  # Append-only guard: sprint summary může existovat z předchozího task close
+  # Přidávej řádky do tabulky, neprůpiš existující data
+  SPRINT_REPORT="{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md"
+  if [ -f "$SPRINT_REPORT" ]; then
+    echo "Appending to existing sprint summary"
+    # Přidej řádek do Task Status tabulky (ne přepiš celý soubor)
+  fi
+  ```
 - aktualizované backlog items:
   - `merge_commit`
   - `status: DONE`
@@ -86,6 +102,16 @@ A metadata (`merge_commit`, `status`) patchuj přes plan/apply, ne ručně.
 
 ## Postup
 
+### Orchestrační model (multi-task)
+
+`fabric-close` zpracovává **VŠECHNY tasks v Task Queue v jednom dispatch** (procedurální loop uvnitř jednoho skill runu). To znamená:
+- Orchestrátor (`fabric-loop`) dispatchne `fabric-close` **jednou** za sprint.
+- `fabric-close` iteruje Task Queue sekvenčně (merge task 1, gates, merge task 2, gates, ...).
+- Po zpracování VŠECH tasks (merge nebo carry-over) se `fabric-close` vrátí s jedním sprint summary reportem.
+- `fabric-loop` pak pokračuje `tick --completed close` → next step (implement pokud jsou READY tasks, jinak docs).
+
+> **Není to 1 dispatch per task.** Close je procedurální batching skill — analogicky k `fabric-intake` (zpracuje všechny intake items v jednom runu).
+
 ### 1) Načti sprint tasks (Task Queue)
 
 Z `sprints/sprint-{N}.md` načti tabulku `Task Queue` a získej ordered list:
@@ -115,7 +141,11 @@ Pro každý MERGEABLE task v pořadí:
    ```bash
    timeout 60 git fetch --all --prune || { echo "WARN: git fetch failed/timeout"; GATE_RESULT="FETCH_FAIL"; }
    git checkout {main_branch}
-   git pull --ff-only || { echo "WARN: pull failed, using local main"; }
+   CHECKOUT_EXIT=$?
+   if [ $CHECKOUT_EXIT -ne 0 ]; then echo "ERROR: cannot checkout main"; exit 1; fi
+   git pull --ff-only
+   PULL_EXIT=$?
+   if [ $PULL_EXIT -ne 0 ]; then echo "WARN: pull failed (exit $PULL_EXIT), using local main"; fi
    ```
 2. Zapamatuj si pre-merge HEAD:
    ```bash
@@ -226,10 +256,15 @@ Pro každý MERGEABLE task v pořadí:
 
 6. Pokud gates FAIL:
 
-   **6a) Pokus o auto-fix (max 1×, jen pro lint/format):**
+   **6a) Pokus o auto-fix (max 1× per close run, jen pro lint/format):**
    Pokud selhaly lint nebo format_check (ne test), zkus auto-fix před revertem:
 
    ```bash
+   # Idempotence guard: auto-fix na main proběhne max 1× per close dispatch
+   CLOSE_AUTOFIX_DONE=0  # lokální flag (nepersistuje — close je jednorázový)
+   if [ "$CLOSE_AUTOFIX_DONE" -ge 1 ]; then
+     echo "SKIP: auto-fix on main already attempted this close run"
+   fi
    # lint auto-fix (pokud lint failnul a lint_fix existuje) — s timeoutem
    if [ -n "{COMMANDS.lint_fix}" ] && [ "{COMMANDS.lint_fix}" != "TBD" ]; then
      timeout 120 {COMMANDS.lint_fix}
@@ -248,14 +283,23 @@ Pro každý MERGEABLE task v pořadí:
    Pokud auto-fix opravil něco, commitni a znovu spusť všechny gates:
    ```bash
    git add -A && git commit -m "chore({id}): auto-fix lint/format on main"
-   # Zapamatuj si PRE auto-fix stav pro regression detekci
-   PRE_FIX_FAILURES="${GATE_RESULT}"
-   timeout 120 {COMMANDS.lint}; POST_LINT=$?
-   timeout 120 {COMMANDS.format_check}; POST_FMT=$?
-   timeout 300 {COMMANDS.test}; POST_TEST=$?
+   CLOSE_AUTOFIX_DONE=1  # Nastav flag po úspěšném auto-fix commitu
+   # Zapamatuj si PRE auto-fix test výsledek pro regression detekci
+   PRE_FIX_TEST_RESULT="${GATE_RESULT}"  # PASS/FAIL/TIMEOUT z pre-autofix gates
+   timeout 120 {COMMANDS.lint}; POST_FIX_LINT_EXIT=$?
+   timeout 120 {COMMANDS.format_check}; POST_FIX_FMT_EXIT=$?
+   timeout 300 {COMMANDS.test}; POST_FIX_TEST_EXIT=$?
+   # Mapuj exit codes na výsledky (konzistentně s fabric-implement naming)
+   if [ $POST_FIX_TEST_EXIT -eq 124 ]; then POST_FIX_TEST="TIMEOUT";
+   elif [ $POST_FIX_TEST_EXIT -ne 0 ]; then POST_FIX_TEST="FAIL"; else POST_FIX_TEST="PASS"; fi
    ```
 
    **Regression detekce:** Pokud auto-fix způsobil NOVÉ selhání (testy FAILily po auto-fixu, ale ne před ním):
+   ```bash
+   if [ "$PRE_FIX_TEST_RESULT" = "PASS" ] && [ "$POST_FIX_TEST" != "PASS" ]; then
+     echo "REGRESSION: auto-fix broke tests on main, reverting"
+   fi
+   ```
    - Revertni auto-fix commit: `git revert --no-edit HEAD`
    - Vytvoř intake item `intake/close-autofix-regression-{date}.md` s diff pre/post
    - Pokračuj revertem merge commitu (7b)
@@ -292,6 +336,11 @@ Pro každý MERGEABLE task v pořadí:
      - `status: DONE`
      - `updated: {YYYY-MM-DD}`
      - `branch: null` *(vyčisti stale branch referenci — zabraňuje reuse v příštím sprintu)*
+   - Explicitní kód pro backlog item update:
+     ```bash
+     python skills/fabric-init/tools/fabric.py backlog-set --id "{id}" --fields-json \
+       '{"merge_commit": "'"$SHA"'", "status": "DONE", "updated": "'"$(date +%Y-%m-%d)"'", "branch": null}'
+     ```
    - **smaž feature branch** (povinné — zabraňuje hromadění stale branches):
      ```bash
      git branch -d {branch} 2>/dev/null || true

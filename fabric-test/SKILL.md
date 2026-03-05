@@ -88,7 +88,7 @@ python skills/fabric-init/tools/fabric.py run test_e2e --tail 200
    python skills/fabric-init/tools/fabric.py gate-test --tail 200
    ```
 
-   Tím vznikne report v `{WORK_ROOT}/reports/` s řádkem `- Result: PASS` nebo `- Result: FAIL`.
+   Tím vznikne report v `{WORK_ROOT}/reports/` s řádkem `Result: PASS` nebo `Result: FAIL` (BEZ leading dash — kanonický formát pro fabric-loop verdict parsing).
 4. Pokud `COMMANDS.test_e2e` není prázdné **a zároveň není `TBD`**, spusť i E2E (volitelně):
    ```bash
    {COMMANDS.test_e2e}
