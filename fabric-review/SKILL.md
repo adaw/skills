@@ -350,6 +350,39 @@ Verdikt pravidla:
 - ≥3 HIGH bez CRITICAL → `REWORK` (akumulace)
 - Jen MEDIUM/LOW → `CLEAN` (findings zapiš do reportu jako doporučení)
 
+### Fix strategy per finding type
+
+Když verdikt je REWORK, review report MUSÍ obsahovat per-finding konkrétní fix strategii. Nepiš jen „oprav to" — řekni LLM přesně JAK.
+
+| Dim | Typ finding | Fix strategie |
+|-----|-------------|---------------|
+| R1 | Missing edge case handling | Přidej `if` guard pro identifikovaný edge case. Šablona: `if {condition}: raise ValueError("{msg}") / return {default}` |
+| R1 | Off-by-one / boundary | Přidej boundary test (`==`, `<`, `>`) + oprav podmínku. Vždy přidej regresní test. |
+| R1 | Logic error | Napiš failing test NEJDŘÍVE (TDD), pak oprav logiku. Commit test + fix společně. |
+| R2 | Missing input validation | Přidej validaci na vstupní bod: `if not isinstance(x, expected): raise TypeError(...)`. Pro API: Pydantic validator. |
+| R2 | Secret/credential exposure | Maskuj přes `{WORK_ROOT}/triage/patterns.py` vzory. Nikdy neloguj raw secret. Přidej test na masking. |
+| R2 | SQL/Command injection | Přepiš na parametrized query / `shlex.quote()` / `subprocess.run([...], shell=False)`. |
+| R3 | O(n²) nebo horší | Refaktor na dict lookup / set intersection / index. Přidej benchmark test s ≥1000 items. |
+| R3 | Unbounded I/O | Přidej `limit` parametr + pagination. Pro soubory: streaming read místo `read()`. |
+| R4 | Missing error handling | Obal v `try/except {SpecificError}:` + log + graceful fallback. Nikdy bare `except:`. |
+| R4 | Missing timeout | Přidej `timeout=` parametr (z config.md COMMANDS timeouts). Detekuj exit 124. |
+| R4 | Missing retry | Přidej retry s exponential backoff: `for attempt in range(max_retries): try ... except: sleep(2**attempt)` |
+| R5 | Untested code path | Přidej test pro identifikovaný path. Minimum: assert vstup → assert výstup → assert side effect. |
+| R5 | Flaky test | Izoluj external dependency (mock/fixture). Přidej `@pytest.mark.timeout(10)`. |
+| R6 | Bad naming | Přejmenuj na `{verb}_{noun}` pro funkce, `{Noun}{Role}` pro třídy. Grep+replace všechny reference. |
+| R6 | God function (>50 LOC) | Extrahuj sub-funkce. Každá ≤30 LOC, single responsibility. Přidej docstring. |
+| R6 | Dead code | Odstraň + přidej test coverage check, že removed path nebyl reachable. |
+| R7 | Missing docstring | Přidej: 1 věta účel, Args/Returns/Raises sekce. Pro public API: příklad použití. |
+| R7 | Stale documentation | Aktualizuj docs na shodu s kódem. Přidej `<!-- last-verified: {date} -->` tag. |
+| R8 | ADR violation | Buď (a) uprav kód na shodu s ADR, nebo (b) vytvoř nový ADR superseding starý (s odůvodněním). |
+| R8 | Spec violation | Oprav kód na shodu se spec. Pokud spec je zastaralý → vytvoř intake item pro spec update. |
+
+**Anti-patterns (ZAKÁZÁNO v REWORK doporučeních):**
+- ❌ „Oprav bug v souboru X" (neříká JAK)
+- ❌ „Přidej testy" (neříká KOLIK a JAKÉ)
+- ❌ „Vylepši error handling" (neříká KTERÝ error a JAK)
+- ✅ „V `scoring.py:45` přidej `try/except ValueError:` kolem `float(score)` s fallback `score=0.0` + test `test_scoring_invalid_input`"
+
 ### 5) Systemic findings → intake
 
 Pokud najdeš věc, která není jen pro tento task (např. chybí lint rule, CI gate, opakující se pattern):

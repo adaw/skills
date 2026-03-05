@@ -505,6 +505,93 @@ fi
 > Nesahej na `phase/step`. WIP reset je **mandatory** — fabric-loop předpokládá, že po close je WIP čistý pro výběr dalšího tasku.
 > **NIKDY nepiš do state.md přímo (sed -i state.md).** Vždy tmp → mv pro atomicitu.
 
+### 8) Sprint-wide quality gates (povinné)
+
+Po zpracování VŠECH tasks (merge/carry-over) a PŘED finálním sprint summary spusť sprint-wide quality gates:
+
+#### 8a) Coverage delta check
+
+```bash
+# Spusť coverage na main po všech mergích
+if [ -n "{COMMANDS.test}" ] && [ "{COMMANDS.test}" != "TBD" ]; then
+  # Baseline: coverage z minulého sprintu (pokud existuje)
+  PREV_SPRINT=$((N - 1))
+  BASELINE_COV=$(grep 'coverage_pct:' "{WORK_ROOT}/reports/close-sprint-${PREV_SPRINT}-"*.md 2>/dev/null | tail -1 | awk '{print $2}' | tr -d '%')
+  BASELINE_COV=${BASELINE_COV:-0}
+
+  # Aktuální coverage
+  timeout 300 pytest --cov=src --cov-report=term-missing --tb=no -q 2>/dev/null | tee /tmp/cov-output.txt
+  CURRENT_COV=$(grep '^TOTAL' /tmp/cov-output.txt | awk '{print $NF}' | tr -d '%')
+  CURRENT_COV=${CURRENT_COV:-0}
+
+  # Delta
+  COV_DELTA=$((CURRENT_COV - BASELINE_COV))
+  echo "Coverage: ${CURRENT_COV}% (delta: ${COV_DELTA}% vs sprint $PREV_SPRINT)"
+
+  # WARN pokud coverage klesla o ≥5%
+  if [ "$COV_DELTA" -lt -5 ]; then
+    echo "WARN: coverage regression detected (${COV_DELTA}%)"
+    python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "coverage-regression-sprint-${N}" \
+      --title "Coverage regression: ${CURRENT_COV}% (was ${BASELINE_COV}%, delta ${COV_DELTA}%)"
+  fi
+fi
+```
+
+**Anti-patterns:**
+- ❌ Přeskočit coverage check protože „testy prošly"
+- ❌ Akceptovat coverage < 50% bez WARN
+- ✅ Vždy zaznamenat coverage_pct do sprint summary reportu
+
+#### 8b) E2E verification (pokud definován)
+
+```bash
+# E2E smoke test na main po všech mergích
+if [ -n "{COMMANDS.test_e2e}" ] && [ "{COMMANDS.test_e2e}" != "TBD" ]; then
+  echo "Running sprint-wide E2E verification on main..."
+  timeout 600 {COMMANDS.test_e2e}
+  E2E_EXIT=$?
+  if [ $E2E_EXIT -eq 124 ]; then
+    echo "TIMEOUT: E2E sprint verification exceeded 600s"
+    E2E_SPRINT_RESULT="TIMEOUT"
+  elif [ $E2E_EXIT -ne 0 ]; then
+    echo "WARN: E2E sprint verification FAILED"
+    E2E_SPRINT_RESULT="FAIL"
+    python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "e2e-sprint-fail-${N}" \
+      --title "E2E sprint verification failed after all merges (sprint ${N})"
+  else
+    E2E_SPRINT_RESULT="PASS"
+  fi
+else
+  E2E_SPRINT_RESULT="SKIPPED"
+fi
+```
+
+#### 8c) Sprint-diff review (doporučeno)
+
+Celkový diff sprintu může odhalit problémy, které per-task review nechytil (cross-task interakce, duplicitní kód, nekonzistentní naming):
+
+```bash
+# Sprint diff: všechny změny od začátku sprintu
+SPRINT_START_SHA=$(grep 'sprint_start_sha:' "{WORK_ROOT}/sprints/sprint-${N}.md" 2>/dev/null | awk '{print $2}')
+if [ -n "$SPRINT_START_SHA" ]; then
+  SPRINT_DIFF_STAT=$(git diff --stat "$SPRINT_START_SHA"...HEAD)
+  SPRINT_DIFF_FILES=$(git diff --name-only "$SPRINT_START_SHA"...HEAD | wc -l)
+  echo "Sprint diff: $SPRINT_DIFF_FILES files changed"
+
+  # Pokud ≥20 souborů změněno, doporuč sprint-wide review
+  if [ "$SPRINT_DIFF_FILES" -ge 20 ]; then
+    echo "WARN: large sprint diff ($SPRINT_DIFF_FILES files) — consider sprint-wide review"
+  fi
+else
+  echo "WARN: sprint_start_sha not found — cannot compute sprint diff"
+fi
+```
+
+**Minimum:** Sprint summary report MUSÍ obsahovat:
+- `coverage_pct: {CURRENT_COV}%` (nebo `N/A` pokud nelze spočítat)
+- `e2e_result: {PASS|FAIL|TIMEOUT|SKIPPED}`
+- `sprint_diff_files: {N}`
+
 ---
 
 ## Fail conditions

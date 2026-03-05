@@ -192,6 +192,7 @@ done
 - [ ] Pokud implementuje: min. test set (3: happy/edge/error)
 - [ ] Pokud analyzuje: alternativy + pseudokód
 - [ ] Pokud reviewuje: fix strategie per finding typ
+- [ ] Deep quality checks (DQ1-DQ6) provedeny pokud scope=deep
 - **0b** pokud postup obsahuje jen vágní „udělej X"
 
 ### Scoring pravidla
@@ -279,6 +280,72 @@ Pro každý přechod A → B: jaký artefakt A vytváří? Čte ho B? Co když c
 ### 3.2) Comparison delta (pokud existuje dev/workflows/)
 
 Per skill: starý workflow vs nový fabric skill — ztráty a zisky.
+
+### 3.3) Deep Quality Checks (scope=deep only)
+
+Tyto kontroly jdou HLOUBĚJI než runtime gates (lint/test). Ověřují strukturální konzistenci kódu.
+
+| ID | Check | Co ověřit | Jak | Severity |
+|----|-------|-----------|-----|----------|
+| DQ1 | API konzistence | Všechny endpointy v `api/routes/` mají odpovídající spec v `specs/` | Porovnej definované routes (`@app.get/post/put/delete`) vs LLMEM_API_V1 spec. Chybějící endpoint v spec = HIGH. | HIGH |
+| DQ2 | Model field coverage | Každý Pydantic model v `models.py` má: type hints, Optional/default, docstring | Grep `class.*BaseModel` → pro každý: field count, docstring existence, Optional% | MEDIUM |
+| DQ3 | Config schema validace | Všechny `LLMEM_*` env vars v `config.py` mají: default, description, type | Grep `Field(` / `env=` v config.py → ověř default + description | MEDIUM |
+| DQ4 | Import konzistence | Žádné cirkulární importy, žádné wildcard importy | `grep -r "from .* import \*" src/` = FAIL. Pro circular: `python -c "import llmem"` exit code. | HIGH |
+| DQ5 | Test-to-code mapping | Každý modul v `src/llmem/` má odpovídající test v `tests/` | Pro `src/llmem/{module}.py` hledej `tests/test_{module}.py`. Chybějící = MEDIUM. | MEDIUM |
+| DQ6 | Error message quality | Chybové zprávy obsahují kontext (ne jen "Error occurred") | Grep `raise.*Error\|logging.error\|print.*error` → ověř, že message obsahuje proměnnou/kontext. | LOW |
+
+**Postup pro DQ checks:**
+
+```bash
+# DQ1: API route vs spec check
+ROUTES=$(grep -rn '@app\.\(get\|post\|put\|delete\)' {CODE_ROOT}/api/ 2>/dev/null | wc -l)
+SPEC_ENDPOINTS=$(grep -c 'endpoint:' {WORK_ROOT}/specs/LLMEM_API_V1*.md 2>/dev/null || echo 0)
+echo "DQ1: $ROUTES routes in code, $SPEC_ENDPOINTS in spec"
+if [ "$ROUTES" -gt "$SPEC_ENDPOINTS" ]; then
+  echo "WARN: code has more routes than spec documents ($ROUTES vs $SPEC_ENDPOINTS)"
+fi
+
+# DQ2: Model docstring coverage
+MODELS=$(grep -c 'class.*BaseModel' {CODE_ROOT}/models.py 2>/dev/null || echo 0)
+MODELS_WITH_DOC=$(grep -A1 'class.*BaseModel' {CODE_ROOT}/models.py 2>/dev/null | grep -c '"""' || echo 0)
+echo "DQ2: $MODELS models, $MODELS_WITH_DOC with docstrings"
+
+# DQ4: No wildcard imports
+WILDCARDS=$(grep -rn 'from .* import \*' {CODE_ROOT}/ 2>/dev/null | grep -v __init__ | wc -l)
+if [ "$WILDCARDS" -gt 0 ]; then
+  echo "WARN: $WILDCARDS wildcard imports found (excluding __init__)"
+fi
+
+# DQ5: Test mapping
+for SRC_FILE in {CODE_ROOT}/*.py {CODE_ROOT}/**/*.py; do
+  [ -f "$SRC_FILE" ] || continue
+  MODULE=$(basename "$SRC_FILE" .py)
+  [ "$MODULE" = "__init__" ] && continue
+  if [ ! -f "tests/test_${MODULE}.py" ]; then
+    echo "DQ5: missing test file for $MODULE"
+  fi
+done
+```
+
+**Výstupní formát:**
+
+```md
+## Deep Quality Checks
+
+| ID | Check | Stav | Detail |
+|----|-------|------|--------|
+| DQ1 | API konzistence | PASS/WARN | {routes} routes, {spec_endpoints} in spec |
+| DQ2 | Model field coverage | PASS/WARN | {models} models, {with_doc} with docstrings |
+| DQ3 | Config schema | PASS/WARN | {vars} env vars, {with_defaults} with defaults |
+| DQ4 | Import konzistence | PASS/FAIL | {wildcards} wildcard imports |
+| DQ5 | Test mapping | PASS/WARN | {missing} modules without tests |
+| DQ6 | Error messages | PASS/WARN | {bare_errors} bare error messages |
+```
+
+**Anti-patterns:**
+- ❌ Přeskočit DQ checks protože lint/test prošly
+- ❌ Reportovat jen PASS/FAIL bez konkrétních čísel
+- ✅ Vždy uvést konkrétní počty a identifikovat chybějící položky
 
 ---
 
