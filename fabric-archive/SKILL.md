@@ -69,6 +69,17 @@ python skills/fabric-init/tools/fabric.py archive-sprint > "{WORK_ROOT}/reports/
 
 ## Postup
 
+### Postup — Path traversal prevention
+
+```bash
+# Path traversal prevention: sanitize all IDs used in file paths
+SAFE_ID=$(echo "${TASK_ID}" | sed 's/[^a-zA-Z0-9_-]//g')
+if [ "$SAFE_ID" != "${TASK_ID}" ]; then
+  echo "WARN: task ID sanitized: '${TASK_ID}' → '$SAFE_ID'"
+fi
+TASK_ID="$SAFE_ID"
+```
+
 ### 1) Najdi DONE backlog items v aktivním backlogu
 
 Pro každý `{WORK_ROOT}/backlog/{id}.md` (mimo done/):

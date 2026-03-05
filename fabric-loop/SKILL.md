@@ -1099,7 +1099,9 @@ if [ $STATE_READ_EXIT -ne 0 ]; then
   LAST_GOOD_STATE=$(grep '"event":"end"' {WORK_ROOT}/logs/protocol.jsonl 2>/dev/null | tail -1 | python -c "import sys,json; d=json.load(sys.stdin); print(d.get('state_snapshot',''))" 2>/dev/null)
   if [ -n "$LAST_GOOD_STATE" ]; then
     echo "Restoring state.md from last protocol snapshot"
-    echo "$LAST_GOOD_STATE" > {WORK_ROOT}/state.md
+    # Atomic write: tmp → mv (nikdy přímý zápis do state.md)
+    echo "$LAST_GOOD_STATE" > "{WORK_ROOT}/state.md.tmp"
+    mv "{WORK_ROOT}/state.md.tmp" "{WORK_ROOT}/state.md"
     # Re-validate
     python skills/fabric-init/tools/fabric.py state-read 2>/dev/null || {
       echo "FATAL: state.md recovery failed — manual intervention required"

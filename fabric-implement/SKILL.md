@@ -197,8 +197,8 @@ if [ "$CURRENT_BRANCH" = "HEAD" ] || [ "$CURRENT_BRANCH" != "{branch_name}" ]; t
   fi
 fi
 # Pokud branch existuje na remote, synchronizuj
-if git ls-remote --heads origin {branch_name} | grep -q {branch_name}; then
-  git pull --ff-only origin {branch_name} || echo "WARN: remote diverged, using local"
+if git ls-remote --heads origin "${branch_name}" | grep -q "${branch_name}"; then
+  git pull --ff-only origin "${branch_name}" || echo "WARN: remote diverged, using local"
 fi
 ```
 
@@ -303,6 +303,16 @@ else
   NEW_COUNT=$((AUTOFIX_COUNT + 1))
   sed -i "s/^autofix_count:.*/autofix_count: $NEW_COUNT/" {WORK_ROOT}/backlog/{id}.md \
     || echo "WARN: autofix_count increment failed"
+
+  # Verify persist succeeded
+  VERIFY_COUNT=$(grep 'autofix_count:' {WORK_ROOT}/backlog/{id}.md | awk '{print $2}')
+  if [ "$VERIFY_COUNT" != "$NEW_COUNT" ]; then
+    echo "WARN: autofix_count persist failed (expected $NEW_COUNT, got $VERIFY_COUNT)"
+    # Fallback: append if field missing
+    if ! grep -q 'autofix_count:' {WORK_ROOT}/backlog/{id}.md; then
+      echo "autofix_count: $NEW_COUNT" >> {WORK_ROOT}/backlog/{id}.md
+    fi
+  fi
 fi
 ```
 Counter se resetuje na 0 při výběru nového tasku (fabric-loop, spolu s test_fail_count a rework_count).
@@ -345,7 +355,7 @@ Pokud auto-fix opravil soubory, rozliš, které změny patří k tasku a které 
 
 ```bash
 # zjisti, které soubory opravil auto-fix, ale NEJSOU v diff tasku
-git diff --name-only {main_branch}...HEAD > /tmp/task-files.txt
+git diff --name-only "${main_branch}...HEAD" > /tmp/task-files.txt
 git diff --name-only > /tmp/autofix-files.txt
 # soubory v autofix ale ne v task-files = pre-existing
 ```

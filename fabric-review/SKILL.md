@@ -90,6 +90,17 @@ if [ -z "$LATEST_TEST_REPORT" ]; then
     --title "Test report missing for ${WIP_ITEM} — temporal dependency violated"
   exit 1
 fi
+
+# Validate test report existence and format
+LATEST_TEST_REPORT=$(ls -t "{WORK_ROOT}/reports/test-${WIP_ITEM}-"*.md 2>/dev/null | head -1)
+if [ -z "$LATEST_TEST_REPORT" ]; then
+  echo "STOP: no test report found for ${WIP_ITEM} — run fabric-test first"
+  exit 1
+fi
+# Format validation: must have schema frontmatter
+if ! grep -q 'schema: fabric.report.v1' "$LATEST_TEST_REPORT" 2>/dev/null; then
+  echo "WARN: test report missing schema frontmatter — may be malformed"
+fi
 ```
 
 ### Rework counter check

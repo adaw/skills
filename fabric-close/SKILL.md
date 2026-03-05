@@ -54,8 +54,13 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
   # Přidávej řádky do tabulky, neprůpiš existující data
   SPRINT_REPORT="{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md"
   if [ -f "$SPRINT_REPORT" ]; then
-    echo "Appending to existing sprint summary"
-    # Přidej řádek do Task Status tabulky (ne přepiš celý soubor)
+    # Dedup guard: zkontroluj zda task ID už není v tabulce (idempotence)
+    if grep -q "| ${TASK_ID} |" "$SPRINT_REPORT" 2>/dev/null; then
+      echo "SKIP: task $TASK_ID already in sprint summary (dedup)"
+    else
+      echo "Appending to existing sprint summary"
+      # Přidej řádek do Task Status tabulky (ne přepiš celý soubor)
+    fi
   fi
   ```
 - aktualizované backlog items:
@@ -435,13 +440,27 @@ Po KAŽDÉM merge aktualizuj tento soubor:
 - **Quality evidence** (jaké commands běžely, PASS/FAIL)
 - **Summary** + **Next** — přepiš aktuální stav
 
-### 7) Reset WIP (povinné)
+### 7) Reset WIP (povinné — ATOMIC WRITE)
 
-Po uzavření každého tasku (merge PASS nebo carry-over) nastav ve `{WORK_ROOT}/state.md`:
-- `wip_item: null`
-- `wip_branch: null`
+Po uzavření každého tasku (merge PASS nebo carry-over) resetuj WIP přes deterministický tool (atomický zápis):
+
+```bash
+# POVINNÉ: Použij state-patch (atomic write: tmp → mv) — nikdy nepiš do state.md přímo!
+python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"wip_item": null, "wip_branch": null}'
+# Fallback pokud state-patch selže:
+STATE_PATCH_EXIT=$?
+if [ $STATE_PATCH_EXIT -ne 0 ]; then
+  echo "WARN: state-patch failed (exit $STATE_PATCH_EXIT), attempting manual atomic write"
+  # Atomic write pattern: tmp → mv (nikdy přímý zápis do state.md)
+  cp "{WORK_ROOT}/state.md" "{WORK_ROOT}/state.md.tmp"
+  sed -i 's/^wip_item:.*/wip_item: null/' "{WORK_ROOT}/state.md.tmp"
+  sed -i 's/^wip_branch:.*/wip_branch: null/' "{WORK_ROOT}/state.md.tmp"
+  mv "{WORK_ROOT}/state.md.tmp" "{WORK_ROOT}/state.md"
+fi
+```
 
 > Nesahej na `phase/step`. WIP reset je **mandatory** — fabric-loop předpokládá, že po close je WIP čistý pro výběr dalšího tasku.
+> **NIKDY nepiš do state.md přímo (sed -i state.md).** Vždy tmp → mv pro atomicitu.
 
 ---
 
