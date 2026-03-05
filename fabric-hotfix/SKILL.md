@@ -404,6 +404,12 @@ python skills/fabric-init/tools/fabric.py backlog-index
 - Backlog item má `status: DONE` a `merge_commit`
 - Backlog index regenerován
 
+**Anti-patterns (zakázáno):**
+- Nastavit `status: DONE` bez `merge_commit` — DONE bez evidence není DONE
+- Nechat `branch:` vyplněné po merge — smaž (nastavit `null`), jinak příští sprint uvidí stale branch
+- Zapomenout regenerovat backlog index — backlog.md bude nekonzistentní se soubory
+- Přeskočit docs update když hotfix mění veřejné API — drift mezi kódem a dokumentací
+
 ### 7.7) H7: Report
 
 **Co:** Hotfix report se souhrnem evidence.
