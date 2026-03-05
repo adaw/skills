@@ -459,11 +459,20 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
      fi
    fi
 
-   # Po archive (přechod do idle) — reset run_id:
-   python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"run_id": null}'
-   RESET_EXIT=$?
-   if [ $RESET_EXIT -ne 0 ]; then
-     echo "WARN: run_id reset failed (exit $RESET_EXIT) — next run will reuse stale run_id"
+   # Po archive (přechod do idle) — preserve run_id monotonicity (P2 fix):
+   # run_id MUST be monotonically increasing. When idle, set run_id to next integer, never null.
+   # This ensures that each run_id is unique and ordered, enabling reproducibility and audit trails.
+   NEXT_RUN_ID=$(python skills/fabric-init/tools/fabric.py state-get --field run_id 2>/dev/null)
+   if [ -n "$NEXT_RUN_ID" ] && echo "$NEXT_RUN_ID" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]+$'; then
+     # Extract counter part and increment
+     COUNTER=$(echo "$NEXT_RUN_ID" | awk -F'-' '{print $NF}')
+     NEW_COUNTER=$((COUNTER + 1))
+     DATE=$(echo "$NEXT_RUN_ID" | cut -d'-' -f1-3)
+     INCREMENTED_RUN_ID="${DATE}-${NEW_COUNTER}"
+     python skills/fabric-init/tools/fabric.py state-patch --fields-json "{\"run_id\": \"$INCREMENTED_RUN_ID\"}"
+   else
+     # Fallback: preserve existing run_id instead of null
+     echo "WARN: run_id format invalid or missing, preserving current state"
    fi
    ```
 

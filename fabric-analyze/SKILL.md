@@ -97,10 +97,15 @@ status: "DRAFT"  # DRAFT | READY
 
 ```bash
 python skills/fabric-init/tools/fabric.py backlog-index
-python skills/fabric-init/tools/fabric.py governance-index
+python skills/fabric-init/tools/fabric.py governance-index 2>/dev/null
+if [ $? -ne 0 ]; then
+  echo "WARN: governance-index failed — continuing without governance data"
+fi
 ```
 
-> Tohle je strojová práce: srovná indexy a odhalí strukturální drift.
+> Tohlo je strojová práce: srovná indexy a odhalí strukturální drift.
+
+**Governance index error handling (P2 fix):** The governance-index call is wrapped with error suppression and continuation logic. If the governance index fails (e.g., missing ADR/spec files), the analysis continues without hard blocking, and a warning is logged for manual review.
 
 ### 1) Načti sprint plan a targety
 
@@ -111,6 +116,19 @@ python skills/fabric-init/tools/fabric.py governance-index
   - nemaž ručně vložené změny, pokud nejsou zjevně špatně.
 
 ### 2) Pro každý target vytvoř návrh tasks
+
+**Co:** Rozložit targety na implementovatelné tasky s jasným scope a testovatelností.
+
+**Size guard (P2 fix): Skip oversized backlog items to prevent parsing performance issues:**
+```bash
+# Size guard: skip oversized backlog items (P2 fix)
+FILE_SIZE=$(wc -c < "{WORK_ROOT}/backlog/${target}.md" 2>/dev/null || echo 0)
+MAX_SIZE=102400  # 100KB
+if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
+  echo "WARN: backlog item ${target}.md exceeds ${MAX_SIZE} bytes — skipping"
+  continue
+fi
+```
 
 Pro každý target:
 
@@ -128,6 +146,12 @@ Každý task musí mít:
 - `Description` (1–2 věty max)
 - `Estimate` (S/M/L; heuristika)
 
+**Anti-patterns (zakázáno):**
+- ❌ Vágní task popis ("implementuj feature X" — musí být konkrétní: jaké soubory, jaký endpoint, jaký model)
+- ❌ Task bez testovatelných AC (každý task musí mít alespoň 1 ověřitelné akceptační kritérium)
+- ❌ Estimate bez zdůvodnění (L protože "je to složité" — uveď proč: nový model + API + testy)
+- ❌ Epic/Story v Task Queue bez rozkladu na Tasks
+
 ### 3) Governance constraints per task
 
 - Z `decisions/INDEX.md` a `specs/INDEX.md` vyber relevantní kontrakty.
@@ -139,9 +163,58 @@ Každý task musí mít:
 
 ### 4) Zapiš per-task analýzy
 
+**Co:** Pro každý task vytvořit kompletní analýzu s pseudokódem a alternativami.
+
 - Pro každý task vytvoř `{ANALYSES_ROOT}/{task_id}-analysis.md` podle template výše.
 - Pokud má task otevřené otázky → ponech `status: DRAFT` a `Task Queue Status = DESIGN`.
 - Pokud je vše jasné → `status: READY` a `Task Queue Status = READY`.
+
+**Contract enforcement (analyze→implement):**
+Analýza NESMÍ být označena `READY` pokud chybí kterákoli z povinných sekcí:
+```bash
+# Validace před nastavením READY
+ANALYSIS_FILE="{ANALYSES_ROOT}/{task_id}-analysis.md"
+MISSING=""
+grep -q "^## Constraints" "$ANALYSIS_FILE" || MISSING="${MISSING} Constraints"
+grep -q "^## Plan" "$ANALYSIS_FILE" || MISSING="${MISSING} Plan"
+grep -q "^## Tests" "$ANALYSIS_FILE" || MISSING="${MISSING} Tests"
+if [ -n "$MISSING" ]; then
+  echo "WARN: analysis missing sections:${MISSING} — keeping status DESIGN"
+  # Nastav DESIGN, ne READY — implement by jinak dostal neúplnou analýzu
+fi
+```
+
+**Povinné sekce v každé analýze (nesmí chybět):**
+
+1. **Pseudokód** — v sekci `## Design → Approach` napiš pseudokód hlavní logiky:
+```python
+# Pseudokód pro {task_id}
+def new_feature(input: InputType) -> OutputType:
+    validated = validate(input)          # krok 1: validace
+    result = process(validated)          # krok 2: core logika
+    store(result)                        # krok 3: persistence
+    return format_response(result)       # krok 4: output
+```
+
+2. **Alternativy** — v sekci `## Design` uveď **≥2 alternativní přístupy** s pro/con:
+```markdown
+### Alternativy
+| # | Přístup | Pro | Con | Zvolen? |
+|---|---------|-----|-----|---------|
+| A | {přístup 1} | {výhody} | {nevýhody} | ✅ |
+| B | {přístup 2} | {výhody} | {nevýhody} | — |
+```
+
+3. **Test strategie** — v sekci `## Tests → New tests` uveď minimálně 3 konkrétní testy:
+   - `test_{id}_happy` — co testuje
+   - `test_{id}_edge` — jaký hraniční případ
+   - `test_{id}_error` — jaký chybový stav
+
+**Anti-patterns (zakázáno):**
+- ❌ Analýza bez pseudokódu ("implementuj dle specifikace" — LLM potřebuje konkrétní kroky)
+- ❌ Jediná alternativa ("jinak to nejde" — vždy existují ≥2 přístupy, byť jeden je horší)
+- ❌ Prázdná sekce Tests ("testy doplní implementátor" — analyzátor MUSÍ definovat co testovat)
+- ❌ Vágní rizika ("může to být složité" — konkrétní: "SQLite lock contention při concurrent writes")
 
 **DŮLEŽITÉ: Synchronizace statusu.**  Kdykoli změníš status tasku (DESIGN → READY nebo naopak), aktualizuj **všechna tři místa**:
 1. Per-task analýza (`{ANALYSES_ROOT}/{task_id}-analysis.md`, frontmatter `status:`)
@@ -159,6 +232,8 @@ python skills/fabric-init/tools/fabric.py plan-apply --plan "{WORK_ROOT}/sprints
 ```
 
 - Pokud `plan-apply` není praktické, uprav sprint plan ručně, ale zachovej tabulku strukturu.
+
+> **OWNERSHIP (P2 fix #38):** Sekce `## Task Queue` v sprint plánu je vlastněna výhradně `fabric-analyze`. Jiné skills (fabric-sprint, fabric-implement) ji ČTOU ale NEPÍŠOU. Pokud implementátor potřebuje změnit status tasku, mění ho v `backlog/{id}.md` a v `analyses/{id}-analysis.md`, ne přímo v Task Queue.
 
 ### 6) Vygeneruj analyze report
 

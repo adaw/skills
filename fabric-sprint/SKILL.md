@@ -78,6 +78,17 @@ Pokud `SPRINT` nebo `COMMANDS` blok chybí → vytvoř intake item `intake/confi
 - Přečti `{WORK_ROOT}/state.md` → `sprint = N`
 - Pokud N chybí → N=1 (a zapiš do reportu jako WARNING; neměň state, to řeší loop/init)
 
+**Sprint counter enforcement (P2 fix):**
+```bash
+# Sprint counter enforcement — validate active_sprint is numeric
+CURRENT_SPRINT=$(grep 'active_sprint:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if ! echo "$CURRENT_SPRINT" | grep -qE '^[0-9]+$'; then
+  echo "WARN: active_sprint is not a valid integer: $CURRENT_SPRINT"
+  CURRENT_SPRINT=1
+fi
+```
+This ensures the sprint counter is always a valid positive integer, preventing silent failures downstream.
+
 ### 3) Načti backlog kandidáty
 
 Z `{WORK_ROOT}/backlog.md` vezmi tabulku a vyfiltruj:
@@ -101,6 +112,12 @@ Vyber top kandidáty podle PRIO (sestupně) s těmito pravidly:
    - `title`, `type`, `tier`, `status`, `effort`, `prio` (frontmatter)
    - aspoň 1–3 AC checkboxy v těle (jinak označ jako DESIGN a počítej s analýzou)
 
+**Sprint size limit (P2 work quality):**
+- Maximum tasks per sprint: 12 (hard cap)
+- Doporučený rozsah: 5-8 tasks (sweet spot)
+- Pokud target decomposition > 12 tasks → rozděl na 2 sprinty
+- Effort distribution: max 40% L tasks, zbytek S/M
+
 **Sprint goal** napiš jako 1 větu, která shrnuje společný outcome všech targetů.
 
 ### 5) Vytvoř sprint plán (podle šablony)
@@ -116,7 +133,16 @@ Použij `{WORK_ROOT}/templates/sprint-plan.md` a vyplň:
 
 `Task Queue`:
 - pokud už máš konkrétní tasks typu `Task/Bug/Chore/Spike` ve statusu `READY`, můžeš předvyplnit 1–3 nejvyšší.
-- jinak nech „Task Queue“ s placeholderem (doplní `fabric-analyze`).
+- jinak nech „Task Queue” s placeholderem (doplní `fabric-analyze`).
+
+**Task Queue formát (P2 work quality):**
+```markdown
+| Order | ID | Type | Status | Estimate | Description |
+|-------|----|------|--------|----------|-------------|
+| 1 | task-xxx | Task | READY | S | Popis |
+```
+Povinné sloupce: Order, ID, Type, Status, Estimate. Description je volitelný.
+Status: DESIGN | READY | IN_PROGRESS | IN_REVIEW | DONE | CARRY-OVER
 
 ### 6) Update state sprint metadata (povolené)
 

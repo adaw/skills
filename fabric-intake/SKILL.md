@@ -9,6 +9,17 @@ description: "Triage intake items into normalized backlog items (Epic/Story/Task
 
 Zpracovat surové vstupy v `{WORK_ROOT}/intake/` a převést je do standardizovaných backlog položek.
 
+## OWNERSHIP — Backlog index
+
+**Odpovědnost:** `fabric-intake`, `fabric-prio` a `fabric-close` MUSÍ spolupracovat na údržbě centrálního backlog indexu (`{WORK_ROOT}/backlog.md`):
+- `fabric-intake` → regeneruje index po triažích
+- `fabric-prio` → regeneruje po prioritizaci
+- `fabric-close` → regeneruje po uzavření sprintu
+
+**Invariant:** Index je vždy aktuální s jednotlivými backlog soubory v `{WORK_ROOT}/backlog/{id}.md` (asynchronní update je povolený, ale konsistence se musí ověřit v auditu).
+
+---
+
 ## Protokol (povinné)
 
 Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
@@ -117,13 +128,25 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/reports/intake-plan
 - ověř existenci `{WORK_ROOT}/intake/`, `{WORK_ROOT}/backlog/`, `{WORK_ROOT}/templates/`
 - pokud některý chybí → CRITICAL → vytvoř intake item `intake/intake-missing-runtime-structure.md` a FAIL
 
-### 2) Najdi „pending“ intake soubory
+### 2) Najdi „pending” intake soubory
 
 Zpracuj pouze:
 - `{WORK_ROOT}/intake/*.md`
 - ignoruj `{WORK_ROOT}/intake/done/` a `{WORK_ROOT}/intake/rejected/`
 
-Pokud nejsou žádné pending intake items:
+**Symlink validation guard (P2 fix):** Reject symlinked intake files to prevent indirect manipulation and ensure auditability.
+```bash
+# Symlink guard (P2 fix): reject symlinked intake files
+for INTAKE_FILE in {WORK_ROOT}/intake/*.md; do
+  if [ -L “$INTAKE_FILE” ]; then
+    echo “WARN: skipping symlink: $INTAKE_FILE”
+    mv “$INTAKE_FILE” “{WORK_ROOT}/intake/rejected/” 2>/dev/null || true
+    continue
+  fi
+done
+```
+
+Pokud nejsou žádné pending intake items (bez symlinků):
 - vytvoř report `reports/intake-{date}.md` s „0 items processed”
 - DONE (vrať se orchestrátoru)
 
@@ -148,12 +171,25 @@ Pokud intake nemá YAML frontmatter:
 
 #### 3.2 Deduplikace
 
-Před vytvořením backlog itemu:
-- hledej existující backlog file se stejným nebo velmi podobným title (fuzzy)
-- pokud existuje:
+Před vytvořením backlog itemu proveď **deterministickou** dedup kontrolu:
+
+```bash
+# Deterministická dedup: normalizuj title → slug → hledej existující soubor
+NORMALIZED_TITLE=$(echo "{new_title}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+EXISTING=$(grep -rl "^title:.*${NORMALIZED_TITLE}" "{WORK_ROOT}/backlog/"*.md 2>/dev/null | head -1)
+if [ -n "$EXISTING" ]; then
+  echo "DEDUP: found existing backlog item: $EXISTING"
+fi
+```
+
+- pokud existuje shoda (normalizovaný title match):
   - přidej do existujícího backlog itemu sekci `## Intake references` s odkazem na intake file
   - intake přesun do `intake/done/` (důvod: merged/duplicate)
   - pokračuj dalším intake
+
+**Anti-patterns:**
+- ❌ Nepoužívej fuzzy/LLM matching pro dedup — výsledky nejsou reprodukovatelné
+- ❌ Nepřeskakuj dedup krok "protože to vypadá unikátně"
 
 #### 3.3 Vision alignment (povinné)
 
@@ -163,7 +199,18 @@ Z `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md`:
 - nastav `linked_vision_goal`:
   - pokud už je ve frontmatter a odpovídá pojmům z vize → ponech
   - pokud chybí → doplň (krátký string; ideálně přesný název pilíře/goal)
-  - pokud je zjevně mimo vizi → ponech prázdné a přidej do backlog itemu „Open questions: proč to děláme / patří to do vize?“
+  - pokud je zjevně mimo vizi → ponech prázdné a přidej do backlog itemu „Open questions: proč to děláme / patří to do vize?”
+
+**Stale vision reference guard (P2 fix):** Validate that vision goal references are still present in the current vision.md.
+```bash
+# Stale vision reference guard (P2 fix)
+if [ -n “${linked_vision_goal}” ]; then
+  if ! grep -qi “${linked_vision_goal}” “{WORK_ROOT}/vision.md” 2>/dev/null; then
+    echo “WARN: linked_vision_goal '${linked_vision_goal}' not found in current vision.md — may be stale”
+  fi
+fi
+```
+This check runs after vision goal assignment to detect references that may have become invalid due to vision.md updates.
 
 **Non-goals gate:** pokud intake jasně porušuje `Non-goals` z vize → NEVYTVÁŘEJ backlog item. Přesuň intake do `intake/rejected/` a doplň důvod (cituj non-goal).
 
@@ -212,9 +259,32 @@ Pravidlo:
 - pokud soubor už existuje → suffix `-2`, `-3`, ...
 
 Příklad:
-- „Add auth middleware“ → `task-add-auth-middleware`
+- „Add auth middleware” → `task-add-auth-middleware`
 
 #### 3.8 Vytvoř backlog item soubor
+
+Collision guard (P1 fix):
+```bash
+TARGET_FILE=”{WORK_ROOT}/backlog/{id}.md”
+if [ -f “$TARGET_FILE” ]; then
+  echo “WARN: backlog file $TARGET_FILE already exists — checking if duplicate”
+  EXISTING_TITLE=$(grep '^title:' “$TARGET_FILE” | head -1 | sed 's/title: *//')
+  if [ “$EXISTING_TITLE” != “{new_title}” ]; then
+    echo “COLLISION: different title, appending suffix”
+    # Append -N suffix until unique
+    N=2
+    while [ -f “{WORK_ROOT}/backlog/{id}-${N}.md” ]; do N=$((N+1)); done
+    id=”{id}-${N}”
+    TARGET_FILE=”{WORK_ROOT}/backlog/{id}.md”
+  else
+    echo “SKIP: duplicate intake for existing backlog item (dedup)”
+    # Move intake to done/ with reason: duplicate
+    continue
+  fi
+fi
+```
+
+Vytvoř backlog item soubor
 
 Vytvoř `{WORK_ROOT}/backlog/{id}.md` podle odpovídající šablony:
 - Epic → `{WORK_ROOT}/templates/epic.md`
@@ -242,6 +312,13 @@ Pouze pokud je intake úplně nerelevantní/spam:
 ### 4) Regeneruj backlog index
 
 Po zpracování všech intake items:
+
+> **OWNERSHIP:** Backlog index (`backlog.md`) regeneraci provádí VÝHRADNĚ `fabric.py backlog-index` (deterministický, idempotentní). Nikdy neregeneruj backlog.md ručně — vždy volej:
+> ```bash
+> python skills/fabric-init/tools/fabric.py backlog-index
+> ```
+> Toto zajišťuje atomicitu a konzistenci i když více skills volá regeneraci.
+
 1. Scan `{WORK_ROOT}/backlog/*.md` (mimo `done/`)
 2. Vytáhni frontmatter: id/title/type/status/tier/effort/prio
 3. Vygeneruj `{WORK_ROOT}/backlog.md` tabulku

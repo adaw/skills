@@ -133,7 +133,22 @@ Před vytvořením intake itemu:
 - zkontroluj backlog titles + intake pending titles (podobnost)
 - pokud existuje:
   - nevytvářej duplicitu
-  - do reportu napiš „deduped“
+  - do reportu napiš „deduped”
+
+**Dedup pseudokód (P2 work quality):**
+```python
+def dedup_items(items: list[Item]) -> list[Item]:
+    seen = set()
+    result = []
+    for item in items:
+        key = normalize(item.title)  # lowercase, strip special chars
+        if key not in seen:
+            seen.add(key)
+            result.append(item)
+        else:
+            log(f”DEDUP: skipping {item.id} (duplicate of {key})”)
+    return result
+```
 
 ### 5) Vytvoř intake items (top 3–8)
 

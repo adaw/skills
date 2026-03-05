@@ -80,6 +80,12 @@ fi
 TASK_ID="$SAFE_ID"
 ```
 
+**Test cases pro archive (P2 work quality):**
+Ověř po archivaci:
+- Archivovaný soubor existuje v cílové lokaci
+- Zdrojový soubor už neexistuje (move, ne copy)
+- Archive report obsahuje seznam všech přesunutých souborů
+
 ### 1) Najdi DONE backlog items v aktivním backlogu
 
 Pro každý `{WORK_ROOT}/backlog/{id}.md` (mimo done/):
@@ -99,6 +105,18 @@ Pro každý DONE item:
   - pokud jiné → ulož do `archive/quarantine/{id}-{YYYY-MM-DD}.md` a vytvoř intake item (konflikt)
 - jinak:
   - move (ne copy) do backlog/done
+
+**Move semantika pseudokód (P2 work quality):**
+```bash
+# Safe move: verify before delete
+cp "${SOURCE}" "${DEST}"
+if [ -f "${DEST}" ] && diff -q "${SOURCE}" "${DEST}" >/dev/null 2>&1; then
+  rm "${SOURCE}"
+  echo "MOVED: ${SOURCE} → ${DEST}"
+else
+  echo "ERROR: copy verification failed — source preserved"
+fi
+```
 
 ### 3) Snapshot do archive/backlog
 

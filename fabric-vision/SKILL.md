@@ -76,6 +76,13 @@ Vyhodnoť:
 - Je jasné **priority ordering** (must/should/could)? (ANO/NE)
 - Jsou definované **constraints**? (ANO/NE)
 
+**Quality gates pro vision (P2 work quality):**
+Vision.md validace (automatizovatelná):
+- Obsahuje sekci "Principles" s ≥3 principy
+- Obsahuje sekci "Goals" s ≥1 cílem
+- Obsahuje sekci "Non-goals" s ≥1 položkou
+- Žádný princip není duplicitní (normalize + compare)
+
 ### 3) Najdi ambiguitu a konflikty
 
 - konflikty mezi core vizí (`vision.md`) a sub-vizemi (`{VISIONS_ROOT}/*.md`)

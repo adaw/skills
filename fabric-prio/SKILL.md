@@ -7,11 +7,22 @@ description: "Recalculate and normalize priority (PRIO) across all active backlo
 
 ## Účel
 
-Z backlogu udělat **seřazenou exekuční frontu**.  
+Z backlogu udělat **seřazenou exekuční frontu**.
 Výsledek musí být strojově čitelný:
 - `prio:` je vyplněné ve všech aktivních backlog items,
 - `{WORK_ROOT}/backlog.md` je seřazený podle PRIO,
 - existuje report s vysvětlením.
+
+## OWNERSHIP — Backlog index
+
+**Odpovědnost:** `fabric-intake`, `fabric-prio` a `fabric-close` MUSÍ spolupracovat na údržbě centrálního backlog indexu (`{WORK_ROOT}/backlog.md`):
+- `fabric-intake` → regeneruje index po triážích
+- `fabric-prio` → regeneruje po prioritizaci (seřazuje podle PRIO, aktualizuje prio pole ve všech items)
+- `fabric-close` → regeneruje po uzavření sprintu (DONE items, carry-over logika)
+
+**Invariant:** Index je vždy aktuální s jednotlivými backlog soubory v `{WORK_ROOT}/backlog/{id}.md` (asynchronní update je povolený, ale konsistence se musí ověřit v auditu).
+
+---
 
 ## Protokol (povinné)
 

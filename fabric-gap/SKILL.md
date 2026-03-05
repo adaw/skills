@@ -96,15 +96,22 @@ E) Security/Operational gap
 ### 5) Vyber top 3–10 gaps a vytvoř intake items
 
 Pro každý top gap vytvoř intake item ({WORK_ROOT}/templates/intake.md):
-- `title`: akční („Dopsat testy pro X“, „Zavést rate limiting“, „Dokumentovat CLI usage“)
+- `title`: akční („Dopsat testy pro X”, „Zavést rate limiting”, „Dokumentovat CLI usage”)
 - `source: gap`
 - `initial_type`: Task/Bug/Chore/Spike
 - `raw_priority`: 8–10 pro critical, 5–7 pro medium
 
 Do těla:
 - Popis mezery
-- Evidence (soubor, modul, nebo „missing“)
+- Evidence (soubor, modul, nebo „missing”)
 - Doporučená akce + AC návrh
+
+**Testovatelnost gap detection (P2 work quality):**
+Každý identifikovaný gap musí mít:
+- Konkrétní evidence (soubor:řádek nebo chybějící artefakt)
+- Severity (CRITICAL/HIGH/MEDIUM/LOW)
+- Doporučená akce (ne jen “opravit” — konkrétně co a kde)
+- Ověřitelné kritérium (jak poznat že gap je uzavřen)
 
 ### 6) Gap report
 

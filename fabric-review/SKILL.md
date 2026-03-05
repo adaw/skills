@@ -97,9 +97,19 @@ if [ -z "$LATEST_TEST_REPORT" ]; then
   echo "STOP: no test report found for ${WIP_ITEM} — run fabric-test first"
   exit 1
 fi
-# Format validation: must have schema frontmatter
-if ! grep -q 'schema: fabric.report.v1' "$LATEST_TEST_REPORT" 2>/dev/null; then
-  echo "WARN: test report missing schema frontmatter — may be malformed"
+
+# --- Validate test report format (P1 fix) ---
+if [ -n "$LATEST_TEST_REPORT" ]; then
+  # Check required sections exist
+  if ! grep -q "^## Summary\|^## Souhrn" "$LATEST_TEST_REPORT"; then
+    echo "WARN: test report missing Summary section"
+  fi
+  if ! grep -q "^status:" "$LATEST_TEST_REPORT"; then
+    echo "WARN: test report missing status in frontmatter"
+  fi
+  if ! grep -q "^schema: fabric.report" "$LATEST_TEST_REPORT"; then
+    echo "WARN: test report missing schema declaration"
+  fi
 fi
 ```
 
@@ -251,8 +261,8 @@ Dimenze:
 
 #### R8 Compliance — konkrétně (povinné)
 
-1) Otevři `decisions/INDEX.md` a identifikuj **všechny `accepted` ADR** (ne jen ty zmíněné v analýze — analýza může opomenout závislost).
-2) Otevři `specs/INDEX.md` a identifikuj **`active` specs** a **`draft` specs** (draft specs nejsou enforced jako CRITICAL, ale porušení je HIGH finding).
+1) Otevři `{WORK_ROOT}/decisions/INDEX.md` a identifikuj **všechny `accepted` ADR** (ne jen ty zmíněné v analýze — analýza může opomenout závislost).
+2) Otevři `{WORK_ROOT}/specs/INDEX.md` a identifikuj **`active` specs** a **`draft` specs** (draft specs nejsou enforced jako CRITICAL, ale porušení je HIGH finding).
 3) Pokud diff zavádí změnu, která **odporuje accepted ADR** nebo **porušuje active spec**:
    - zapiš finding severity **CRITICAL**
    - v reportu cituj konkrétní ADR/SPEC + konkrétní změnu v diffu
@@ -268,16 +278,17 @@ Dimenze:
    # Pokud soubor matchuje contract_modules některého spec → ověř spec compliance
    ```
 
-   **Mapování (source of truth: `config.md` GOVERNANCE registr):**
-   - `recall/injection.py`, `recall/pipeline.py` → D0004 (injection-contract) + LLMEM_INJECTION_FORMAT_V1 (active): preamble warning musí zůstat, XML struktura musí odpovídat spec, CDATA wrapping zachován
-   - `storage/backends/` → LLMEM_QDRANT_SCHEMA_V1 (draft): collection schema, vector params, payload fields
-   - `storage/log_jsonl.py` → D0003 (event-sourcing-and-rebuild): JSONL log je immutable (append-only), rebuild musí být možný z logu
-   - `triage/heuristics.py`, `triage/patterns.py` → D0001 (secrets-policy) + LLMEM_TRIAGE_HEURISTICS_V1 (draft): masking rules, PII hashing
-   - `models.py` → D0002 (ids-and-idempotency) + LLMEM_DATA_MODEL_V1 (draft): UUIDv7 z content_hash, idempotency_key musí zůstat
-   - `api/` → LLMEM_API_V1 (draft): endpoint paths, request/response schema
-   - `recall/scoring.py` → LLMEM_RECALL_PIPELINE_V1 (draft): scoring formula, budget algorithm
+   **Mapování (source of truth: `{WORK_ROOT}/config.md` GOVERNANCE registr — P2 fix #24):**
+   Use variables `{WORK_ROOT}` and `{CODE_ROOT}` instead of hardcoded paths. The snapshot below is for reference only; always load the authoritative registry from config.md:
+   - `{CODE_ROOT}/recall/injection.py`, `{CODE_ROOT}/recall/pipeline.py` → D0004 (injection-contract) + LLMEM_INJECTION_FORMAT_V1 (active): preamble warning musí zůstat, XML struktura musí odpovídat spec, CDATA wrapping zachován
+   - `{CODE_ROOT}/storage/backends/` → LLMEM_QDRANT_SCHEMA_V1 (draft): collection schema, vector params, payload fields
+   - `{CODE_ROOT}/storage/log_jsonl.py` → D0003 (event-sourcing-and-rebuild): JSONL log je immutable (append-only), rebuild musí být možný z logu
+   - `{CODE_ROOT}/triage/heuristics.py`, `{CODE_ROOT}/triage/patterns.py` → D0001 (secrets-policy) + LLMEM_TRIAGE_HEURISTICS_V1 (draft): masking rules, PII hashing
+   - `{CODE_ROOT}/models.py` → D0002 (ids-and-idempotency) + LLMEM_DATA_MODEL_V1 (draft): UUIDv7 z content_hash, idempotency_key musí zůstat
+   - `{CODE_ROOT}/api/` → LLMEM_API_V1 (draft): endpoint paths, request/response schema
+   - `{CODE_ROOT}/recall/scoring.py` → LLMEM_RECALL_PIPELINE_V1 (draft): scoring formula, budget algorithm
 
-   > **Kanonický zdroj:** `config.md` GOVERNANCE registr je JEDINÝ source of truth. Tento seznam je odvozený snapshot pro rychlou referenci. Při review POVINNĚ načti aktuální registr z config.md a automaticky ověř drift:
+   > **Kanonický zdroj:** `{WORK_ROOT}/config.md` GOVERNANCE registr je JEDINÝ source of truth. Tento seznam je odvozený snapshot pro rychlou referenci. Při review POVINNĚ načti aktuální registr z config.md a automaticky ověř drift:
    > ```bash
    > # Automatický governance drift check (POVINNÉ na začátku R8)
    > # Primární: deterministický tool

@@ -42,6 +42,31 @@ python skills/fabric-init/tools/fabric.py bootstrap --create-vision-stub --out-j
 python skills/fabric-init/tools/validate_fabric.py --workspace
 ```
 
+2.05) Enforc vision.md content (P1 gate — warn-only):
+
+```bash
+# --- Vision.md content enforcement (P1 fix) ---
+VISION_FILE="{WORK_ROOT}/vision.md"
+if [ -f "$VISION_FILE" ]; then
+  VISION_LINES=$(wc -l < "$VISION_FILE")
+  if [ "$VISION_LINES" -lt 10 ]; then
+    echo "WARN: vision.md exists but appears to be a stub ($VISION_LINES lines)"
+    echo "ACTION: Fill in vision.md with project principles, goals, and non-goals"
+    echo "IMPACT: fabric-architect and fabric-intake depend on vision.md content"
+  fi
+  # Principle count validation (fabric-architect expects ≥3 principles)
+  PRINCIPLE_COUNT=$(grep -ciE '^\s*[-*]\s*(princip|principle|zásada)|^#+.*princip' "$VISION_FILE" 2>/dev/null || echo 0)
+  if [ "$PRINCIPLE_COUNT" -lt 3 ]; then
+    echo "WARN: vision.md has $PRINCIPLE_COUNT principles (fabric-architect expects ≥3)"
+    echo "ACTION: Add project principles as bullet points (e.g., '- Principle: Everything is Async')"
+  fi
+else
+  echo "WARN: vision.md not found — bootstrap should have created a stub"
+fi
+```
+
+> **Note:** This is a WARN gate, not a STOP. Init completes, but the user must fill in `vision.md` before downstream skills (`fabric-architect`, `fabric-intake`) can run effectively.
+
 2.1) Vygeneruj governance indexy (deterministicky):
 
 ```bash

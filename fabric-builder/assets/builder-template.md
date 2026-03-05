@@ -797,3 +797,56 @@ python skills/fabric-init/tools/fabric.py state-set \
 python skills/fabric-init/tools/fabric.py state-set \
   --field wip_branch --value "null"
 ```
+
+## C.11 Handoff Validation Pattern (shared precondition)
+
+Použij tento pattern v JAKÉMKOLI skillu, který čte výstup z předchozího skillu. Validuje, že upstream artefakt existuje a má správnou strukturu.
+
+```bash
+# Validate upstream artifact exists and has required schema
+# Use in ANY skill that reads from a previous skill's output
+validate_handoff() {
+  local FILE="$1"
+  local REQUIRED_SCHEMA="$2"
+  local REQUIRED_SECTIONS="$3"  # comma-separated
+
+  if [ ! -f "$FILE" ]; then
+    echo "STOP: handoff artifact missing: $FILE"
+    return 1
+  fi
+
+  if [ -n "$REQUIRED_SCHEMA" ]; then
+    if ! grep -q "^schema: $REQUIRED_SCHEMA" "$FILE"; then
+      echo "WARN: $FILE missing schema: $REQUIRED_SCHEMA"
+    fi
+  fi
+
+  IFS=',' read -ra SECTIONS <<< "$REQUIRED_SECTIONS"
+  for SECTION in "${SECTIONS[@]}"; do
+    if ! grep -q "^## $SECTION" "$FILE"; then
+      echo "WARN: $FILE missing section: $SECTION"
+    fi
+  done
+  return 0
+}
+
+# Usage examples:
+# validate_handoff "$ANALYSIS_FILE" "fabric.report.v1" "Constraints,Plan,Tests"
+# validate_handoff "$TEST_REPORT" "fabric.report.v1" "Summary,Evidence"
+# validate_handoff "$REVIEW_REPORT" "fabric.report.v1" "Verdict,Findings"
+
+# Typické precondition pattern:
+# 1. Načti cestu k upstream reportu
+# 2. Zavolej validate_handoff s požadovaným schematem
+# 3. Pokud selže → STOP s jasnou zprávou jaký skill to má vytvořit
+ANALYSIS_FILE="{ANALYSES_ROOT}/${TASK_ID}-analysis.md"
+if ! validate_handoff "$ANALYSIS_FILE" "fabric.report.v1" "Constraints,Plan"; then
+  echo "STOP: analysis artifact not ready — run fabric-analyze first"
+  exit 1
+fi
+```
+
+**Výhody:**
+- Fail-fast na chybějícím upstream artefaktu (ne na vágní chybě později)
+- Explicitní seznam vyžadovaných sekcí (dokumentace kontraktu)
+- Reusable vzor (eliminuje copy-paste v preconditions)

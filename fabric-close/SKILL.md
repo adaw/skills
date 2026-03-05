@@ -12,6 +12,17 @@ description: "Close the current sprint: merge approved task branches into main (
 - aktualizovat backlog items (`status: DONE`, `merge_commit`)
 - vytvořit sprint close report
 
+## OWNERSHIP — Backlog index
+
+**Odpovědnost:** `fabric-intake`, `fabric-prio` a `fabric-close` MUSÍ spolupracovat na údržbě centrálního backlog indexu (`{WORK_ROOT}/backlog.md`):
+- `fabric-intake` → regeneruje index po triážích
+- `fabric-prio` → regeneruje po prioritizaci
+- `fabric-close` → regeneruje po uzavření sprintu (DONE items, carry-over logika)
+
+**Invariant:** Index je vždy aktuální s jednotlivými backlog soubory v `{WORK_ROOT}/backlog/{id}.md` (asynchronní update je povolený, ale konsistence se musí ověřit v auditu).
+
+---
+
 ## Protokol (povinné)
 
 Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
@@ -81,6 +92,19 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 - sprint plán musí existovat a mít `## Task Queue`
 - pro každý task určený k merge: review report musí existovat na disku (temporal: review → close)
 
+### Read reviews index for governance (P2 fix #37)
+
+```bash
+# Read reviews index for governance (P2 fix)
+if [ -f "{WORK_ROOT}/reviews/INDEX.md" ]; then
+  echo "Found reviews index — checking for REWORK verdicts"
+  REWORK_COUNT=$(grep -c "REWORK" "{WORK_ROOT}/reviews/INDEX.md" 2>/dev/null || echo 0)
+  if [ "$REWORK_COUNT" -gt 0 ]; then
+    echo "WARN: $REWORK_COUNT tasks have REWORK verdict — verify before closing"
+  fi
+fi
+```
+
 Pokud `QUALITY.mode` je `strict`:
 - `COMMANDS.lint` a `COMMANDS.format_check` NESMÍ být prázdné (`""`).
 - Pokud jsou → vytvoř `intake/close-strict-mode-missing-lint-or-format.md` a FAIL.
@@ -106,6 +130,15 @@ REVIEW_REPORT=$(grep 'review_report:' "{WORK_ROOT}/backlog/${TASK_ID}.md" | awk 
 if [ -z "$REVIEW_REPORT" ] || [ ! -f "{WORK_ROOT}/${REVIEW_REPORT}" ]; then
   echo "SKIP: review report missing for $TASK_ID — carry-over"
   continue
+fi
+
+# 2a. Review verdict schema validation (P2 fix #26)
+LATEST_REVIEW=$(ls -t {WORK_ROOT}/reports/review-*.md 2>/dev/null | head -1)
+if [ -n "$LATEST_REVIEW" ]; then
+  VERDICT=$(grep '^verdict:' "$LATEST_REVIEW" | awk '{print $2}')
+  if ! echo "$VERDICT" | grep -qE '^(PASS|FAIL|REWORK)$'; then
+    echo "WARN: review verdict '$VERDICT' is not valid (expected PASS|FAIL|REWORK)"
+  fi
 fi
 
 # 3. branch musí existovat
@@ -383,6 +416,13 @@ Pro každý MERGEABLE task v pořadí:
 
 8. Pokud gates PASS:
    - získej commit SHA: `SHA=$(git rev-parse HEAD)`
+   - **merge_commit enforcement (P2 fix #27):**
+     ```bash
+     MERGE_COMMIT=$(git log --oneline -1 --format=%H)
+     if [ -z "$MERGE_COMMIT" ]; then
+       echo "WARN: merge_commit is empty — close report will be incomplete"
+     fi
+     ```
    - aktualizuj backlog item:
      - `merge_commit: {SHA}`
      - `status: DONE`
@@ -393,6 +433,7 @@ Pro každý MERGEABLE task v pořadí:
      python skills/fabric-init/tools/fabric.py backlog-set --id "{id}" --fields-json \
        '{"merge_commit": "'"$SHA"'", "status": "DONE", "updated": "'"$(date +%Y-%m-%d)"'", "branch": null}'
      ```
+     > Ensure the backlog update section explicitly sets `merge_commit:` — this guard above confirms it is not empty before update.
    - **smaž feature branch** (povinné — zabraňuje hromadění stale branches):
      ```bash
      git branch -d "${branch}" 2>/dev/null || true
@@ -411,6 +452,8 @@ Pro každý MERGEABLE task v pořadí:
 
 Deterministicky:
 ```bash
+# OWNERSHIP: backlog.md regeneraci provádí VÝHRADNĚ fabric.py backlog-index
+# Nikdy neregeneruj backlog.md ručně — vždy volej tento příkaz.
 python skills/fabric-init/tools/fabric.py backlog-index
 ```
 

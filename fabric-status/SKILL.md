@@ -72,6 +72,8 @@ Reportuj:
 
 > Nejde o perfektní LOC, jde o trend.
 
+**MINIMUM:** tabulka s: Extension, Count (files), Approx LOC
+
 ### 2) Test health (objektivní)
 
 Z configu načti:
@@ -89,6 +91,8 @@ Jinak spusť:
 Reportuj:
 - PASS/FAIL
 - (pokud fail) 1–3 nejpravděpodobnější root causes + next action
+
+**MINIMUM:** Status: {PASS|FAIL|UNKNOWN|SKIPPED}, Evidence (pass/fail count), Exit code
 
 ### 3) Lint/format health
 
@@ -152,14 +156,69 @@ Pokud existují poslední 3 status reporty:
 
 `{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md` (vytvoř jako kopii `{WORK_ROOT}/templates/status-report.md`):
 
-- Health score 0–100 (heuristicky)
-- Key signals:
+**MINIMUM obsah:**
+- **Health score:** 0–100 (heuristicky)
+- **Key signals:** tabulka se sloupci Status, Value, Assessment
   - Tests: PASS/FAIL/UNKNOWN
   - Lint/Format: PASS/FAIL/UNKNOWN
   - Backlog: READY count, BLOCKED count, WIP breach?
   - Docs: OK/STALE/UNKNOWN
-- Risks radar (top 5)
-- Suggested next actions (max 5)
+  - Git: working-tree-clean (YES/NO), stale-branches (count)
+- **Risks radar:** top 3–5 rizik (specifika, ne generické)
+- **Suggested next actions:** max 5 (konkrétně, s prioritou)
+
+**Šablona:**
+```markdown
+---
+schema: fabric.report.v1
+kind: status
+run_id: "{run_id}"
+created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
+status: OK
+health_score: {0-100}
+---
+
+# status — Report {YYYY-MM-DD}
+
+## Health snapshot
+Health score: **{N}/100** ({healthy|at-risk|critical})
+
+## Key signals
+| Signal | Status | Value | Assessment |
+|--------|--------|-------|------------|
+| Tests | {PASS/FAIL/UNKNOWN} | {count or —} | {brief} |
+| Lint | {PASS/FAIL/UNKNOWN} | {count or —} | {brief} |
+| Format | {PASS/FAIL/UNKNOWN} | {count or —} | {brief} |
+| Backlog flow | {OK/RISK} | READY={N}, BLOCKED={N} | {brief} |
+| Docs | {OK/STALE/UNKNOWN} | {modified: N days ago or —} | {brief} |
+| Git | {CLEAN/DIRTY} | dirty={N}, stale-branches={N} | {brief} |
+
+## Codebase snapshot
+| Metric | Value |
+|--------|-------|
+| Top language | {ext: count files, LOC} |
+| Total code files | {N} |
+| Total LOC | ~{N} |
+
+## Risks (top 3)
+1. {Risk}: {Specifika + impact} → {next action}
+2. {Risk}: {Specifika + impact} → {next action}
+3. {Risk}: {Specifika + impact} → {next action}
+
+## Suggested next actions (priority)
+1. {Konkrétní akce + reason}
+2. {Konkrétní akce + reason}
+3. {Konkrétní akce + reason}
+
+## Trend (last 3 reports)
+[Tabulka: Date, Health score, Key delta]
+```
+
+**Anti-patterns (zakázáno):**
+- Nepiš „build health" bez ověření COMMANDS.test
+- Netvrdíš „dobrý stav" pokud tests FAIL
+- Netvrdíš „žádná rizika" pokud BLOCKED > READY
+- Nevynechávej konkrétní čísla (vždy: {N} files, {N} tests passed, atd.)
 
 ---
 
@@ -176,7 +235,19 @@ Start 100:
 
 ## Self-check
 
-- report existuje v `{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md`
-- report obsahuje: Health score, Key signals (Tests/Lint/Format/Backlog/Docs), Risks radar
-- každý signal má explicitní hodnotu: PASS / FAIL / UNKNOWN / SKIPPED
-- pokud COMMANDS.lint nebo format_check je TBD → intake item existuje
+### Existence checks
+- [ ] Report existuje: `{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md`
+- [ ] Protocol log obsahuje START i END záznam
+
+### Quality checks
+- [ ] Report obsahuje povinné sekce: Health snapshot, Key signals, Codebase snapshot, Risks, Suggested next actions
+- [ ] Health score je číselný (0–100)
+- [ ] Všechny key signals mají explicitní hodnotu: PASS / FAIL / UNKNOWN / SKIPPED
+- [ ] Risks jsou specifické (ne generické): jméno rizika + impact + next action
+- [ ] Suggested actions jsou konkrétní (ne vágní): není „improve tests", je „run test coverage; target ≥80%"
+- [ ] Tabulky mají hodnoty (ne „—" když je data dostupná)
+
+### Invarianty
+- [ ] Pokud `COMMANDS.test` je `TBD` → intake item „fabric-status-missing-test-command" existuje
+- [ ] Pokud `COMMANDS.lint` je `TBD` → intake item „fabric-status-missing-lint-command" existuje
+- [ ] Health score logika odpovídá Scoring sekcí (start 100, -40 pokud tests FAIL, atd.)

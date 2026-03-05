@@ -163,6 +163,12 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/reports/implement-p
      - nebo podle `GIT.feature_branch_pattern` (pokud je definováno)
    - zapiš `branch:` do backlog itemu
 
+**Unicode normalization (P2 fix): Sanitize branch name before git checkout:**
+```bash
+# Unicode normalization (P2 fix): sanitize branch name
+branch_name=$(echo "${branch_name}" | LC_ALL=C sed 's/[^a-zA-Z0-9._/-]/-/g' | sed 's/--*/-/g')
+```
+
 Git kroky:
 
 ```bash
@@ -200,6 +206,17 @@ fi
 if git ls-remote --heads origin "${branch_name}" | grep -q "${branch_name}"; then
   git pull --ff-only origin "${branch_name}" || echo "WARN: remote diverged, using local"
 fi
+
+# Post-checkout validation enhancement (P2 fix): verify working tree is on correct branch and clean
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$CURRENT_BRANCH" != "${branch_name}" ]; then
+  echo "ERROR: expected branch ${branch_name} but on $CURRENT_BRANCH"
+  exit 1
+fi
+if [ -n "$(git status --porcelain)" ]; then
+  echo "WARN: working tree not clean after checkout"
+  git stash --message "auto-stash before implement ${TASK_ID}" || true
+fi
 ```
 
 Pokud working tree není čistý → FAIL (nejdřív vyřeš).
@@ -208,6 +225,17 @@ Pokud working tree není čistý → FAIL (nejdřív vyřeš).
 
 - Přečti `{WORK_ROOT}/backlog/{id}.md` (AC + dotčené soubory)
 - Pokud existuje `{ANALYSES_ROOT}/{id}-analysis.md`, použij ho jako plán.
+
+**Validace analýzy (pokud existuje):**
+Ověř, že analysis obsahuje povinné sekce:
+- `## Constraints` (musí existovat, i kdyby byla `None`)
+- `## Plan` (musí mít alespoň 2 kroky)
+- `## Tests` (musí mít alespoň 1 test)
+
+Pokud některá sekce chybí:
+- zaloguj WARNING: "analysis {id} missing section: {section}"
+- pokračuj, ale v implement reportu poznamenej "incomplete analysis"
+- vytvoř intake item `intake/implement-incomplete-analysis-{id}.md` (jednorázově)
 
 Udělej baseline (s timeoutem):
 ```bash
@@ -238,9 +266,52 @@ Pokud baseline selže (exit ≠ 0, včetně timeout):
 
 ### 4) Implementuj minimální změnu
 
-- uprav jen nezbytné soubory v `{CODE_ROOT}/`
-- přidej/aktualizuj testy v `{TEST_ROOT}/` tak, aby AC byly verifikovatelné
-- pokud se mění veřejné chování, připrav změnu docs (docs step to může dokončit)
+**Co:** Napsat produkční kód + testy tak, aby AC byly splněny a quality gates prošly.
+
+**Jak (detailní instrukce):**
+
+1. **Uprav jen nezbytné soubory** v `{CODE_ROOT}/` — malý diff, fokusovaná změna.
+2. **Testy jsou POVINNÉ** — žádný kód bez testů. Minimální test set:
+   - `test_{id}_happy` — základní funkčnost (happy path)
+   - `test_{id}_edge` — hraniční případ (empty input, max values, unicode, None)
+   - `test_{id}_error` — chybový stav (invalid input → correct exception/error response)
+3. Pokud se mění veřejné chování, připrav změnu docs (docs step to může dokončit).
+
+**Minimum akceptovatelného výstupu:**
+- ≥3 testy (happy/edge/error) pro každou novou/změněnou komponentu
+- Coverage nových řádků ≥60% (ověř: `pytest --cov={modul} --cov-report=term-missing`)
+- Žádný `pass`, `# TODO`, `...` nebo stub v DONE kódu
+- Všechny nové funkce/metody mají type hints a docstring (min 1 věta)
+
+**Anti-patterns (zakázáno):**
+- ❌ Commit bez testů ("testy dodám později" = nikdy)
+- ❌ `pass` nebo `raise NotImplementedError` v produkčním kódu
+- ❌ Stub testy: `def test_something(): assert True` (musí testovat reálné chování)
+- ❌ God function >50 řádků (rozděl na menší funkce)
+- ❌ Hardcoded magic numbers (použij konstanty nebo config)
+- ❌ `# type: ignore` bez komentáře proč
+- ❌ Kopírování kódu místo abstrakce (DRY)
+
+**Šablona testu:**
+```python
+class Test{ComponentName}:
+    """Testy pro {component} — {task_id}."""
+
+    def test_{id}_happy(self):
+        """Happy path: {co testuje}."""
+        result = component.method(valid_input)
+        assert result == expected
+
+    def test_{id}_edge(self):
+        """Edge case: {jaký hraniční případ}."""
+        result = component.method(edge_input)
+        assert result == expected_edge
+
+    def test_{id}_error(self):
+        """Error: {jaký chybový stav}."""
+        with pytest.raises(ExpectedException):
+            component.method(invalid_input)
+```
 
 Během práce nastav backlog status:
 - `status: IN_PROGRESS`
