@@ -31,18 +31,19 @@ Volitelně může uživatel přidat parametry:
 - `Načti a proveď skills/fabric-loop/SKILL.md loop=auto goal=mvp audit=1`
 
 ### Semantika
+Chování je vždy stejné: pokud je stav `idle`, provede se idle tick (detekce práce). Pokud práce existuje, sprint začne. Pokud ne, skonči. Rozdíl mezi `loop=<N>` a `loop=auto` je **jen v MAX_LOOPS**.
+
 - `loop=<N>` = maximální počet orchestrátor **loopů** v rámci tohoto spuštění.
   - 1 loop = opakuj orchestrátor ticků, dokud nenastane **loop boundary**:
-    - `COMPLETED_STEP == "archive"` (sprint uzavřen), nebo
-    - `state.step == "idle"` (není práce), nebo
+    - `COMPLETED_STEP == “archive”` (sprint uzavřen), nebo
+    - `state.step == “idle”` a idle tick potvrdí, že není práce, nebo
     - STOP/CRITICAL (např. `state.error`, kontrakt breach).
-  - Default: `loop=1`.
+  - Default: `loop=1` (= 1 sprint).
   - Limit: `N` omez na rozsah **1–50** (cokoliv mimo clampni na nejbližší mez).
 
-- `loop=auto` = „běž, dokud je co dělat“:
-  - opakuj loopy, dokud **existuje práce** (pending intake / backlog práce / WIP), a dokud nenastane STOP/CRITICAL,
-  - jakmile dojde práce, nastav `state.step=idle` a skonči,
-  - vždy s hard-capem `AUTO_MAX_LOOPS` (default `100`, lze přepsat v `config.md` jako `RUN.auto_max_loops`).
+- `loop=auto` = „běž, dokud je co dělat”:
+  - totéž co `loop=N`, ale `MAX_LOOPS` je high-cap (default `100`, lze přepsat v `config.md` jako `RUN.auto_max_loops`).
+  - jakmile dojde práce a idle tick potvrdí `idle`, skonči (OK).
 
 - `goal=<...>` = **done-condition / scope** pro `loop=auto` i pro work‑status.
   - Goal říká, které backlog items se počítají jako „zbývající práce“ (tier filter).
@@ -58,15 +59,15 @@ Volitelně může uživatel přidat parametry:
 ### Parsování
 V uživatelském triggeru (promptu) hledej tyto tokeny (case-insensitive). Pokud existuje více výskytů, vezmi **první**:
 
-- `loop=<...>` → řídí počet loopů a `RUN_MODE`
+- `loop=<...>` → řídí počet loopů (`MAX_LOOPS`)
 - `goal=<...>` → řídí goal/tier scope (viz výše)
 - `audit=<...>` → 0/1 (nebo jen `audit` jako synonymum pro `audit=1`)
 
 
-- pokud je hodnota `auto` → `RUN_MODE=auto`
-- jinak parsuj jako integer → `RUN_MODE=fixed`, `MAX_LOOPS=<N>`
+- pokud je hodnota `auto` → `MAX_LOOPS = RUN.auto_max_loops` (default `100`)
+- jinak parsuj jako integer → `MAX_LOOPS=<N>` (clamp 1–50)
 
-**Stop dřív než vyčerpáš limit, pokud nastane STOP/CRITICAL** (např. `state.error`, kontrakt breach, missing config/commands). V režimu `loop=auto` skonči také tehdy, když se systém dostane do `state.step=idle`.
+**Stop dřív než vyčerpáš limit, pokud nastane STOP/CRITICAL** (např. `state.error`, kontrakt breach, missing config/commands). Skonči také, když se systém dostane do `state.step=idle` a idle tick potvrdí, že není práce.
 
 #### Explicitní parsovací kód (povinný)
 
@@ -77,18 +78,17 @@ USER_PROMPT="$1"
 # LOOP parameter
 LOOP_RAW=$(echo "$USER_PROMPT" | grep -oiE 'loop=[a-z0-9]+' | head -1 | cut -d= -f2)
 if [ -z "$LOOP_RAW" ]; then
-  MAX_LOOPS=1; RUN_MODE="fixed"
+  MAX_LOOPS=1
 elif echo "$LOOP_RAW" | grep -qiE '^auto$'; then
-  MAX_LOOPS=100; RUN_MODE="auto"  # hard cap from config RUN.auto_max_loops
+  MAX_LOOPS=100  # hard cap from config RUN.auto_max_loops
 elif echo "$LOOP_RAW" | grep -qE '^[0-9]+$'; then
   MAX_LOOPS=$LOOP_RAW
   # Clamp to [1, 50]
   [ "$MAX_LOOPS" -lt 1 ] && MAX_LOOPS=1
   [ "$MAX_LOOPS" -gt 50 ] && MAX_LOOPS=50
-  RUN_MODE="fixed"
 else
   echo "WARN: invalid loop value '$LOOP_RAW', using default loop=1"
-  MAX_LOOPS=1; RUN_MODE="fixed"
+  MAX_LOOPS=1
 fi
 
 # GOAL parameter
@@ -122,7 +122,7 @@ fi
 `idle` je **sentinel step** znamenající: „momentálně není žádná akční práce“.  
 Nejde o lifecycle krok; `idle` používá pouze `fabric-loop` jako **stop marker** a jako „sleep state“.
 
-### Deterministická detekce práce (povinné pro auto)
+### Deterministická detekce práce (povinné)
 K detekci práce nepoužívej heuristiky ani ruční procházení stovek souborů.
 
 Preferovaná cesta je **`tick` bez `--completed`**, který udělá work‑status + patch stavu deterministicky:
@@ -144,7 +144,7 @@ Výstup (JSON) obsahuje `status`:
 - `none` = nic k práci (žádný intake, žádná backlog práce)
 
 ### Chování při `idle`
-Když `state.step == "idle"` na začátku spuštění v `loop=auto`:
+Když `state.step == “idle”` na začátku ticku (platí pro **jakýkoliv** `loop=` režim):
 
 1) zavolej `tick` bez `--completed`:
 
@@ -153,19 +153,19 @@ python skills/fabric-init/tools/fabric.py tick --run-mode auto {GOAL_ARG}
 ```
 
 2) znovu načti `state.md`:
-   - pokud je stále `idle` → zaloguj “still idle” a skonči (OK)
+   - pokud je stále `idle` → zaloguj “no work, idle” a skonči (OK)
    - pokud `state.error != null` → STOP + ESCALATE
-   - jinak pokračuj v loopu.
+   - jinak pokračuj v loopu (nový sprint začíná).
 
-### Kdy nastavovat `idle` (auto)
-V režimu `loop=auto` je `idle` nastavený deterministicky přes `tick`:
+### Kdy nastavovat `idle`
+`idle` je nastavený deterministicky přes `tick`:
 - po `prio` (auto guard): pokud není práce → `idle`
 - po `archive` (auto guard): pokud není práce → `idle`
 
 
 
 ### Blocker escalation (deterministické)
-> **Preferovaně:** v `loop=auto` tohle typicky udělá deterministicky `python skills/fabric-init/tools/fabric.py tick --run-mode auto {GOAL_ARG}`.
+> **Preferovaně:** tohle typicky udělá deterministicky `python skills/fabric-init/tools/fabric.py tick --run-mode auto {GOAL_ARG}`.
 > Vygeneruje `reports/blocker-*.md` a nastaví `state.error = "BLOCKED_ONLY: see ..."`.
 > V takovém případě už jen **ESCALATE** s odkazem na report.
 
@@ -450,16 +450,18 @@ FÁZE 3: UZAVŘENÍ
 
 
 ## Okno běhu (loop window)
-Na začátku běhu urč `RUN_MODE`, `MAX_LOOPS` a `MAX_TICKS_PER_LOOP` podle parametru `loop=<...>`
+Na začátku běhu urč `MAX_LOOPS` a `MAX_TICKS_PER_LOOP` podle parametru `loop=<...>`
 
 Dále urč `GOAL` a připrav `GOAL_ARG`:
 - `GOAL` = token `goal=<...>` nebo `RUN.default_goal` (default `release`)
 - `GOAL_ARG` = prázdné, pokud `GOAL` je `release`/None; jinak `--goal "<GOAL>"`
  (viz sekce *Spuštění*) a podle `RUN.*` v `config.md`:
 
-- pokud parametr **není**: `RUN_MODE=fixed`, `MAX_LOOPS = RUN.max_loops_default` (fallback `RUN.max_ticks_default`, default `1`)
-- pokud `loop=<N>`: `RUN_MODE=fixed`, `MAX_LOOPS = clamp(N, RUN.max_loops_clamp)` (fallback `RUN.max_ticks_clamp`, default clamp `1–50`)
-- pokud `loop=auto`: `RUN_MODE=auto`, `MAX_LOOPS = RUN.auto_max_loops` (default `100`)
+- pokud parametr **není**: `MAX_LOOPS = 1`
+- pokud `loop=<N>`: `MAX_LOOPS = clamp(N, 1–50)`
+- pokud `loop=auto`: `MAX_LOOPS = RUN.auto_max_loops` (default `100`)
+
+Chování je vždy stejné: idle tick se provede, a pokud je práce, sprint začne. Rozdíl je **jen v MAX_LOOPS** — kolik sprintů maximálně proběhne.
 
 `MAX_TICKS_PER_LOOP` je safety cap proti nekonečným smyčkám, ale **nesmí být tak nízký, aby usekl reálnou práci**.
 
@@ -469,8 +471,8 @@ Použij tento deterministický výpočet (bez heuristik):
   - `3` je implement → test → review pro 1 task
   - rework iterace přidává další cyklus implement/test/review
 - `AUTO_MIN = 2 * EST` (**100% rezerva**)
-- pokud `RUN_MODE == auto`: `MAX_TICKS_PER_LOOP = clamp(max(BASE, AUTO_MIN), 25..1000)`
-- pokud `RUN_MODE == fixed`: `MAX_TICKS_PER_LOOP = clamp(BASE, 1..1000)`
+- pokud `loop=auto`: `MAX_TICKS_PER_LOOP = clamp(max(BASE, AUTO_MIN), 25..1000)`
+- pokud `loop=<N>`: `MAX_TICKS_PER_LOOP = clamp(BASE, 1..1000)`
 
 Pak proveď nejvýše `MAX_LOOPS` loopů. Každý loop obsahuje 1+ ticků (dispatchů) až do loop boundary.
 ### Tick algoritmus (deterministický)
@@ -478,18 +480,17 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
 
 1) Načti `{WORK_ROOT}/state.md`.
 2) Pokud `state.error != null` → spusť crash recovery (sekce níže) a **STOP**.
-3) Pokud `state.step == "idle"`:
-   - pokud `RUN_MODE != auto` → zaloguj “idle (fixed)” a **STOP (OK)**.
-   - pokud `RUN_MODE == auto` → proveď *idle tick* deterministicky (bez `--completed`):
+3) Pokud `state.step == “idle”`:
+   - proveď *idle tick* deterministicky (bez `--completed`):
 
      ```bash
      python skills/fabric-init/tools/fabric.py tick --run-mode auto {GOAL_ARG}
      ```
 
    - znovu načti `{WORK_ROOT}/state.md`:
-     - pokud je stále `idle` → zaloguj “still idle” a **STOP (OK)**
+     - pokud je stále `idle` → zaloguj “no work, idle” a **STOP (OK)**
      - pokud `state.error != null` → **STOP + ESCALATE**
-     - jinak pokračuj.
+     - jinak pokračuj (nový sprint začíná).
 4) Dispatchni skill pro aktuální `state.step` (podle tabulky „next step“ níže).
    - ulož si `COMPLETED_STEP = state.step` (budeš ho používat pro kontrakt + tick + run report)
 5) Ověř kontrakt výstupů deterministicky:
@@ -509,7 +510,7 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
 6) Deterministicky posuň stav jedním příkazem (gating + next step + patch state):
 
    ```bash
-   python skills/fabric-init/tools/fabric.py tick --completed "<COMPLETED_STEP>" --run-mode {RUN_MODE} {GOAL_ARG}
+   python skills/fabric-init/tools/fabric.py tick --completed "<COMPLETED_STEP>" --run-mode auto {GOAL_ARG}
    ```
 
    - `tick` řeší všechny guardy:
@@ -517,7 +518,7 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
      - po `review` čte poslední review report (vyžaduje `verdict: CLEAN|REWORK|REDESIGN` nebo `Verdict:`)
      - po `analyze` kontroluje Task Queue — pokud je prázdná (0 tasks) → next step = `docs` (přeskoč implement)
      - po `close` rozhodne mezi `implement` vs `docs` podle sprint plánu
-     - po `prio` a po `archive` v `RUN_MODE=auto` umí spadnout do `idle`
+     - po `prio` a po `archive` umí spadnout do `idle` (pokud není práce)
       - po `archive` incrementuje `state.sprint` a tím uzavírá loop
    - `tick` patchne `state.md` (`step/phase/last_completed/last_run/last_tick_at`).
    - pokud chybí důkazy nebo je kontrakt porušen → nastaví `state.error` a vrátí non‑zero → **STOP + ESCALATE**.
@@ -700,7 +701,7 @@ Pokud kdykoliv nastavíš `state.error` nebo vytvoříš CRITICAL intake (kontra
 
 > `phase` je pomocná (orientation/planning/implementation/closing), ale **step** je zdroj pravdy pro dispatch.
 >
-> **Clarifikace post-archive v auto mode:** Po `archive` tick() rozhodne deterministicky: (a) pokud existuje práce (pending intake / backlog) → `step=vision` (nový sprint cyklus pokračuje), (b) pokud není práce → `step=idle` (loop boundary, orchestrátor skončí OK). Nikdy není stav, kdy archive přejde na vision a loop neví, jestli má pokračovat — `tick --run-mode auto` to řeší v jednom atomickém kroku.
+> **Clarifikace post-archive:** Po `archive` tick() rozhodne deterministicky: (a) pokud existuje práce (pending intake / backlog) → `step=vision` (nový sprint cyklus pokračuje), (b) pokud není práce → `step=idle` (loop boundary, orchestrátor skončí OK). Nikdy není stav, kdy archive přejde na vision a loop neví, jestli má pokračovat — `tick --run-mode auto` to řeší v jednom atomickém kroku.
 
 **Poznámka (multi-task sprint / single-piece flow):** Fáze IMPLEMENTACE se opakuje **per task**. Po `review=CLEAN` jde orchestrátor na `close`, kde se task **merge-ne** (a WIP se resetuje). Teprve potom se vybere další READY task z `Task Queue`.
 
