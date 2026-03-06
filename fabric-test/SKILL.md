@@ -134,6 +134,18 @@ python skills/fabric-init/tools/fabric.py run test_e2e --tail 200
 
 > **Poznámka:** `gate-test` report vytvoří automaticky. Ty **musíš** doplnit interpretaci — prázdný Notes/Failures je skill violation.
 
+7. **LOC ratio tracking (POVINNÉ v reportu):**
+   ```bash
+   # Test-to-code LOC ratio
+   CODE_LOC=$(find {CODE_ROOT}/ -name '*.py' -not -path '*/test*' -not -name '__init__.py' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+   TEST_LOC=$(find {TEST_ROOT}/ -name '*.py' -not -name '__init__.py' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+   if [ "$CODE_LOC" -gt 0 ]; then
+     RATIO=$((TEST_LOC * 100 / CODE_LOC))
+     echo "Test/Code LOC ratio: ${RATIO}% ($TEST_LOC test / $CODE_LOC code)"
+   fi
+   ```
+   Zapiš do test reportu: `Test/Code LOC: {TEST_LOC}/{CODE_LOC} ({RATIO}%)`. Trend proxy pro test pokrytí.
+
 ---
 
 ## Report template

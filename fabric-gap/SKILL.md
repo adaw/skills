@@ -72,7 +72,39 @@ Pro každou capability:
 - **Tests signal:** existují testy pro klíčové chování?
 - **Docs signal:** je to popsáno v docs?
 
-Neřeš přesné coverage číslo; stačí kvalitativní „Yes/No/Unknown“ + evidence.
+Neřeš přesné coverage číslo; stačí kvalitativní „Yes/No/Unknown” + evidence.
+
+**Test execution pro reality check (POVINNÉ):**
+
+Nečti jen soubory — SPUSŤ testy, abys zjistil REÁLNÝ stav:
+
+```bash
+# Quick test run pro reality check (ne plný test suite — jen smoke)
+if [ -n “{COMMANDS.test}” ] && [ “{COMMANDS.test}” != “TBD” ]; then
+  echo “Running quick test for gap reality check...”
+  timeout 120 {COMMANDS.test} -x --tb=line -q 2>/dev/null | tail -5
+  GAP_TEST_EXIT=$?
+  if [ $GAP_TEST_EXIT -eq 0 ]; then
+    GAP_TEST_STATUS=”PASS”
+  elif [ $GAP_TEST_EXIT -eq 124 ]; then
+    GAP_TEST_STATUS=”TIMEOUT”
+  else
+    GAP_TEST_STATUS=”FAIL”
+    # Extrahuj failing test names pro gap mapping
+    FAILING_TESTS=$(timeout 120 {COMMANDS.test} --tb=no -q 2>/dev/null | grep FAILED | head -10)
+  fi
+  echo “Gap reality check: $GAP_TEST_STATUS”
+fi
+
+# Stub detection v kódu
+STUBS=$(grep -rn 'pass$\|raise NotImplementedError\|# TODO\|# FIXME' {CODE_ROOT}/ --include='*.py' 2>/dev/null | grep -v test | grep -v __pycache__)
+STUB_COUNT=$(echo “$STUBS” | grep -c '\S' || echo 0)
+if [ “$STUB_COUNT” -gt 0 ]; then
+  echo “Found $STUB_COUNT stubs/TODOs in code”
+fi
+```
+
+Zapiš test výsledek + stub count do gap reportu. Pokud testy FAILují → gap je REÁLNÝ (ne jen “soubor chybí”).
 
 ### 4) Identifikuj gap typy
 

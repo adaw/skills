@@ -79,7 +79,11 @@ status: "DRAFT"  # DRAFT | READY
 
 ## Tests
 - Baseline: {BASELINE_COMMANDS}
-- New tests: {NEW_TESTS}
+- Unit (≥3): {test_happy}, {test_edge}, {test_error}
+- Integration: {test_integration_endpoint} (pokud API/service change)
+- E2E: {test_e2e_scenario} (pokud user-facing feature)
+- Edge cases (≥2): {konkrétní scénáře}
+- Regression: {test_regression} (pokud bugfix)
 - Evidence artifacts: {WHAT_TO_SAVE_IN_REPORTS}
 
 ## Acceptance criteria mapping
@@ -146,11 +150,54 @@ Každý task musí mít:
 - `Description` (1–2 věty max)
 - `Estimate` (S/M/L; heuristika)
 
+**Effort sanity check (POVINNÉ):**
+Pokud analýza odhalí, že skutečný scope neodpovídá effort odhadu:
+```bash
+# Effort sanity: pokud task odhadnutý jako S ale dotýká se ≥5 souborů nebo ≥3 modulů → WARN
+TOUCHED_FILES=$(echo "{files_list}" | wc -w)
+if [ "$EFFORT" = "S" ] && [ "$TOUCHED_FILES" -ge 5 ]; then
+  echo "WARN: task $TASK_ID estimated S but touches $TOUCHED_FILES files — consider M or L"
+fi
+```
+Pokud effort mismatch: uprav odhad v Task Queue a backlog itemu + zapiš důvod do analýzy.
+
 **Anti-patterns (zakázáno):**
 - ❌ Vágní task popis ("implementuj feature X" — musí být konkrétní: jaké soubory, jaký endpoint, jaký model)
 - ❌ Task bez testovatelných AC (každý task musí mít alespoň 1 ověřitelné akceptační kritérium)
 - ❌ Estimate bez zdůvodnění (L protože "je to složité" — uveď proč: nový model + API + testy)
 - ❌ Epic/Story v Task Queue bez rozkladu na Tasks
+
+### 2.1) Procesní analýza per task (POVINNÉ)
+
+Pro KAŽDÝ task PŘED zápisem do analýzy proveď procesní rozbor:
+
+**A) Datový tok** — identifikuj jak data tečou systémem pro tento task:
+```
+Vstup → [Validace] → [Transformace] → [Persistence] → [Response]
+         ↓ error       ↓ error          ↓ error         ↓ error
+       400/422        500/log          retry/fail       500/partial
+```
+Zapiš do analýzy sekci `## Data Flow` s ASCII diagramem (nemusí být složitý — 3-5 kroků stačí).
+
+**B) Dotčené moduly a závislosti** — SYSTEMATICKY (ne "files likely touched"):
+```markdown
+### Dotčené moduly
+| Modul | Typ změny | Závislosti UP | Závislosti DOWN | Risk |
+|-------|-----------|--------------|-----------------|------|
+| {CODE_ROOT}/api/routes/capture.py | MODIFY | server.py (router) | services/capture.py | LOW |
+| {CODE_ROOT}/services/capture.py | MODIFY | — | triage/heuristics.py, storage/ | MEDIUM |
+```
+
+**C) Message/Entity lifecycle** (pokud task mění chování entity):
+```
+CREATED → VALIDATED → STORED → [RECALLED] → EXPIRED
+```
+Pokud task nemění lifecycle entity → napiš "N/A — task nemění entity lifecycle".
+
+**Anti-patterns:**
+- ❌ "Files likely touched: models.py, api/" — VÁGNÍ (musí být konkrétní modul + typ změny + závislosti)
+- ❌ Přeskočit datový tok protože "je to jednoduchý task" — i jednoduchý task má vstup→výstup
+- ✅ ASCII diagram VŽDY, i kdyby měl jen 3 boxy
 
 ### 3) Governance constraints per task
 
@@ -205,16 +252,37 @@ def new_feature(input: InputType) -> OutputType:
 | B | {přístup 2} | {výhody} | {nevýhody} | — |
 ```
 
-3. **Test strategie** — v sekci `## Tests → New tests` uveď minimálně 3 konkrétní testy:
-   - `test_{id}_happy` — co testuje
-   - `test_{id}_edge` — jaký hraniční případ
-   - `test_{id}_error` — jaký chybový stav
+3. **Test strategie (5 úrovní)** — v sekci `## Tests → New tests` uveď testy na VŠECH relevantních úrovních:
+
+   **Úroveň 1 — Unit testy (POVINNÉ, ≥3):**
+   - `test_{id}_happy` — základní funkčnost
+   - `test_{id}_edge` — hraniční případ (empty, None, max, unicode)
+   - `test_{id}_error` — chybový stav (invalid input → exception)
+
+   **Úroveň 2 — Integration testy (POVINNÉ pokud task mění API/service):**
+   - `test_{id}_integration_{endpoint}` — endpoint volání end-to-end (request→response)
+   - `test_{id}_integration_{service}` — service vrstva s reálnou závislostí (ne mock)
+
+   **Úroveň 3 — E2E testy (POVINNÉ pokud task přidává nový user-facing feature):**
+   - `test_{id}_e2e_{scenario}` — celý flow od vstupu po výstup
+
+   **Úroveň 4 — Edge case testy (POVINNÉ, ≥2):**
+   - Concurrent access, race conditions, timeout, network failure, malformed input
+   - Pro každý edge case: konkrétní scénář + expected behavior
+
+   **Úroveň 5 — Regression testy (POVINNÉ pokud task fixuje bug):**
+   - `test_{id}_regression_{bug_description}` — reprodukce původního bugu + ověření fixu
+
+   **MINIMUM:** Každá analýza MUSÍ mít ≥3 unit + relevantní integration/E2E/edge/regression.
+   **Anti-pattern:** ❌ "testy dodá implementátor" — analyzátor MUSÍ specifikovat CO testovat na KTERÉ úrovni.
 
 **Anti-patterns (zakázáno):**
 - ❌ Analýza bez pseudokódu ("implementuj dle specifikace" — LLM potřebuje konkrétní kroky)
 - ❌ Jediná alternativa ("jinak to nejde" — vždy existují ≥2 přístupy, byť jeden je horší)
 - ❌ Prázdná sekce Tests ("testy doplní implementátor" — analyzátor MUSÍ definovat co testovat)
 - ❌ Vágní rizika ("může to být složité" — konkrétní: "SQLite lock contention při concurrent writes")
+- ❌ Over-engineering ("abstrakce pro budoucí rozšiřitelnost" bez aktuálního use case — YAGNI/KISS)
+- ✅ Preferuj jednodušší řešení: pokud alternativa A je jednodušší a splňuje AC, zvol A i když B je "elegantnější"
 
 **DŮLEŽITÉ: Synchronizace statusu.**  Kdykoli změníš status tasku (DESIGN → READY nebo naopak), aktualizuj **všechna tři místa**:
 1. Per-task analýza (`{ANALYSES_ROOT}/{task_id}-analysis.md`, frontmatter `status:`)
@@ -222,6 +290,33 @@ def new_feature(input: InputType) -> OutputType:
 3. **Backlog item** (`backlog/{task_id}.md`, frontmatter `status:`)
 
 Pokud některé z těchto míst neaktualizuješ, `fabric-implement` uvidí nekonzistentní stav a task přeskočí.
+
+### 4.1) Cross-task analýza (POVINNÉ pro ≥3 tasks)
+
+Pokud sprint má ≥3 tasks, proveď cross-task analýzu PŘED finalizací:
+
+**A) Sdílené patterny:**
+- Používají ≥2 tasks stejný modul? → identifikuj POŘADÍ implementace (kdo jde první)
+- Zavádí ≥2 tasks nové modely? → ověř konzistenci naming/patterns
+
+**B) Závislosti a konflikty:**
+```markdown
+### Cross-task závislosti
+| Task A | Task B | Typ | Řešení |
+|--------|--------|-----|--------|
+| task-001 | task-003 | task-003 mění model, task-001 ho čte | task-003 MUSÍ jít PRVNÍ |
+| task-002 | task-004 | oba mění scoring.py | SEKVENČNÍ, task-002 nejdřív (menší scope) |
+```
+
+**C) Optimální pořadí:**
+Seřaď tasks podle: závislosti → risk (high-risk první, aby se chytily problémy dříve) → effort (menší první pro momentum).
+
+Zapiš do analyze reportu sekci `## Cross-task Analysis` (i pro <3 tasks — pak napiš "N/A — jen {N} tasks").
+
+**Anti-patterns:**
+- ❌ Analyzovat tasks izolovaně bez cross-task pohledu
+- ❌ Nechat pořadí v Task Queue náhodné (musí reflektovat závislosti)
+- ✅ Vždy identifikovat sdílené moduly a konflikty
 
 ### 5) Aktualizuj sprint plan deterministicky
 

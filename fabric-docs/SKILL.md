@@ -58,6 +58,40 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 **MINIMUM:** seznam ≥1 merged item(u) s ID, title, a dotčenými soubory
 
+### 1.1) Proaktivní code scanning (POVINNÉ)
+
+Místo čekání na close report, AKTIVNĚ skenuj kód a najdi co v docs chybí:
+
+```bash
+# Scan public API surface
+PUBLIC_CLASSES=$(grep -rn '^class ' {CODE_ROOT}/ --include='*.py' | grep -v test | grep -v __pycache__)
+PUBLIC_FUNCS=$(grep -rn '^def \|^async def ' {CODE_ROOT}/ --include='*.py' | grep -v test | grep -v '_\.' | grep -v __pycache__)
+
+# Scan docstring coverage
+TOTAL_PUBLIC=$(echo “$PUBLIC_CLASSES” | wc -l)
+WITH_DOCSTRING=0
+for FILE_LINE in $(grep -rn '^class \|^def \|^async def ' {CODE_ROOT}/ --include='*.py' | grep -v test | cut -d: -f1-2); do
+  FILE=$(echo “$FILE_LINE” | cut -d: -f1)
+  LINE=$(echo “$FILE_LINE” | cut -d: -f2)
+  NEXT_LINE=$((LINE + 1))
+  if sed -n “${NEXT_LINE}p” “$FILE” 2>/dev/null | grep -q '”””'; then
+    WITH_DOCSTRING=$((WITH_DOCSTRING + 1))
+  fi
+done
+DOC_COVERAGE=$((WITH_DOCSTRING * 100 / (TOTAL_PUBLIC + 1)))
+echo “Docstring coverage: ${DOC_COVERAGE}% ($WITH_DOCSTRING / $TOTAL_PUBLIC)”
+
+# Identifikuj nové/změněné signatury od posledního docs reportu
+LAST_DOCS_DATE=$(ls -t {WORK_ROOT}/reports/docs-*.md 2>/dev/null | head -1 | grep -oP '\d{4}-\d{2}-\d{2}')
+if [ -n “$LAST_DOCS_DATE” ]; then
+  # Soubory změněné od posledního docs reportu
+  CHANGED_SINCE=$(git log --since=”$LAST_DOCS_DATE” --name-only --pretty=format: -- '*.py' | sort -u | grep -v test)
+  echo “Files changed since last docs: $(echo “$CHANGED_SINCE” | wc -l)”
+fi
+```
+
+**Výstup:** Seznam undocumented classes/functions + changed files since last docs. Použij jako DOPLNĚK ke close reportu (ne náhradu).
+
 ### 2) Zjisti, co je „doc-worthy”
 
 Doc-worthy změny typicky:

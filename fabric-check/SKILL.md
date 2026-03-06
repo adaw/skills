@@ -237,6 +237,110 @@ Pokud by to bylo příliš drahé, zaznamenej to jako `skipped` s důvodem.
   ```
   Pokud failne → CRITICAL + intake item `intake/check-validator-failed.md`.
 
+### 7.1) Stale detection (backlog items + epics)
+
+```bash
+# Stale detection: items beze změny >30 dní
+TODAY_EPOCH=$(date +%s)
+for ITEM in {WORK_ROOT}/backlog/*.md; do
+  [ -f "$ITEM" ] || continue
+  UPDATED=$(grep '^updated:' "$ITEM" | awk '{print $2}')
+  if [ -n "$UPDATED" ]; then
+    ITEM_EPOCH=$(date -d "$UPDATED" +%s 2>/dev/null || echo 0)
+    DAYS_OLD=$(( (TODAY_EPOCH - ITEM_EPOCH) / 86400 ))
+    ITEM_TYPE=$(grep '^type:' "$ITEM" | awk '{print $2}')
+    ITEM_ID=$(basename "$ITEM" .md)
+    # Stale thresholds: Epic >60d, ostatní >30d
+    if [ "$ITEM_TYPE" = "Epic" ] && [ "$DAYS_OLD" -gt 60 ]; then
+      echo "WARN: stale Epic $ITEM_ID (${DAYS_OLD}d unchanged)"
+    elif [ "$ITEM_TYPE" != "Epic" ] && [ "$DAYS_OLD" -gt 30 ]; then
+      echo "WARN: stale item $ITEM_ID (${DAYS_OLD}d unchanged)"
+    fi
+  fi
+done
+```
+
+Stale items zapiš do audit reportu + vytvoř intake items pro top 5 nejstarších.
+
+### 7.2) Report freshness monitoring
+
+```bash
+# Report freshness: GAP ≤30d, PRIO ≤45d, CHECK ≤15d
+check_report_freshness() {
+  local PATTERN="$1"
+  local MAX_DAYS="$2"
+  local LABEL="$3"
+  LATEST=$(ls -t {WORK_ROOT}/reports/${PATTERN}*.md 2>/dev/null | head -1)
+  if [ -z "$LATEST" ]; then
+    echo "WARN: no $LABEL report found"
+  else
+    REPORT_DATE=$(grep '^created_at:\|^date:' "$LATEST" | head -1 | awk '{print $2}' | cut -c1-10)
+    if [ -n "$REPORT_DATE" ]; then
+      REPORT_EPOCH=$(date -d "$REPORT_DATE" +%s 2>/dev/null || echo 0)
+      DAYS_OLD=$(( (TODAY_EPOCH - REPORT_EPOCH) / 86400 ))
+      if [ "$DAYS_OLD" -gt "$MAX_DAYS" ]; then
+        echo "WARN: $LABEL report is ${DAYS_OLD}d old (max ${MAX_DAYS}d)"
+      fi
+    fi
+  fi
+}
+
+check_report_freshness "gap-" 30 "GAP"
+check_report_freshness "prio-" 45 "PRIO"
+check_report_freshness "check-" 15 "CHECK"
+check_report_freshness "vision-" 60 "VISION"
+```
+
+### 7.3) Spec completeness check (READY items)
+
+Pro READY items v backlogu ověř minimální kvalitu:
+```bash
+for ITEM in {WORK_ROOT}/backlog/*.md; do
+  STATUS=$(grep '^status:' "$ITEM" | awk '{print $2}')
+  [ "$STATUS" = "READY" ] || continue
+  ITEM_ID=$(basename "$ITEM" .md)
+  MISSING=""
+  # Musí mít ≥2 věty popisu (ne jen title)
+  BODY_LINES=$(sed -n '/^---$/,/^---$/!p' "$ITEM" | grep -c '\S')
+  [ "$BODY_LINES" -lt 3 ] && MISSING="${MISSING} popis(<3 řádky)"
+  # Musí mít effort (ne TBD)
+  EFFORT=$(grep '^effort:' "$ITEM" | awk '{print $2}')
+  [ "$EFFORT" = "TBD" ] || [ -z "$EFFORT" ] && MISSING="${MISSING} effort"
+  # Musí mít ≥1 AC
+  grep -q '\- \[.\]' "$ITEM" 2>/dev/null || MISSING="${MISSING} AC"
+  if [ -n "$MISSING" ]; then
+    echo "WARN: READY item $ITEM_ID missing:${MISSING}"
+  fi
+done
+```
+
+### 7.4) E2E endpoint coverage ratio
+
+```bash
+# Počet definovaných routes vs E2E testů
+if [ -d "{CODE_ROOT}/api/" ]; then
+  ROUTE_COUNT=$(grep -rn '@app\.\(get\|post\|put\|delete\)' {CODE_ROOT}/api/ 2>/dev/null | wc -l)
+  E2E_TEST_COUNT=$(grep -rn 'def test.*e2e\|def test.*integration\|def test.*api' {TEST_ROOT}/ 2>/dev/null | wc -l)
+  RATIO=0
+  if [ "$ROUTE_COUNT" -gt 0 ]; then
+    RATIO=$(( E2E_TEST_COUNT * 100 / ROUTE_COUNT ))
+  fi
+  echo "E2E coverage: $E2E_TEST_COUNT tests / $ROUTE_COUNT routes = ${RATIO}%"
+  if [ "$RATIO" -lt 50 ]; then
+    echo "WARN: E2E coverage ${RATIO}% < 50% target"
+  fi
+fi
+```
+
+### 7.5) Confidence scoring per check
+
+Pro každý finding v audit reportu přidej confidence level:
+- **HIGH (95%+):** Deterministický check (file existence, schema validation, enum match)
+- **MEDIUM (70-95%):** Heuristický check (stale detection — threshold může být neadekvátní, grep-based code search)
+- **LOW (<70%):** Best-effort check (doc coverage estimation, complexity heuristics)
+
+Formát v reportu: `| Finding | Severity | Confidence | Detail |`
+
 ### 8) Vygeneruj audit report
 
 Vytvoř `{WORK_ROOT}/reports/check-{YYYY-MM-DD}.md` dle `{WORK_ROOT}/templates/audit-report.md`:

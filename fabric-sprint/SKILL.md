@@ -120,6 +120,26 @@ Vyber top kandidáty podle PRIO (sestupně) s těmito pravidly:
 
 **Sprint goal** napiš jako 1 větu, která shrnuje společný outcome všech targetů.
 
+### 4.1) Definition of Done (POVINNÉ)
+
+Každý sprint MUSÍ mít explicitní DoD v sprint plánu:
+
+```markdown
+## Definition of Done
+
+Sprint {N} je DONE když:
+- [ ] Všechny READY tasks mají status DONE nebo CARRY-OVER s důvodem
+- [ ] `{COMMANDS.test}` PASS na main po všech mergích
+- [ ] `{COMMANDS.lint}` PASS na main (nebo SKIPPED s důvodem)
+- [ ] Coverage ≥ {baseline}% (neklesla o >5%)
+- [ ] Docs aktualizovány pro doc-worthy changes
+- [ ] Close report existuje s quality evidence
+```
+
+Pokud sprint má specifické cíle (např. "zero P0 bugs", "API v2 ready") → přidej je do DoD.
+
+**Anti-pattern:** ❌ Sprint bez DoD (nikdo neví kdy je "hotovo" — vede k scope creep nebo předčasnému uzavření)
+
 ### 5) Vytvoř sprint plán (podle šablony)
 
 Vytvoř soubor:

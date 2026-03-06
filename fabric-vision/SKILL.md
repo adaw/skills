@@ -83,6 +83,28 @@ Vision.md validace (automatizovatelná):
 - Obsahuje sekci "Non-goals" s ≥1 položkou
 - Žádný princip není duplicitní (normalize + compare)
 
+**Per-pillar kvantitativní assessment (POVINNÉ):**
+
+Pro KAŽDÝ pilíř z vision.md vyhodnoť:
+
+```markdown
+### Pillar Assessment
+| Pilíř | Coverage % | Implementation % | Drift | Verdikt |
+|-------|-----------|------------------|-------|---------|
+| {pillar_1} | {backlog items / total needed}% | {DONE items / total}% | {LOW/MEDIUM/HIGH} | ON TRACK / CAUTION / DEVIATION |
+```
+
+Metodika:
+- **Coverage %** = kolik z toho, co pilíř vyžaduje, je v backlogu (heuristika: počet backlog items s `linked_vision_goal` matchujícím pilíř / odhadovaný potřebný počet)
+- **Implementation %** = kolik backlog items pro pilíř je DONE vs total
+- **Drift** = míra odchylky od zamýšleného směru: LOW (na cestě), MEDIUM (částečná odchylka), HIGH (zásadní odchylka)
+- **Verdikt:**
+  - `ON TRACK` — Coverage ≥70%, Implementation trending up, Drift LOW
+  - `CAUTION` — Coverage 40-70% NEBO Implementation stagnating NEBO Drift MEDIUM
+  - `DEVIATION` — Coverage <40% NEBO Drift HIGH NEBO žádný DONE item za poslední sprint
+
+**Anti-pattern:** ❌ "Všechny pilíře ON TRACK" bez čísel — VŽDY uveď konkrétní procenta a trend.
+
 ### 3) Najdi ambiguitu a konflikty
 
 - konflikty mezi core vizí (`vision.md`) a sub-vizemi (`{VISIONS_ROOT}/*.md`)

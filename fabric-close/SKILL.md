@@ -217,6 +217,24 @@ Jinak je **CARRY-OVER** s důvodem:
 
 Pro každý MERGEABLE task v pořadí:
 
+0. **Per-task stub verification (POVINNÉ):**
+   ```bash
+   # Ověř, že task kód neobsahuje stuby
+   TASK_FILES=$(git diff --name-only "${main_branch}...${branch}" -- '*.py' 2>/dev/null)
+   STUBS_FOUND=0
+   for F in $TASK_FILES; do
+     [ -f "$F" ] || continue
+     if grep -qn 'pass$\|raise NotImplementedError\|# TODO\|# FIXME\|\.\.\.  # stub' "$F" 2>/dev/null; then
+       echo "WARN: stub detected in $F for task $TASK_ID"
+       STUBS_FOUND=$((STUBS_FOUND + 1))
+     fi
+   done
+   if [ "$STUBS_FOUND" -gt 0 ]; then
+     echo "WARN: $STUBS_FOUND files contain stubs — review may have missed them"
+     # Nezastavuj merge — ale zapiš do close reportu jako WARNING
+   fi
+   ```
+
 1. Připrav main:
    ```bash
    timeout 60 git fetch --all --prune || { echo "WARN: git fetch failed/timeout"; GATE_RESULT="FETCH_FAIL"; }
@@ -578,9 +596,33 @@ if [ -n "$SPRINT_START_SHA" ]; then
   SPRINT_DIFF_FILES=$(git diff --name-only "$SPRINT_START_SHA"...HEAD | wc -l)
   echo "Sprint diff: $SPRINT_DIFF_FILES files changed"
 
-  # Pokud ≥20 souborů změněno, doporuč sprint-wide review
+  # Pokud ≥20 souborů změněno → spusť sprint-wide review dimenze
   if [ "$SPRINT_DIFF_FILES" -ge 20 ]; then
-    echo "WARN: large sprint diff ($SPRINT_DIFF_FILES files) — consider sprint-wide review"
+    echo "ACTION: large sprint diff ($SPRINT_DIFF_FILES files) — running sprint-wide R1-R8 quick scan"
+    # Quick R1-R8 scan na sprint diff (ne plný review — jen critical/high hledání)
+    SPRINT_DIFF=$(git diff "$SPRINT_START_SHA"...HEAD -- '*.py')
+
+    # R2 Security quick scan
+    SECURITY_HITS=$(echo "$SPRINT_DIFF" | grep -c 'eval(\|exec(\|subprocess.*shell=True\|pickle.loads\|yaml.load(' 2>/dev/null || echo 0)
+    if [ "$SECURITY_HITS" -gt 0 ]; then
+      echo "CRITICAL: $SECURITY_HITS potential security issues in sprint diff"
+    fi
+
+    # R4 Reliability quick scan
+    RELIABILITY_HITS=$(echo "$SPRINT_DIFF" | grep -c 'except:$\|except Exception:$' 2>/dev/null || echo 0)
+    if [ "$RELIABILITY_HITS" -gt 0 ]; then
+      echo "WARN: $RELIABILITY_HITS bare except blocks in sprint diff"
+    fi
+
+    # R6 Maintainability quick scan
+    # (large functions detection is harder in diff, skip for now)
+
+    echo "Sprint R1-R8 quick scan: security=$SECURITY_HITS, reliability=$RELIABILITY_HITS"
+    # Pokud CRITICAL > 0 → vytvoř intake item
+    if [ "$SECURITY_HITS" -gt 0 ]; then
+      python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "sprint-security-scan-${N}" \
+        --title "Sprint-wide security scan found $SECURITY_HITS potential issues"
+    fi
   fi
 else
   echo "WARN: sprint_start_sha not found — cannot compute sprint diff"

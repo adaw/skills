@@ -279,7 +279,21 @@ Pokud baseline selže (exit ≠ 0, včetně timeout):
 
 **Minimum akceptovatelného výstupu:**
 - ≥3 testy (happy/edge/error) pro každou novou/změněnou komponentu
-- Coverage nových řádků ≥60% (ověř: `pytest --cov={modul} --cov-report=term-missing`)
+- Coverage nových řádků ≥60% — **VYNUCENO příkazem:**
+  ```bash
+  # Coverage check (POVINNÉ po všech testech)
+  CHANGED_MODULES=$(git diff --name-only "${main_branch}...HEAD" -- '*.py' | grep -v test | head -20)
+  for MODULE in $CHANGED_MODULES; do
+    MODULE_NAME=$(echo "$MODULE" | sed 's|/|.|g' | sed 's|\.py$||' | sed 's|^src\.||')
+    timeout 120 pytest --cov="$MODULE_NAME" --cov-report=term-missing --cov-fail-under=60 -q 2>/dev/null
+    COV_EXIT=$?
+    if [ $COV_EXIT -ne 0 ] && [ $COV_EXIT -ne 124 ]; then
+      echo "WARN: coverage <60% for $MODULE_NAME"
+    fi
+  done
+  ```
+  Pokud coverage <60% pro core modul (ne helper/util): oprav testy PŘED commitem.
+  Pokud coverage <60% pro helper/util: zapiš WARNING do reportu, pokračuj.
 - Žádný `pass`, `# TODO`, `...` nebo stub v DONE kódu
 - Všechny nové funkce/metody mají type hints a docstring (min 1 věta)
 
@@ -312,6 +326,24 @@ class Test{ComponentName}:
         with pytest.raises(ExpectedException):
             component.method(invalid_input)
 ```
+
+**Integration test mapping (POVINNÉ pro API/service/CLI změny):**
+
+Pokud task mění veřejné rozhraní, MUSÍ mít odpovídající integrační test. Mapping:
+
+| Typ změny | Testovací soubor | Vzor testu |
+|-----------|-----------------|------------|
+| Nový/změněný API endpoint | `tests/test_api_{module}.py` | `async def test_{endpoint}_{method}(): response = client.{method}("/path"); assert response.status_code == {expected}` |
+| Nový/změněný CLI command | `tests/test_cli.py` | `def test_cli_{command}(): result = runner.invoke(app, ["{command}", ...]); assert result.exit_code == 0` |
+| Nový/změněný service | `tests/test_{service}_integration.py` | `def test_{service}_{operation}(): svc = {Service}(real_backend); result = svc.{method}(input); assert result == expected` |
+| Nový storage backend | `tests/test_{backend}_integration.py` | `def test_{backend}_roundtrip(): backend.store(item); retrieved = backend.get(item.id); assert retrieved == item` |
+| Změna modelu (Pydantic) | `tests/test_models.py` | `def test_{model}_validation(): valid = {Model}(**valid_data); assert valid.field == expected` |
+| Změna triage/heuristics | `tests/test_triage_{pattern}.py` | `def test_{pattern}_detection(): result = triage(input_with_pattern); assert result.tier == expected` |
+
+**Anti-patterns:**
+- ❌ Pouze unit testy pro API endpoint změnu (MUSÍ mít integrační test s HTTP klientem)
+- ❌ Mock VŠECHNO — integrační test má testovat reálnou interakci (mock jen external deps)
+- ✅ Pro KAŽDOU API změnu: ≥1 integrační test který volá endpoint přes HTTP client
 
 Během práce nastav backlog status:
 - `status: IN_PROGRESS`
@@ -476,6 +508,48 @@ git commit -m "feat({id}): {short description}"
 Po commit:
 - nastav backlog item `status: IN_REVIEW`
 - doplň `updated: {YYYY-MM-DD}`
+
+### 6.1) Per-task micro-review (security + reliability quick check)
+
+PO COMMITU a PŘED přechodem na další krok proveď RYCHLÝ self-review zaměřený na R2 (Security) a R4 (Reliability):
+
+```bash
+# Quick security scan na diff
+git diff "${main_branch}...HEAD" -- '*.py' | grep -n \
+  -e 'eval(' -e 'exec(' -e 'subprocess.*shell=True' \
+  -e '__import__' -e 'pickle.loads' -e 'yaml.load(' \
+  -e 'os.system(' -e 'input(' \
+  > /tmp/security-scan.txt 2>/dev/null
+
+if [ -s /tmp/security-scan.txt ]; then
+  echo "WARN: potential security issues in diff:"
+  cat /tmp/security-scan.txt
+  # Nezastavuj — ale zapiš do implement reportu jako "Security scan findings"
+fi
+
+# Quick reliability scan
+git diff "${main_branch}...HEAD" -- '*.py' | grep -n \
+  -e 'except:$' -e 'except Exception:$' \
+  -e 'pass$' -e '# TODO' -e '# FIXME' -e '# HACK' \
+  > /tmp/reliability-scan.txt 2>/dev/null
+
+if [ -s /tmp/reliability-scan.txt ]; then
+  echo "WARN: potential reliability issues in diff:"
+  cat /tmp/reliability-scan.txt
+fi
+```
+
+**Co kontrolovat (checklist):**
+- [ ] Žádný `eval()`, `exec()`, `subprocess(shell=True)`, `pickle.loads()` bez sanitizace
+- [ ] Žádný bare `except:` nebo `except Exception:` bez re-raise/logging
+- [ ] Žádný `pass` v exception handleru (tiché polknutí chyb)
+- [ ] Všechny nové I/O operace mají timeout
+- [ ] Všechny nové user vstupy jsou validované
+
+**Pokud scan najde ≥1 finding:** Zapiš do implement reportu sekci "## Security/Reliability Scan" s nálezem. Review to pak ověří hlouběji.
+**Pokud scan je čistý:** Zapiš "Security/Reliability scan: clean (0 findings)".
+
+> **Poznámka:** Toto NENAHRAZUJE fabric-review. Je to rychlý pre-screening, aby se kritické problémy chytly IHNED po implementaci, ne až v review dispatchi.
 
 ### 7) Update state (pouze wip)
 

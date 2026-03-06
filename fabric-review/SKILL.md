@@ -248,15 +248,65 @@ Pro každou dimenzi napiš:
 - konkrétní nálezy (1–N)
 - doporučení nebo požadavek na rework
 
-Dimenze:
-- **R1 Correctness:** správnost a edge cases
-- **R2 Security:** input validation, secrets, authz, injections
-- **R3 Performance:** složitost, I/O, hot paths
-- **R4 Reliability:** error handling, retries, timeouts
-- **R5 Testability:** testy pokrývají AC? izolace? flaky?
-- **R6 Maintainability:** čitelnost, naming, modularita
-- **R7 Documentation:** docs + komentáře + ADR když je potřeba
-- **R8 Compliance:** dodržení config konvencí + **accepted ADR** + **active specs** (porušení = CRITICAL)
+Dimenze s konkrétními checklisty (POVINNÉ — projdi KAŽDÝ bod):
+
+**R1 Correctness** — správnost a edge cases:
+- [ ] Logika odpovídá AC (mapuj 1:1)
+- [ ] Edge cases ošetřeny: None/empty/0/negative/max_int/unicode
+- [ ] Off-by-one v loops a ranges (`<` vs `<=`, indexování)
+- [ ] Nesting ≤3 úrovní (jinak extrahuj funkci)
+- [ ] Cyclomatic complexity ≤10 per funkce (pokud >10 → finding)
+- [ ] Žádný dead code (unreachable branches, unused imports/vars)
+- [ ] Magic numbers nahrazeny konstantami s popisným jménem
+
+**R2 Security** — vstupní validace, secrets, autorizace:
+- [ ] VŠECHNY user vstupy validovány na entry point (type, range, format)
+- [ ] Žádný `eval()`, `exec()`, `subprocess(shell=True)`, `pickle.loads()` bez sanitizace
+- [ ] Secrets/credentials nejsou v kódu, logách, ani chybových zprávách
+- [ ] SQL/NoSQL queries parametrizované (ne string concatenation)
+- [ ] Path traversal prevence pro dynamické cesty (`os.path.realpath` + prefix check)
+- [ ] Auth/authz check na KAŽDÉM novém endpoint/handleru
+
+**R3 Performance** — složitost, I/O, hot paths:
+- [ ] Algoritmus ≤O(n log n) pro hot paths (O(n²) = finding)
+- [ ] Žádné N+1 queries (databáze/API v loopu)
+- [ ] I/O operace mají limit/pagination (ne unbounded `read()` nebo `fetchall()`)
+- [ ] Cache hit ratio (pokud applicable): opakované výpočty cachované?
+- [ ] Memory: žádné unbounded collections (list.append v loop bez limitu)
+
+**R4 Reliability** — error handling, retries, timeouts:
+- [ ] KAŽDÝ I/O call má `try/except {SpecificError}` (ne bare `except:`)
+- [ ] KAŽDÝ I/O call má timeout (explicitní parametr nebo wrapper)
+- [ ] Graceful degradation: pokud dependency selže, systém funguje (fail-open pro LLMem)
+- [ ] Resource cleanup: `with` statement pro file/connection handles (ne manual close)
+- [ ] Retry logika má backoff + max_retries (ne infinite retry)
+- [ ] Error zprávy obsahují kontext: co selhalo, s jakým vstupem, proč
+
+**R5 Testability** — kvalita testů:
+- [ ] Testy pokrývají VŠECHNY AC (mapuj 1:1)
+- [ ] ≥2 assertions per test (ne jen `assert True` nebo single assert)
+- [ ] Edge case testy existují pro core logic
+- [ ] Error path testy: `pytest.raises` pro expected exceptions
+- [ ] Test isolation: žádné sdílené mutable state mezi testy
+- [ ] Mock boundaries: mock jen external deps (ne internal modules)
+- [ ] Flaky test detection: žádný `time.sleep()` v testech bez `@pytest.mark.timeout`
+
+**R6 Maintainability** — čitelnost, naming, modularita:
+- [ ] Funkce: `{verb}_{noun}` naming (describe_action, calculate_score, validate_input)
+- [ ] Třídy: `{Noun}{Role}` naming (CaptureService, HashEmbedder, InMemoryBackend)
+- [ ] Funkce ≤50 LOC (>50 = finding, doporuč split)
+- [ ] Single Responsibility: každá funkce dělá JEDNU věc
+- [ ] DRY: žádný copy-paste kód (≥3 řádky duplicitní → extrahuj)
+- [ ] Import ordering: stdlib → third-party → local (consistent)
+
+**R7 Documentation** — docs, komentáře, ADR:
+- [ ] KAŽDÁ nová public funkce/třída má docstring (≥1 věta)
+- [ ] Complex logic má inline komentář PROČ (ne CO — kód říká co)
+- [ ] README/CHANGELOG aktualizován pokud user-facing change
+- [ ] API changes → aktualizuj specs (nebo vytvoř intake item)
+- [ ] Arch decisions → existuje ADR nebo je v analýze zdůvodnění
+
+**R8 Compliance** — dodržení config konvencí + **accepted ADR** + **active specs** (porušení = CRITICAL)
 
 
 #### R8 Compliance — konkrétně (povinné)
@@ -349,6 +399,22 @@ Verdikt pravidla:
 - ≥1 CRITICAL (vyžaduje redesign) → `REDESIGN`
 - ≥3 HIGH bez CRITICAL → `REWORK` (akumulace)
 - Jen MEDIUM/LOW → `CLEAN` (findings zapiš do reportu jako doporučení)
+
+**Severity→Score numerické mapování (pro konzistentní prioritizaci intake items):**
+
+| Severity | Score range | Intake raw_priority | Příklad |
+|----------|-----------|-------------------|---------|
+| CRITICAL | 9.0–10.0 | 9–10 | SQL injection, data corruption, untested AC |
+| HIGH | 7.0–8.9 | 7–8 | Missing error handling for core flow, performance regression |
+| MEDIUM | 5.0–6.9 | 5–6 | Bad naming, minor refactor, missing doc comment |
+| LOW | 3.0–4.9 | 3–4 | Stylistic, preference, minor improvements |
+
+Score formule per finding: `base_severity + impact_modifier + fixability_modifier`
+- `base_severity`: CRITICAL=9, HIGH=7, MEDIUM=5, LOW=3
+- `impact_modifier`: +1 pokud affects >3 files, +0.5 pokud affects public API
+- `fixability_modifier`: -0.5 pokud quick fix (<5 min), +0.5 pokud requires redesign
+
+Zapiš score ke každému finding v review reportu: `| R2 | Missing validation | HIGH (7.5) | ... |`
 
 ### Fix strategy per finding type
 
@@ -448,3 +514,37 @@ python skills/fabric-init/tools/fabric.py report-new \
 - **R1–R8 tabulka je přítomna** (ne jen souhrnné "All 5/5")
 - backlog item has `review_report`
 - verdict is explicit (CLEAN/REWORK/REDESIGN)
+
+---
+
+## Scope varianty (volitelné — dispatcher určuje scope)
+
+### `--scope=codebase` — Codebase-wide review
+
+Pokud dispatcher (fabric-loop nebo člověk) spustí review se `scope=codebase`:
+
+1. Ignoruj `wip_item` / `wip_branch` — review se týká CELÉHO codebase na `main`
+2. Pro R1-R8: projdi CELÝ `{CODE_ROOT}/` (ne jen diff)
+3. Fokus na systémové problémy:
+   - Duplicitní kód across souborů (grep pro podobné bloky ≥10 řádků)
+   - Nekonzistentní patterns (různé error handling styly, různý naming)
+   - Dead code (unused imports: `grep -rn "^import\|^from" | sort | uniq -c | sort -rn`)
+   - Orphaned testy (test soubory pro moduly které neexistují)
+4. Verdikt: `CLEAN` / `NEEDS_ATTENTION` (ne REWORK — codebase review nemá single task k opravě)
+5. Výstup: intake items pro systémové problémy (ne per-task REWORK)
+
+### `--scope=sprint` — Sprint-wide review
+
+Pokud dispatcher spustí review se `scope=sprint`:
+
+1. Diff: `git diff {sprint_start_sha}...HEAD` (celý sprint, ne jeden task)
+2. Pro R1-R8: hodnoť CELÝ sprint diff
+3. Fokus na cross-task problémy:
+   - Cross-task interakce (task A mění model, task B ho čte — kompatibilita?)
+   - Duplicitní kód zavedený různými tasks (copy-paste across tasks)
+   - Nekonzistentní naming/patterns zavedené různými tasks
+   - Celková architektonická koherence sprint diffu
+4. Verdikt: `CLEAN` / `REWORK` (pokud cross-task problémy vyžadují opravu)
+5. Výstup: review report s `scope: sprint` + intake items pro systémové findings
+
+> **Poznámka:** Sprint-scope review by měl být volán z `fabric-close` po všech mergích (krok 8c) pokud sprint diff ≥20 souborů.
