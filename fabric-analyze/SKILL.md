@@ -1532,6 +1532,17 @@ status: PASS
 ---
 ```
 
+## Protokol (povinné)
+
+Na začátku a na konci tohoto skillu zapiš události do protokolu:
+
+- START:
+  - `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "analyze" --event start`
+- END (OK/WARN/ERROR):
+  - `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "analyze" --event end --status {OK|WARN|ERROR} --report "{WORK_ROOT}/reports/analyze-{YYYY-MM-DD}.md"`
+
+---
+
 ## Self-check (VŠECHNY položky MUSÍ být ✅ ANTES publish)
 
 ### Per-task Analysis Quality (§2.1 contract)

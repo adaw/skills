@@ -196,6 +196,83 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 ---
 
+## Preconditions (K6 — povinná validace před spuštěním)
+
+```bash
+# --- fabric-loop preconditions ---
+# P1: config.md musí existovat (discovery najde, ale validuj výsledek)
+if [ -z "$CONFIG_PATH" ] || [ ! -f "$CONFIG_PATH" ]; then
+  echo "STOP: config.md not found — run fabric-init first"
+  exit 1
+fi
+
+# P2: WORK_ROOT musí být nastavený a existovat
+WORK_ROOT=$(grep 'WORK_ROOT:' "$CONFIG_PATH" | awk '{print $2}' | tr -d '"')
+if [ -z "$WORK_ROOT" ] || [ ! -d "$WORK_ROOT" ]; then
+  echo "STOP: WORK_ROOT '$WORK_ROOT' not found or not set in config.md"
+  exit 1
+fi
+
+# P3: state.md musí existovat (nebo bootstrap přes init)
+if [ ! -f "$WORK_ROOT/state.md" ]; then
+  echo "WARN: state.md missing — triggering fabric-init bootstrap"
+fi
+
+# P4: skills adresář musí existovat
+SKILLS_ROOT=$(grep 'SKILLS_ROOT:' "$CONFIG_PATH" | awk '{print $2}' | tr -d '"')
+if [ -z "$SKILLS_ROOT" ] || [ ! -d "$SKILLS_ROOT" ]; then
+  echo "STOP: SKILLS_ROOT '$SKILLS_ROOT' not found"
+  exit 1
+fi
+
+# P5: fabric.py tool musí být dostupný
+if [ ! -f "$SKILLS_ROOT/fabric-init/tools/fabric.py" ]; then
+  echo "STOP: fabric.py tool not found at $SKILLS_ROOT/fabric-init/tools/fabric.py"
+  exit 1
+fi
+
+# P6: validate_fabric.py musí být dostupný
+if [ ! -f "$SKILLS_ROOT/fabric-init/tools/validate_fabric.py" ]; then
+  echo "STOP: validate_fabric.py not found"
+  exit 1
+fi
+```
+
+## Input Validation (K7 — path traversal ochrana)
+
+```bash
+# validate_path: odmítne cesty obsahující ".." nebo absolutní cesty mimo WORK_ROOT
+validate_path() {
+  local path="$1"
+  local context="$2"
+  if echo "$path" | grep -qE '(\.\./|/\.\.)'; then
+    echo "STOP: path traversal detected in $context: '$path'"
+    return 1
+  fi
+  # Ověř že cesta je pod WORK_ROOT (pro runtime cesty)
+  local resolved
+  resolved=$(realpath -m "$path" 2>/dev/null)
+  local work_resolved
+  work_resolved=$(realpath -m "$WORK_ROOT" 2>/dev/null)
+  if [ -n "$resolved" ] && [ -n "$work_resolved" ]; then
+    case "$resolved" in
+      "$work_resolved"*) return 0 ;;
+      *) echo "WARN: path '$path' ($context) resolves outside WORK_ROOT"; return 1 ;;
+    esac
+  fi
+  return 0
+}
+
+# Validuj wip_item (pochází ze state.md, může být manipulován)
+WIP_ITEM=$(grep 'wip_item:' "$WORK_ROOT/state.md" 2>/dev/null | awk '{print $2}')
+if [ -n "$WIP_ITEM" ] && [ "$WIP_ITEM" != "null" ]; then
+  validate_path "$WORK_ROOT/backlog/$WIP_ITEM.md" "wip_item" || {
+    echo "STOP: invalid wip_item path"
+    exit 1
+  }
+fi
+```
+
 ## Nevyjednatelné zásady
 1. **Config-first:** Každý běh začíná čtením `{WORK_ROOT}/config.md`. Hardcoded cesty/příkazy jsou bug.
 2. **File-only orchestration:** Skills spolu komunikují jen přes soubory. Žádné „volání skillu ze skillu“.

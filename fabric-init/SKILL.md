@@ -81,6 +81,31 @@ python skills/fabric-init/tools/fabric.py governance-index
 
 ---
 
+## Input Validation (K7 — path traversal ochrana)
+
+```bash
+# validate_path: odmítne cesty obsahující ".." pro bezpečnost
+validate_path() {
+  local path="$1"
+  local context="$2"
+  if echo "$path" | grep -qE '(\.\./|/\.\.)'; then
+    echo "STOP: path traversal detected in $context: '$path'"
+    return 1
+  fi
+  return 0
+}
+
+# Validuj WORK_ROOT z config (hlavní vstup initu)
+if [ -n "$WORK_ROOT" ]; then
+  validate_path "$WORK_ROOT" "WORK_ROOT" || exit 1
+fi
+
+# Validuj TEMPLATES_ROOT
+if [ -n "$TEMPLATES_ROOT" ]; then
+  validate_path "$TEMPLATES_ROOT" "TEMPLATES_ROOT" || exit 1
+fi
+```
+
 ## 0) Předpoklady
 
 1. Musíš mít k dispozici Fabric `config.md`.
@@ -90,6 +115,33 @@ python skills/fabric-init/tools/fabric.py governance-index
 2. Musíš mít právo zápisu do `{WORK_ROOT}/`.
 
 3. Vše zapisuj v UTF-8.
+
+```bash
+# --- Preconditions bash validation ---
+# P1: Skills root must be accessible
+if [ ! -d "skills/fabric-init" ]; then
+  echo "STOP: skills/fabric-init not found — fabric skills directory missing"
+  exit 1
+fi
+
+# P2: fabric.py tool must exist
+if [ ! -f "skills/fabric-init/tools/fabric.py" ]; then
+  echo "STOP: fabric.py not found — run git pull or check skills installation"
+  exit 1
+fi
+
+# P3: config template must exist for bootstrap
+if [ ! -f "skills/fabric-init/assets/config.template.md" ]; then
+  echo "STOP: config.template.md not found — cannot bootstrap without template"
+  exit 1
+fi
+
+# P4: validate_fabric.py must exist
+if [ ! -f "skills/fabric-init/tools/validate_fabric.py" ]; then
+  echo "STOP: validate_fabric.py not found — cannot validate workspace"
+  exit 1
+fi
+```
 
 Pokud config nejde najít nebo YAML nejde parsovat → **STOP** a vytvoř `./bootstrap-missing-or-invalid-config.md` (popiš co chybí a jak to opravit).
 
@@ -367,6 +419,14 @@ Vytvoř report `{WORK_ROOT}/reports/init-{YYYY-MM-DD}.md`:
 - co bylo vytvořeno
 - co bylo přeskočeno (idempotence)
 - warnings (chybějící templates, missing config COMMANDS)
+
+---
+
+## Anti-patterns (ZAKÁZÁNO)
+
+- **A1: Config Overwrite** — NESMÍ přepsat existující `config.md` vlastním obsahem. Detection: `test -f {WORK_ROOT}/config.md`. Fix: Pokud existuje, pouze validuj; nepřepisuj.
+- **A2: Vision Auto-generate** — NESMÍ automaticky generovat obsah `vision.md`. Vision je autorský dokument. Detection: Zkontroluj, že vision.md má jen placeholder pokud byl vytvořen initem. Fix: Vytvoř jen stub, ne obsah.
+- **A3: State Overwrite** — NESMÍ přepsat `phase/step` v existujícím `state.md` pokud jsou validní. Detection: `grep 'phase:' state.md | grep -vE 'orientation|planning|implementation|closing'`. Fix: Pouze doplň chybějící klíče.
 
 ---
 

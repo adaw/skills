@@ -259,6 +259,24 @@ Vytvoř `{WORK_ROOT}/reports/archive-{YYYY-MM-DD}.md`:
 
 ---
 
+## Anti-patterns (ZAKÁZÁNO)
+
+- **A1: Partial Archive** — NESMÍ archivovat sprint bez kompletního close reportu. Detection: `test -f reports/close-*.md`. Fix: Spusť fabric-close nejdřív.
+- **A2: Active WIP Archive** — NESMÍ archivovat sprint s aktivním WIP itemem (state.wip_item != null). Detection: `grep 'wip_item:' state.md | grep -v null`. Fix: Dokonči nebo zruš WIP.
+- **A3: Missing Reports Archive** — NESMÍ přesunout do archive/ bez ověření kompletnosti report sady. Detection: Porovnej CONTRACTS.outputs s existujícími reports. Fix: Spusť chybějící skills.
+
+## Acceptance Criteria (MINIMUM akceptovatelného výstupu)
+
+Archive MUSÍ obsahovat:
+1. **Archive report** (`reports/archive-{YYYY-MM-DD}.md`) s kompletním YAML frontmatter
+2. **Snapshot v archive/** — sprint plan, reports, analyses zkopírované do `archive/sprints/sprint-{N}/`
+3. **State update** — `state.sprint` inkrementován, `state.step` = next step nebo idle
+4. **Backlog cleanup** — DONE items přesunuty do `backlog/done/`
+
+Pokud kterýkoli z těchto bodů chybí, archive report MUSÍ mít `status: WARN` a vytvořit intake item.
+
+---
+
 ## Self-check
 
 ### Existence checks

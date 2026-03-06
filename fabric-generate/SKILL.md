@@ -387,6 +387,14 @@ Public API users won't know the field exists.
 
 ---
 
+## Anti-patterns (ZAKÁZÁNO)
+
+- **A1: Duplicate Intake** — NESMÍ generovat intake item, který už existuje v `{WORK_ROOT}/intake/`. Detection: `ls {WORK_ROOT}/intake/{source}-{slug}-*.md`. Fix: Přeskoč existující.
+- **A2: Empty Intake** — NESMÍ vytvořit intake item bez title a description. Detection: `grep -c 'title:' intake-item.md`. Fix: Vždy vyplň title + description.
+- **A3: Invalid Priority** — NESMÍ nastavit raw_priority mimo rozsah 1-10. Detection: `grep 'raw_priority:' | awk '{print $2}' | grep -vE '^[1-9]$|^10$'`. Fix: Clamp na 1-10.
+
+---
+
 ## Self-check
 
 ### Existence checks
