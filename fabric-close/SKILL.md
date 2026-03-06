@@ -38,6 +38,81 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 ---
 
+## K2 Fix: Task Merge Loop with Counter
+
+```bash
+MAX_TASKS=${MAX_TASKS:-50}
+MERGE_COUNTER=0
+```
+
+When iterating through Task Queue to merge approved tasks:
+```bash
+while read -r task_id; do
+  MERGE_COUNTER=$((MERGE_COUNTER + 1))
+  if [ "$MERGE_COUNTER" -ge "$MAX_TASKS" ]; then
+    echo "WARN: max task merges reached ($MERGE_COUNTER/$MAX_TASKS)"
+    break
+  fi
+  # ... merge task
+done
+```
+
+## K10 Fix: Concrete Close Example with LLMem Data
+
+Here is a concrete example of closing a sprint task with real LLMem project context:
+
+**Sprint-2 Task Merge: T-TRI-02 (Triage Heuristics)**
+
+**Per-task close report:** `{WORK_ROOT}/reports/close-T-TRI-02-2026-03-06-run123.md`
+
+```yaml
+---
+schema: fabric.report.v1
+kind: close
+version: "1.0"
+task_id: "T-TRI-02"
+sprint_number: 2
+created_at: "2026-03-06T15:45:00Z"
+merge_commit: "abc1234def567"
+coverage_before_pct: 62
+coverage_after_pct: 78
+test_result: PASS
+lint_result: PASS
+---
+
+# T-TRI-02 Close Report — Triage Heuristics
+
+## Summary
+
+Successfully merged feature/tri-02-heuristics into main. Deterministic triage heuristics now live in production. Coverage increased from 62% → 78% (target ≥60%, PASS).
+
+## Merge Details
+
+- **Branch:** feature/tri-02-heuristics
+- **Merge Commit:** abc1234def567
+- **Squash:** Yes (1 logical commit)
+- **Review Status:** APPROVED (review-T-TRI-02-2026-03-05.md)
+- **Test Results:** 9/9 PASS (triage suite)
+- **Lint:** 0 errors
+
+## Backlog Update
+
+Updated `{WORK_ROOT}/backlog/T-TRI-02.md`:
+```yaml
+status: DONE
+merge_commit: abc1234def567
+branch: feature/tri-02-heuristics
+updated: 2026-03-06
+```
+
+## Sprint Summary Impact
+
+- Task Duration: 2 days (Sprint-2)
+- Effort Actual: M (5 hours)
+- Quality Gates: PASS (all)
+- Coverage Contribution: +16% (T-TRI-02 focused: heuristics module)
+```
+
 ## Vstupy
 
 - `{WORK_ROOT}/config.md` (GIT + COMMANDS)
@@ -203,6 +278,35 @@ A metadata (`merge_commit`, `status`) patchuj přes plan/apply, ne ručně.
 ---
 
 ## Postup
+
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="closing"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-close. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$TASK_FILE"
+# validate_path "$BRANCH_NAME"
+```
 
 ### Orchestrační model (multi-task)
 
@@ -945,14 +1049,25 @@ Fabric předpokládá lokální git operace (žádný remote push na main v defa
 
 ## Self-check
 
-Před návratem:
-- všechny DONE tasky squash-mergnuty do main (nebo přeskočeny při REDESIGN/BLOCKED)
-- `COMMANDS.test` PASS na main (post-merge)
-- `COMMANDS.test_e2e` PASS na main (pokud definován)
-- `COMMANDS.lint` PASS na main (po případném auto-fix)
-- WIP branch smazán lokálně i remote (nebo zachován při REDESIGN)
-- `state.wip_item = null` a `state.wip_branch = null`
-- close report existuje v `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md`
-- sprint plan aktualizován (task statuses)
+### Existence checks
+- [ ] Report existuje: `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md`
+- [ ] Report má validní YAML frontmatter se schematem `fabric.report.v1`
+- [ ] WIP branch smazán (nebo explicitně zachován s důvodem v reportu)
+- [ ] Protocol log má START a END záznam s `skill: close`
 
-Pokud ne → FAIL + vytvoř intake item `intake/close-selfcheck-failed-{date}.md`.
+### Quality checks (BLOCKING ENFORCEMENT)
+- [ ] **Všechny DONE tasky squash-mergnuty do main** (nebo REDESIGN/BLOCKED) — commit history čistý
+- [ ] **COMMANDS.test PASS na main** (post-merge) — testy prošly po integraci
+- [ ] **COMMANDS.test_e2e PASS na main** (pokud definován) — e2e testy bez regresí
+- [ ] **COMMANDS.lint PASS na main** (po případném auto-fix) — kód je čistý
+- [ ] **state.wip_item = null** a **state.wip_branch = null** — state reset po zavření
+- [ ] **Close report** obsahuje sekce: Summary (N tasků DONE, M REDESIGN, K BLOCKED), Changes, Quality, Warnings
+- [ ] **Sprint plan** aktualizován — všechny task statuses reflektují final state
+
+### Invariants
+- [ ] Backlog itemy se statusem DONE mají aktualizované metadata (`merged_at`, `commit_hash`)
+- [ ] State.md aktualizován: `current_sprint = null` (pokud je end-of-sprint close) nebo `sprint = N+1` (pokud next sprint)
+- [ ] Protocol log má START i END záznam
+- [ ] Žádný lokální commit zbývá nemergnený v main
+
+Pokud ANY check FAIL → **FAIL + vytvoř intake item `intake/close-selfcheck-failed-{date}.md`** (ne exit, ale WARN).

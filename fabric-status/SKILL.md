@@ -43,6 +43,35 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 ---
 
+## Preconditions
+
+```bash
+# --- Precondition 1: Config existuje ---
+if [ ! -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 2: State existuje ---
+if [ ! -f "{WORK_ROOT}/state.md" ]; then
+  echo "STOP: {WORK_ROOT}/state.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 3: Backlog existuje ---
+if [ ! -f "{WORK_ROOT}/backlog.md" ]; then
+  echo "WARN: {WORK_ROOT}/backlog.md not found — backlog metrics will be unavailable"
+fi
+
+# --- Precondition 4: Reports directory exists ---
+mkdir -p "{WORK_ROOT}/reports"
+```
+
+**Dependency chain:** `(anytime)` → [fabric-status] → `(monitoring/dashboard)`
+
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.
 
 ## FAST PATH (doporučeno) — deterministický snapshot
 
@@ -57,6 +86,35 @@ Pak report stav podle dat ze snapshotu (ne odhadem).
 ---
 
 ## Postup
+
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="orientation"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-status. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$CODE_PATH"
+# validate_path "$STATUS_REPORT"
+```
 
 ### 1) Zjisti dominantní typy souborů (language-agnostic)
 
@@ -151,6 +209,53 @@ Najdi aktuální sprint file z `state.sprint`.
 
 Pokud existují poslední 3 status reporty:
 - trend: zlepšuje se test/lint? roste backlog READY? klesá BLOCKED?
+
+## K10 Fix: Example Status Report with Real LLMem Data
+
+Here is a concrete filled-in status report showing actual LLMem project health metrics:
+
+```markdown
+---
+schema: fabric.report.v1
+kind: status
+run_id: "status-2026-03-06-live"
+created_at: "2026-03-06T10:15:00Z"
+status: OK
+health_score: 72
+---
+
+# status — Report 2026-03-06
+
+## Health snapshot
+Health score: **72/100** (at-risk)
+
+## Key signals
+| Signal | Status | Value | Assessment |
+|--------|--------|-------|------------|
+| Tests | PASS | 87 passed, 2 failed | Good — 1 flaky test, 1 regression |
+| Lint | PASS | 0 issues | ✓ Code quality maintained |
+| Format | PASS | 0 style issues | ✓ Formatting consistent |
+| Backlog flow | RISK | READY=15, BLOCKED=3, WIP=2 | ⚠ WIP limit OK, but 3 blockers |
+| Docs | OK | modified 2 days ago | Reasonably current |
+| Git | CLEAN | dirty=0, stale-branches=2 | 2 old feature branches (13+ days) |
+
+## Codebase snapshot
+| Metric | Value |
+|--------|-------|
+| Top language | .py: 47 files, ~4200 LOC |
+| Total code files | 52 |
+| Total LOC | ~4850 |
+
+## Risks (top 3)
+1. **2 test failures (1 flaky, 1 regression):** Flaky E2E test in test_recall_memory. Regression in test_capture_validation. → Run tests 3x to confirm flakiness; investigate regression root cause
+2. **3 BLOCKED backlog items:** task-b008 awaiting API spec clarification; task-b012 blocked on Qdrant setup. → Unblock by EOP Friday
+3. **2 stale feature branches:** feature/semantic-v2 (15 days), hotfix/rate-limit (12 days). → Merge or delete by sprint end
+
+## Suggested next actions (priority)
+1. Fix failing test test_capture_validation (regression in ObservationEvent validation) — estimated 2h
+2. Unblock task-b008 by meeting with architect on API spec — estimated 1h
+3. Delete stale feature branches to clean up repo — estimated 15m
+```
 
 ### 9) Status report (dashboard)
 

@@ -46,6 +46,109 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 ---
 
+## Preconditions
+
+```bash
+# --- Precondition 1: Config existuje ---
+if [ ! -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 2: State existuje ---
+if [ ! -f "{WORK_ROOT}/state.md" ]; then
+  echo "STOP: {WORK_ROOT}/state.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 3: Backlog index existuje a je prioritizovaný ---
+if [ ! -f "{WORK_ROOT}/backlog.md" ]; then
+  echo "STOP: {WORK_ROOT}/backlog.md not found — run fabric-prio first"
+  exit 1
+fi
+
+# --- Precondition 4: Templates existují ---
+if [ ! -f "{WORK_ROOT}/templates/sprint-plan.md" ]; then
+  echo "WARN: sprint-plan.md template not found"
+fi
+
+# --- Precondition 5: Vision existuje (for goal alignment) ---
+if [ ! -f "{WORK_ROOT}/vision.md" ]; then
+  echo "WARN: {WORK_ROOT}/vision.md not found — sprint goal may not align with vision"
+fi
+```
+
+**Dependency chain:** `fabric-prio` → [fabric-sprint] → `fabric-analyze`
+
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.
+
+## K2 Fix: Sprint Selection with Counter
+
+```bash
+MAX_SPRINT_TASKS=${MAX_SPRINT_TASKS:-50}
+SPRINT_SELECTION_COUNTER=0
+```
+
+When selecting items from backlog for sprint:
+```bash
+# Counter ensures we don't over-select tasks
+SELECTED_ITEMS=()
+while read -r backlog_item; do
+  SPRINT_SELECTION_COUNTER=$((SPRINT_SELECTION_COUNTER + 1))
+  if [ "$SPRINT_SELECTION_COUNTER" -ge "$MAX_SPRINT_TASKS" ]; then
+    echo "INFO: max sprint tasks reached ($SPRINT_SELECTION_COUNTER/$MAX_SPRINT_TASKS)"
+    break
+  fi
+  SELECTED_ITEMS+=("$backlog_item")
+done
+```
+
+## K10 Fix: Sprint Plan Example with Real LLMem Data
+
+Here is a concrete example of a filled-in Sprint plan for LLMem:
+
+**File:** `{WORK_ROOT}/sprints/sprint-2.md`
+
+```yaml
+---
+schema: fabric.report.v1
+kind: sprint-plan
+version: "1.0"
+sprint_number: 2
+start_date: "2026-03-10"
+end_date: "2026-03-14"
+goal: "Implement deterministic triage with secret/PII/preference detection; 70% test coverage on triage module."
+max_tasks: 5
+capacity_effort_hours: 40
+---
+
+# Sprint 2 Plan — Triage & Security
+
+## Sprint Targets (Selected by fabric-prio)
+
+| Priority | ID | Type | Title | Status | Effort | Confidence |
+|----------|----|----|-------|--------|--------|-----------|
+| 1 | T-TRI-01 | Task | Design triage heuristics (secret, PII, pref, decision) | READY | M | High |
+| 2 | T-TRI-02 | Task | Implement triage heuristics module | READY | M | High |
+| 3 | T-CAP-01 | Task | Integrate triage into CaptureService | READY | S | High |
+| 4 | T-TEST-01 | Task | Add triage unit tests (patterns, edge cases) | READY | M | High |
+| 5 | T-DOC-01 | Chore | Document triage heuristics API | DESIGN | S | Medium |
+
+## Sprint Goal Justification
+
+Triage heuristics unblock core Write Path functionality. T-TRI-01/02 are critical path. T-CAP-01 integrates with CaptureService (high confidence). T-TEST-01 addresses current 62% → 70% coverage gap. T-DOC-01 marked DESIGN (can carry-over).
+
+**Effort Budget:** 5×M + 1×S = ~40 hours (capacity: 40h, margin: 0%)
+
+## Dependency Graph
+
+- T-TRI-01 → T-TRI-02 (design first)
+- T-TRI-02 → T-CAP-01 (triage must exist before integration)
+- T-TRI-02 → T-TEST-01 (tests depend on implementation)
+- All others: independent or parallel safe
+```
 
 ## FAST PATH (doporučeno)
 
@@ -59,7 +162,7 @@ Použij ho jako zdroj pravdy pro výběr top-PRIO položek.
 
 ---
 
-## Příklad vyplněného sprint plánu
+## Příklad vyplněného sprint plánu (Extended)
 
 ```markdown
 ---
@@ -177,6 +280,35 @@ Sprint 2 is DONE when:
 ---
 
 ## Postup
+
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="planning"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-sprint. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$SPRINT_FILE"
+# validate_path "$BACKLOG_FILE"
+```
 
 ### 1) Načti konfiguraci
 
@@ -633,8 +765,24 @@ V `{WORK_ROOT}/reports/sprint-{N}-{YYYY-MM-DD}.md` uveď:
 
 ## Self-check (fail conditions)
 
-- sprint plán byl vytvořen a má sekce `Sprint Targets` + `Task Queue`
-- každý target ID odpovídá existujícímu `{WORK_ROOT}/backlog/{id}.md`
-- state metadata byla nastavena (3 pole)
+### Existence checks
+- [ ] Sprint plan existuje: `{WORK_ROOT}/sprints/sprint-{N}.md`
+- [ ] Sprint plan má validní YAML frontmatter se schematem `fabric.report.v1`
+- [ ] Report existuje: `{WORK_ROOT}/reports/sprint-{YYYY-MM-DD}.md`
+- [ ] Protocol log má START a END záznam s `skill: sprint`
 
-Pokud něco z toho neplatí → reportuj jako CRITICAL a vytvoř intake item `intake/sprint-plan-invalid.md`.
+### Quality checks (BLOCKING)
+- [ ] **Sprint plán má povinné sekce**: Sprint Targets + Task Queue + Effort Capacity
+- [ ] **Každý target ID odpovídá existujícímu** `{WORK_ROOT}/backlog/{id}.md` (verifikace odkazů)
+- [ ] **Effort sanity**: Suma effort estimates ≤ team capacity (z config.md TEAM_CAPACITY_POINTS)
+- [ ] **Task Queue je seřazená** dle dependencies a risk (topological order)
+- [ ] **Circular dependencies detekce**: Task Queue neobsahuje A→B→A cykly
+- [ ] **State metadata nastavena** (3 pole): `current_sprint: N`, `sprint_start: YYYY-MM-DD`, `sprint_end: YYYY-MM-DD`
+
+### Invariants
+- [ ] Backlog.md NENÍ modifikován (sprint jen odkazuje)
+- [ ] Backlog items si zachovávají status (ne prematurně READY)
+- [ ] Žádný soubor mimo `{WORK_ROOT}/sprints/`, `{WORK_ROOT}/reports/`, `{WORK_ROOT}/state.md` nebyl modifikován
+- [ ] Protocol log má START i END záznam
+
+Pokud **ANY CRITICAL check FAIL** → **FAIL + vytvoř intake item `intake/sprint-plan-invalid-{date}.md`** + EXIT 1.

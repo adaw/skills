@@ -59,19 +59,19 @@ auto_fixes_applied: [description]
 - Fix: Create intake item per stale item. If >60 days, escalate to CRITICAL and FAIL the audit.
 
 **Anti-pattern B: Broken backlog index (items exist but not in backlog.md)**
-- Detection: `diff <(ls backlog/*.md | sed 's|.*/||;s|\.md||' | sort) <(grep -oP '(?<=\[)[^\]]+' backlog.md | sort)`
+- Detection: `diff <(ls "{WORK_ROOT}/backlog"/*.md | sed 's|.*/||;s|\.md||' | sort) <(grep -oP '(?<=\[)[^\]]+' "{WORK_ROOT}/backlog.md" | sort)`
 - Fix: Run `python skills/fabric-init/tools/backlog_index.py --work-root "{WORK_ROOT}"` to regenerate.
 
 **Anti-pattern C: Missing required frontmatter fields**
-- Detection: `for f in backlog/*.md; do grep -L "^status:" "$f"; done`
+- Detection: `for f in "{WORK_ROOT}/backlog"/*.md; do grep -L "^status:" "$f"; done`
 - Fix: Auto-fill missing fields with defaults (status: BACKLOG, effort: M, tier: T2, updated: today).
 
 **Anti-pattern D: Config COMMANDS referencing non-existent scripts**
-- Detection: `grep -oP 'test:\s*"?\K[^"]+' config.md | xargs -I{} sh -c 'command -v {} || echo "MISSING: {}"'`
+- Detection: `grep -oP 'test:\s*"?\K[^"]+' "{WORK_ROOT}/config.md" | xargs -I{} sh -c 'command -v {} || echo "MISSING: {}"'`
 - Fix: Report as CRITICAL. Create intake item to fix config.md or install missing tool.
 
 **Anti-pattern E: Duplicate backlog item slugs**
-- Detection: `ls backlog/*.md | sed 's|.*/||;s|\.md||' | sort | uniq -d`
+- Detection: `ls "{WORK_ROOT}/backlog"/*.md | sed 's|.*/||;s|\.md||' | sort | uniq -d`
 - Fix: Rename duplicates with suffix `-v2`, `-v3`. Update backlog.md index.
 
 ---
@@ -98,6 +98,39 @@ auto_fixes_applied: [description]
 
 ---
 
+## Preconditions
+
+```bash
+# --- Precondition 1: Config existuje ---
+if [ ! -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 2: State existuje ---
+if [ ! -f "{WORK_ROOT}/state.md" ]; then
+  echo "STOP: {WORK_ROOT}/state.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 3: Backlog struktura existuje ---
+if [ ! -f "{WORK_ROOT}/backlog.md" ]; then
+  echo "WARN: {WORK_ROOT}/backlog.md not found — check will auto-regenerate it"
+fi
+
+# --- Precondition 4: Templates existují ---
+if [ ! -d "{WORK_ROOT}/templates" ]; then
+  echo "WARN: {WORK_ROOT}/templates directory not found"
+fi
+
+# --- Precondition 5: Reports directory exists ---
+mkdir -p "{WORK_ROOT}/reports"
+```
+
+**Dependency chain:** `(workspace state)` → [fabric-check] → `fabric-loop` (uses check status to decide pipeline continuation)
+
+---
+
 ## Status taxonomie (z config.md)
 
 Backlog statusy musí být:
@@ -106,6 +139,35 @@ Backlog statusy musí být:
 ---
 
 ## Postup
+
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="closing"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-check. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$BACKLOG_FILE"
+# validate_path "$REPORT_PATH"
+```
 
 ### 1) Strukturální integrita workspace
 
@@ -133,11 +195,28 @@ Pokud chybí → WARNING + intake.
 
 ### 3) Backlog item schema audit
 
+**K2 Fix: Backlog Audit with Counter**
+
+```bash
+MAX_FINDINGS=${MAX_FINDINGS:-500}
+FINDING_COUNTER=0
+```
+
 Z `{WORK_ROOT}/config.md` načti kontrakty:
 - `SCHEMA.backlog_item`
 - `ENUMS.statuses`, `ENUMS.tiers`, `ENUMS.efforts`, `ENUMS.types`
 
 Pro každý `{WORK_ROOT}/backlog/*.md` (mimo `backlog/done/`):
+```bash
+for item_file in {WORK_ROOT}/backlog/*.md; do
+  FINDING_COUNTER=$((FINDING_COUNTER + 1))
+  if [ "$FINDING_COUNTER" -ge "$MAX_FINDINGS" ]; then
+    echo "WARN: max audit findings reached ($FINDING_COUNTER/$MAX_FINDINGS)"
+    break
+  fi
+  # ... validate item schema
+done
+```
 - parse YAML frontmatter
 - ověř povinné klíče:
   - `schema`, `id`, `title`, `type`, `tier`, `status`, `effort`, `created`, `updated`, `source`, `prio`
@@ -646,7 +725,21 @@ Workspace audit found 2 CRITICAL issues (missing test command, stale process map
 
 ## Self-check
 
-- report existuje
-- pokud byly auto-fixes, jsou popsány
-- pro každý CRITICAL existuje intake item
-- audit report má všechny povinné sekce: Summary, Metrics, Findings (tabulka se Severity+Confidence), Auto-fixes, Intake items, Warnings
+### Existence checks
+- [ ] Report existuje: `{WORK_ROOT}/reports/check-{YYYY-MM-DD}.md`
+- [ ] Report má validní YAML frontmatter se schematem `fabric.report.v1`
+- [ ] Všechny referované intake items existují v `{WORK_ROOT}/intake/` (pokud CRITICAL findings)
+- [ ] Protocol log má START a END záznam s `skill: check`
+
+### Quality checks
+- [ ] Audit report má všechny povinné sekce: Summary, Metrics, Findings (tabulka se Severity+Confidence), Auto-fixes, Intake items, Warnings
+- [ ] Pokud byly auto-fixes, jsou konkrétně popsány v reportu (soubor + before/after)
+- [ ] Pro každý CRITICAL finding existuje intake item s odkazem (`source: check`, `linked_finding: {finding_id}`)
+- [ ] Findings tabulka má sloupce: Finding, Severity, Confidence, Location (file:line), Auto-fix applied, Status
+- [ ] Pokud audit PASS, report obsahuje summary: `0 CRITICAL, N WARN, M INFO`
+
+### Invariants
+- [ ] Žádný soubor mimo `{WORK_ROOT}/reports/` a `{WORK_ROOT}/intake/` nebyl modifikován (fabric-check je read-only audit)
+- [ ] Backlog.md NENÍ modifikován (audit nesmí měnit backlog bez intake item)
+- [ ] State.md NENÍ modifikován
+- [ ] Protocol log má START i END záznam

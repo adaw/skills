@@ -24,6 +24,32 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 `fabric-docs` je konzervativní: **nepřidává vymyšlené informace**.
 
+## Preconditions — State & Phase Validation
+
+**PŘED jakoukoli prací ověř:**
+
+```bash
+# 1. Verify state.md exists
+if [ ! -f "{WORK_ROOT}/state.md" ]; then
+  echo "STOP: {WORK_ROOT}/state.md not found — run fabric-init first"
+  exit 1
+fi
+
+# 2. Verify phase: fabric-docs runs in implementation/closing phases
+PHASE=$(grep -E '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if ! echo "$PHASE" | grep -qE '^(implementation|closing)$'; then
+  echo "WARN: fabric-docs should run in implementation or closing phase, but phase='$PHASE' — continuing with caution"
+fi
+
+# 3. Verify config.md has DOCS_ROOT defined
+if ! grep -q '^DOCS_ROOT:' "{WORK_ROOT}/config.md"; then
+  echo "STOP: config.md missing DOCS_ROOT variable"
+  exit 1
+fi
+```
+
+---
+
 ## Downstream Contract (WQ7 fix)
 
 **Which downstream skills read the docs report and what fields they consume:**
@@ -36,6 +62,12 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 - **fabric-review** reads:
   - `API Surface Delta` section → New/Changed/Removed endpoints to validate against backlog
   - `Validation Results` section → Broken link count (must be 0)
+
+---
+
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.
 
 ---
 
@@ -59,6 +91,35 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 ## Postup
 
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="closing"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-docs. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$BACKLOG_FILE"
+# validate_path "$DOC_PATH"
+```
+
 ### 1) Načti context
 
 1. Otevři poslední `close` report a vylistuj:
@@ -69,6 +130,38 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
    - najdi dotčené soubory (sekce „Dotčené soubory” nebo diff, pokud existuje)
 
 **MINIMUM:** seznam ≥1 merged item(u) s ID, title, a dotčenými soubory
+
+### K2 Fix: Loop Termination Guard
+
+```bash
+MAX_DOC_UPDATES=${MAX_DOC_UPDATES:-500}
+DOC_UPDATE_COUNTER=0
+
+# Validate MAX_DOC_UPDATES is numeric (K2 tight validation)
+if ! echo "$MAX_DOC_UPDATES" | grep -qE '^[0-9]+$'; then
+  MAX_DOC_UPDATES=500
+  echo "WARN: MAX_DOC_UPDATES not numeric, reset to default (500)"
+fi
+```
+
+When updating documentation files, add termination guard:
+```bash
+while read -r doc_file; do
+  DOC_UPDATE_COUNTER=$((DOC_UPDATE_COUNTER + 1))
+
+  # Numeric validation of counter (K2 strict check)
+  if ! echo "$DOC_UPDATE_COUNTER" | grep -qE '^[0-9]+$'; then
+    DOC_UPDATE_COUNTER=0
+    echo "WARN: DOC_UPDATE_COUNTER corrupted, reset to 0"
+  fi
+
+  if [ "$DOC_UPDATE_COUNTER" -ge "$MAX_DOC_UPDATES" ]; then
+    echo "WARN: max documentation updates reached ($DOC_UPDATE_COUNTER/$MAX_DOC_UPDATES)"
+    break
+  fi
+  # ... process doc_file
+done
+```
 
 ### 1.1) Proaktivní code scanning (POVINNÉ)
 
@@ -468,10 +561,10 @@ Pro KAŽDÝ MUST_DOCUMENT item:
 - Pokud neexistuje → vytvoř nový
 - Aktualizuj s:
   - **Co:** Nová feature/API, změna konfigurace
-  - **Kde:** Cesta v kódu s explicitním linkováním: `src/llmem/api/routes/recall.py`
+  - **Kde:** Cesta v kódu s explicitním linkováním: `{CODE_ROOT}/{relative_path}` (EXAMPLE: `src/llmem/api/routes/recall.py`)
   - **Příklad:** Minimálně 1 runnable code example
   - **Parametry:** Pokud endpoint/func → popis ALL parametrů (povinné, typ, default)
-  - **Zpět na kód:** Odkaz "Source:" `[RecallService.recall()](../../src/llmem/services/recall.py#L42)`
+  - **Zpět na kód:** Odkaz "Source:" na GitHub/dokonce — (EXAMPLE: `[RecallService.recall()](../../src/llmem/services/recall.py#L42)`)
 
 **Anti-patterns with detection bash + fix procedures (WQ4):**
 
@@ -833,10 +926,15 @@ ADR: {vytvořen|nepotřebný}.
 - DELETE /old-memory (deprecated in ITEM-119)
 
 ## Updated Files
+
+<!--
+EXAMPLE (LLMem project specifics — adapt to your codebase):
+-->
+
 | File | Change | Code Reference | Status |
 |------|--------|-----------------|--------|
-| docs/api/recall.md | Added endpoint spec | src/llmem/api/routes/recall.py:L42-L78 | ✓ |
-| docs/README.md | Added recall command | — | ✓ |
+| {DOCS_ROOT}/api/recall.md | Added endpoint spec | {CODE_ROOT}/src/llmem/api/routes/recall.py:L42-L78 | ✓ |
+| {DOCS_ROOT}/README.md | Added recall command | — | ✓ |
 | CHANGELOG.md | Added [Unreleased] entries | — | ✓ |
 
 ## Docstring Quality Distribution
@@ -867,7 +965,7 @@ ADR: {vytvořen|nepotřebný}.
 - CHANGELOG.md: [Unreleased] entries added — **OK**
 
 ## ADR
-- **ADR-005:** Created — New recall scoring mechanism (docs/adr/0005-recall-scoring.md)
+- **ADR-005:** Created — New recall scoring mechanism ({DOCS_ROOT}/adr/0005-recall-scoring.md)
 
 ## TODO
 {Pokud nic: "Žádné pending items"

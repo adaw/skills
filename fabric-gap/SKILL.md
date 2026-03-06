@@ -69,6 +69,10 @@ A z toho vytvořit:
 
 ## Příklady vyplněných gap reportů
 
+### K10 Fix: Concrete Example with Real LLMem Data
+
+This section demonstrates what a completed gap report looks like with actual LLMem project data, showing all gap types, evidence, and priority calculations.
+
 ### Příklad 1: Gap Report — Security & Validation Gaps
 
 ```yaml
@@ -159,15 +163,112 @@ critical_gaps: 1
 
 ---
 
+## Preconditions
+
+```bash
+# --- Precondition 1: Config existuje ---
+if [ ! -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 2: Vision existuje ---
+if [ ! -f "{WORK_ROOT}/vision.md" ]; then
+  echo "STOP: {WORK_ROOT}/vision.md not found — run fabric-vision first"
+  exit 1
+fi
+
+# --- Precondition 3: Backlog index existuje ---
+if [ ! -f "{WORK_ROOT}/backlog.md" ]; then
+  echo "STOP: {WORK_ROOT}/backlog.md not found — run fabric-intake first"
+  exit 1
+fi
+
+# --- Precondition 4: Code/Test/Docs directories exist ---
+CODE_ROOT="${CODE_ROOT:-.}"
+if [ ! -d "$CODE_ROOT" ]; then
+  echo "WARN: CODE_ROOT not found at $CODE_ROOT"
+fi
+```
+
+**Dependency chain:** `fabric-vision` → [fabric-gap] → `fabric-process`
+
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.
+
 ## Postup
 
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' “{WORK_ROOT}/state.md” | awk '{print $2}')
+EXPECTED_PHASES=”orientation”
+if ! echo “$EXPECTED_PHASES” | grep -qw “$CURRENT_PHASE”; then
+  echo “STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-gap. Expected: $EXPECTED_PHASES”
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing “..”
+validate_path() {
+  local INPUT_PATH=”$1”
+  if echo “$INPUT_PATH” | grep -qE '\.\.'; then
+    echo “STOP: path traversal detected in: $INPUT_PATH”
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path “$VISION_FILE”
+# validate_path “$GAP_REPORT”
+```
+
 ### 1) Extrahuj „capabilities” z vize
+
+**K2 Fix: Gap Detection Loop with Counter**
+
+```bash
+MAX_GAPS=${MAX_GAPS:-100}
+COUNTER=0
+CAPABILITIES=()
+
+# Validate MAX_GAPS is numeric
+if ! echo “$MAX_GAPS” | grep -qE '^[0-9]+$'; then
+  MAX_GAPS=100
+  echo “WARN: MAX_GAPS not numeric, reset to default (100)”
+fi
+```
 
 Z `vision.md` + `{VISIONS_ROOT}/*.md` vytáhni seznam:
 - pillars / goals / must-haves (z core vision)
 - rozšířené cíle a detaily z sub-vizí
 
 Výsledek: 5–30 capabilities (krátké názvy).
+
+Při iteraci přes capability zdroje:
+```bash
+while IFS= read -r cap; do
+  COUNTER=$((COUNTER + 1))
+
+  # Numeric validation of counter (K2 tight validation)
+  if ! echo “$COUNTER” | grep -qE '^[0-9]+$'; then
+    COUNTER=0
+    echo “WARN: COUNTER corrupted, reset to 0”
+  fi
+
+  if [ “$COUNTER” -ge “$MAX_GAPS” ]; then
+    echo “WARN: max gap detection iterations reached ($COUNTER/$MAX_GAPS)”
+    break
+  fi
+  # ... process capability
+  CAPABILITIES+=(“$cap”)
+done
+```
 
 ### 2) Mapuj backlog coverage
 
@@ -597,43 +698,27 @@ Run this to get a structured summary of ALL gap types. Proceed to intake item cr
 
 ## Self-check (with BLOCKING validation)
 
-- report existuje v `{WORK_ROOT}/reports/gap-{YYYY-MM-DD}.md`
-- report obsahuje: Vision↔Backlog gaps, Backlog↔Code gaps, Code↔Tests gaps, Docs drift, Security/Operational gaps
-- každé CRITICAL/HIGH gap má buď intake item, nebo explicitní vysvětlení proč ne
-- počet intake items: 3–10
+### Existence checks
+- [ ] Report existuje: `{WORK_ROOT}/reports/gap-{YYYY-MM-DD}.md`
+- [ ] Report má validní YAML frontmatter se schematem `fabric.report.v1`
+- [ ] Všechny CRITICAL/HIGH gaps mají odpovídající intake items v `{WORK_ROOT}/intake/`
+- [ ] Protocol log má START a END záznam s `skill: gap`
 
-**BLOCKING Validation (WQ10 fix):**
+### Quality checks
+- [ ] Report obsahuje všechny povinné sekce: Summary, Vision↔Backlog gaps, Backlog↔Code gaps, Code↔Tests gaps, Docs drift, Security/Operational gaps, Intake Items
+- [ ] Gap findings tabulka má sloupce: Gap Type, Severity (CRITICAL/HIGH/MEDIUM/LOW), Confidence (%), Root cause, Evidence (file:line)
+- [ ] Každé CRITICAL gap má buď intake item, nebo explicitní vysvětlení proč ne
+- [ ] Počet intake items: 3–10 (guardrail pro spam prevention)
+- [ ] BLOCKING validace PASS:
+  ```bash
+  grep -q "^## Summary" $REPORT && grep -q "^## Gap Analysis" $REPORT && grep -q "^## Intake Items" $REPORT
+  ```
 
-```bash
-# Validate gap report structure
-REPORT="{WORK_ROOT}/reports/gap-{YYYY-MM-DD}.md"
-if [ ! -f "$REPORT" ]; then
-  echo "FAIL: Gap report does not exist"
-  exit 1
-fi
-
-# Check required sections
-for section in "Summary" "Gap Analysis" "Intake Items"; do
-  if ! grep -q "^## $section" "$REPORT"; then
-    echo "FAIL: Report missing required section: $section"
-    exit 1
-  fi
-done
-
-# Check that ALL findings have severity + confidence + root_cause
-FINDING_COUNT=$(grep -c "^| " "$REPORT" || echo 0)
-if [ "$FINDING_COUNT" -lt 1 ]; then
-  echo "FAIL: Report has no findings table"
-  exit 1
-fi
-
-# Validate CRITICAL findings create intake items
-CRITICAL_COUNT=$(grep -c "CRITICAL" "$REPORT" || echo 0)
-INTAKE_COUNT=$(ls {WORK_ROOT}/intake/gap-* 2>/dev/null | wc -l)
-if [ "$CRITICAL_COUNT" -gt 0 ] && [ "$INTAKE_COUNT" -lt "$CRITICAL_COUNT" ]; then
-  echo "FAIL: CRITICAL findings present but not all have intake items"
-  exit 1
-fi
+### Invariants
+- [ ] Žádný soubor mimo `{WORK_ROOT}/reports/` a `{WORK_ROOT}/intake/` nebyl modifikován (audit skill)
+- [ ] Backlog.md NENÍ modifikován (fabric-gap jen detekuje, neměnit)
+- [ ] Code files NEJSOU modifikován (read-only analýza)
+- [ ] Protocol log má START i END záznam
 
 echo "PASS: Gap report validation successful"
 exit 0

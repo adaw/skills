@@ -8,6 +8,40 @@ description: "Převést READY/DESIGN backlog item na implementační specifikaci
 
 ---
 
+## K2 Fix: Design Section Counter
+
+```bash
+MAX_COMPONENTS=${MAX_COMPONENTS:-50}
+COMPONENT_COUNTER=0
+
+# Validate MAX_COMPONENTS is numeric (K2 tight validation)
+if ! echo "$MAX_COMPONENTS" | grep -qE '^[0-9]+$'; then
+  MAX_COMPONENTS=50
+  echo "WARN: MAX_COMPONENTS not numeric, reset to default (50)"
+fi
+```
+
+When iterating through components, API methods, or test cases in design:
+```bash
+while read -r component; do
+  COMPONENT_COUNTER=$((COMPONENT_COUNTER + 1))
+
+  # Numeric validation of counter (K2 strict check)
+  if ! echo "$COMPONENT_COUNTER" | grep -qE '^[0-9]+$'; then
+    COMPONENT_COUNTER=0
+    echo "WARN: COMPONENT_COUNTER corrupted, reset to 0"
+  fi
+
+  if [ "$COMPONENT_COUNTER" -ge "$MAX_COMPONENTS" ]; then
+    echo "WARN: max components reached ($COMPONENT_COUNTER/$MAX_COMPONENTS)"
+    break
+  fi
+  # ... process component
+done
+```
+
+---
+
 ## §1 — Účel
 
 Převést backlog item (Task/Bug/Epic) na **detailní implementační specifikaci**, ze které může
@@ -148,6 +182,12 @@ fabric-init → fabric-intake → fabric-prio → [fabric-design] → fabric-ana
 
 ---
 
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.
+
+---
+
 ## §6 — Deterministic FAST PATH
 
 ```bash
@@ -165,6 +205,35 @@ echo "Project language: ${PROJECT_LANG:-unknown}"
 ---
 
 ## §7 — Postup (JÁDRO SKILLU — zde žije kvalita práce)
+
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="planning"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-design. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$TASK_FILE"
+# validate_path "$DESIGN_OUTPUT"
+```
 
 ### 7.1) D1: Pochop kontext (VERIFY-FIRST)
 

@@ -76,6 +76,62 @@ Výsledek musí být:
 
 ---
 
+## K2 Fix: Intake Processing with Counter
+
+```bash
+MAX_INTAKE=${MAX_INTAKE:-100}
+INTAKE_COUNTER=0
+```
+
+## Preconditions
+
+```bash
+# --- Precondition 1: Config existuje ---
+if [ ! -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 2: State existuje ---
+if [ ! -f "{WORK_ROOT}/state.md" ]; then
+  echo "STOP: {WORK_ROOT}/state.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 3: Intake directory existuje ---
+if [ ! -d "{WORK_ROOT}/intake" ]; then
+  echo "STOP: {WORK_ROOT}/intake directory not found — run fabric-init first"
+  exit 1
+fi
+
+# When processing intake items, enforce counter:
+for intake_file in {WORK_ROOT}/intake/*.md; do
+  [ -f "$intake_file" ] || continue
+  INTAKE_COUNTER=$((INTAKE_COUNTER + 1))
+  if [ "$INTAKE_COUNTER" -ge "$MAX_INTAKE" ]; then
+    echo "WARN: max intake items reached ($INTAKE_COUNTER/$MAX_INTAKE)"
+    break
+  fi
+  # ... triage and process intake item
+done
+
+# --- Precondition 4: Templates existují ---
+if [ ! -d "{WORK_ROOT}/templates" ]; then
+  echo "STOP: {WORK_ROOT}/templates directory not found"
+  exit 1
+fi
+
+# --- Precondition 5: Vision existuje (for alignment check) ---
+if [ ! -f "{WORK_ROOT}/vision.md" ]; then
+  echo "WARN: {WORK_ROOT}/vision.md not found — intake items cannot be aligned to vision"
+fi
+```
+
+**Dependency chain:** `fabric-init` → [fabric-intake] → `fabric-prio`
+
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.
 
 ## FAST PATH (povinné) — scan → plan → apply (bez ručních přesunů/editací)
 
@@ -121,7 +177,90 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/reports/intake-plan
 
 ---
 
+## K10 Fix: Intake Processing Example with LLMem Data
+
+Here is a concrete example of intake triaging showing real LLMem items moving through the pipeline:
+
+### Example: Process 4 Intake Items in a Single Run
+
+**Input intake items in {WORK_ROOT}/intake/:**
+1. `intake/gap-g001-add-pydantic-validation.md` (from fabric-gap)
+2. `intake/generate-add-rate-limiting-middleware.md` (from fabric-generate)
+3. `intake/user-feedback-improve-recall-sorting.md` (user submission)
+4. `intake/check-missing-test-command.md` (from fabric-check)
+
+**Processing:**
+
+Item 1: Gap-driven (validation)
+- Source: gap
+- Title: "Add Pydantic validation to /capture/event endpoint"
+- Triage → Type: Bug (fixing security gap)
+- Assign: tier=T0, effort=M, status=READY
+- Create: `backlog/task-b042-add-validation.md`
+- Move: `intake/done/gap-g001-add-pydantic-validation.md`
+
+Item 2: Generate-driven (rate limiting)
+- Source: generate
+- Title: "Add rate limiting middleware"
+- Triage → Type: Task (feature)
+- Assign: tier=T0, effort=S, status=READY
+- Create: `backlog/task-b043-rate-limiting.md`
+- Move: `intake/done/generate-add-rate-limiting-middleware.md`
+
+Item 3: User feedback (recall sorting)
+- Source: user_feedback
+- Title: "Improve recall scoring to prioritize recent memories"
+- Triage → Type: Story (enhancement)
+- Unclear priority → Assign: tier=T2, effort=L, status=DESIGN
+- Open question: "Does this align with semantic embeddings vision goal?"
+- Create: `backlog/epic-e004-improve-recall.md`
+- Move: `intake/done/user-feedback-improve-recall-sorting.md`
+
+Item 4: Check audit (test command)
+- Source: check
+- Title: "Configure test command in config.md"
+- Triage → Type: Chore (tooling)
+- Assign: tier=T0, effort=XS, status=READY
+- Create: `backlog/chore-b044-config-test.md`
+- Move: `intake/done/check-missing-test-command.md`
+
+**Output:**
+- 4 new backlog items created (IDs: b042–b044)
+- Regenerated backlog.md index (4 items added, sorted by prio)
+- Intake report: intake-2026-03-06.md
+
+---
+
 ## Postup
+
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="orientation"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-intake. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$INTAKE_FILE"
+# validate_path "$BACKLOG_FILE"
+```
 
 ### 1) Načti config a připrav prostředí
 
@@ -361,11 +500,23 @@ Pokud se nepodaří vytvořit backlog item nebo je schema nekonzistentní:
 
 > **Naming clarifikace:** Intake **items** (soubory v `intake/`) pojmenovávej dle config konvence `{source}-{slug}-{date-or-id}.md`. Intake **report** (výstup skillu) je `reports/intake-{YYYY-MM-DD}.md`. Nezaměňuj.
 
-Před návratem:
-- žádné nezpracované soubory v `intake/` (vše přesunuto do `intake/done/` nebo ponecháno s vysvětlením)
-- pro každý zpracovaný intake existuje odpovídající backlog item v `backlog/`
-- `backlog.md` regenerován a odpovídá obsahu `backlog/*.md`
-- intake report existuje v `{WORK_ROOT}/reports/intake-{YYYY-MM-DD}.md`
-- duplicity rozpoznány (neztraceny, sloučeny nebo zamítnuty s důvodem)
+### Existence checks
+- [ ] Report existuje: `{WORK_ROOT}/reports/intake-{YYYY-MM-DD}.md`
+- [ ] Report má validní YAML frontmatter se schematem `fabric.report.v1`
+- [ ] Backlog index aktualizován: `{WORK_ROOT}/backlog.md` existuje a odpovídá `backlog/*.md`
+- [ ] Protocol log má START a END záznam s `skill: intake`
 
-Pokud ne → FAIL + vytvoř intake item `intake/intake-selfcheck-failed-{date}.md`.
+### Quality checks
+- [ ] **Všechny intake items zpracovány**: žádné nezpracované soubory v `intake/` (vše v `intake/done/` nebo vysvětleno v reportu)
+- [ ] **Pro každý zpracovaný intake existuje backlog item** v `backlog/` s matching `id` a `title`
+- [ ] **Duplicity odstraněny**: report obsahuje seznam duplikátů (neztraceny, sloučeny nebo zamítnuty s důvodem)
+- [ ] **Report má sekce**: Summary (N itemů zpracováno), Processing, Dedup/Merges, Backlog updates, Warnings
+- [ ] **Backlog.md je seřazený** dle PRIO (nebo config-specified ordering)
+
+### Invariants
+- [ ] Žádný soubor mimo `{WORK_ROOT}/intake/`, `{WORK_ROOT}/backlog/`, `{WORK_ROOT}/reports/` nebyl modifikován
+- [ ] State.md NENÍ modifikován (intake nesmí měnit phase/step)
+- [ ] Žádný backlog item smazán (jen stav změněn)
+- [ ] Protocol log má START i END záznam
+
+Pokud ANY check FAIL → **FAIL + vytvoř intake item `intake/intake-selfcheck-failed-{date}.md`**.

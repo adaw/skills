@@ -422,6 +422,35 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/plans/review-plan-{
 
 ## Postup
 
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="implementation"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-review. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$BRANCH_NAME"
+# validate_path "$REVIEW_PATH"
+```
+
 ### 1) Objective gates (must run)
 
 Na branchi:
@@ -1148,11 +1177,25 @@ exit 0
 
 ## Self-check
 
-- review report exists
-- **R1–R9 tabulka je přítomna** (ne jen souhrnné "All 5/5")
-- R9 status je recorded (SKIPPED / PASS / ALERT / CRITICAL)
-- backlog item has `review_report`
-- verdict is explicit (CLEAN/REWORK/REDESIGN)
+### Existence checks
+- [ ] Review report existuje: `{WORK_ROOT}/reports/review-{wip_item}-{YYYY-MM-DD}-{run_id}.md`
+- [ ] Report má validní YAML frontmatter se schematem `fabric.report.v1`
+- [ ] Backlog item `{WORK_ROOT}/backlog/{wip_item}.md` aktualizován s `review_report` polem
+- [ ] Protocol log má START a END záznam s `skill: review`
+
+### Quality checks
+- [ ] **R1–R9 tabulka je přítomna** (ne jen souhrnné „All 5/5") — každá dimenze má konkrétní nalezení
+- [ ] **R9 status je recorded**: SKIPPED / PASS / ALERT / CRITICAL pro každou dimenzi
+- [ ] **Verdict je explicitní**: CLEAN / REWORK / REDESIGN s vysvětlením
+- [ ] **Backlog item aktualizován**: `review_report: {report_path}` + `status: IN_REVIEW` (během) nebo `APPROVED` (po CLEAN verdict)
+- [ ] **Findings mají evidence**: Každé finding má soubor:linie nebo konkrétní evidence (ne „code quality issues")
+- [ ] **Risk hodnocení**: ALERT/CRITICAL findings mají risk/impact/mitigation
+
+### Invariants
+- [ ] Žádný soubor mimo `{WORK_ROOT}/reports/`, `{WORK_ROOT}/backlog/` nebyl modifikován (review je read-only code audit)
+- [ ] Git working tree NENÍ změněn (review nesmí commitovat)
+- [ ] State.md NENÍ modifikován (review jen analyzuje)
+- [ ] Protocol log má START i END záznam
 
 ---
 

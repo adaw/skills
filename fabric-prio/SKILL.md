@@ -54,6 +54,39 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 ---
 
+## Preconditions
+
+```bash
+# --- Precondition 1: Config existuje ---
+if [ ! -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 2: Backlog index existuje ---
+if [ ! -f "{WORK_ROOT}/backlog.md" ]; then
+  echo "STOP: {WORK_ROOT}/backlog.md not found — run fabric-intake first"
+  exit 1
+fi
+
+# --- Precondition 3: Vision existuje (for impact scoring) ---
+if [ ! -f "{WORK_ROOT}/vision.md" ]; then
+  echo "WARN: {WORK_ROOT}/vision.md not found — impact scoring will be limited"
+fi
+
+# --- Precondition 4: Backlog items directory exists ---
+if [ ! -d "{WORK_ROOT}/backlog" ]; then
+  echo "STOP: {WORK_ROOT}/backlog directory not found"
+  exit 1
+fi
+```
+
+**Dependency chain:** `fabric-intake` → [fabric-prio] → `fabric-sprint`
+
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.
+
 ## Scoring model (transparentní)
 
 Použij tento model:
@@ -80,6 +113,55 @@ Mapování effort → EffortScore:
 - TBD: nejdřív odhadni effort (preferovaně), jinak použij M jako fallback a zapiš WARNING
 
 > Výsledné PRIO normalizuj na integer (0–100). Důležitá je **relativní** škála.
+
+### K10 Fix: Concrete Priority Calculation Examples
+
+**Example 1: High-Priority Security Task**
+
+Item: `task-b042-add-input-validation.md`
+- Title: "Add Pydantic validation to /capture/event endpoint"
+- Type: Bug
+- Tier: T0
+- Status: READY
+- Effort: M (EffortScore=5)
+- Blocked by: none
+- Linked vision goal: "Reliability - Input validation"
+
+Scoring:
+- Impact = 8 (T0 = 8, + 1 security hotfix) = 9
+- Urgency = 9 (T0 = 7, +2 DOS vulnerability blocker) = 9
+- Readiness = 10 (READY status, AC complete)
+- EffortScore = 5 (M = 5)
+- Staleness = 0 (created this sprint)
+
+PRIO = (9×3) + (9×2) + (10×2) - (5×1) - (0×1) = 27 + 18 + 20 - 5 = **60 (URGENT)**
+
+**Example 2: Medium-Priority Refactoring**
+
+Item: `task-b031-refactor-triage-service.md`
+- Title: "Refactor triage service for better testability"
+- Type: Task
+- Tier: T2
+- Status: DESIGN
+- Effort: L (EffortScore=7)
+- Linked vision goal: "Code Quality"
+
+Scoring:
+- Impact = 4 (T2 = 4) = 4
+- Urgency = 3 (T2 = 3, not time-sensitive)
+- Readiness = 5 (DESIGN status, incomplete AC)
+- EffortScore = 7 (L = 7)
+- Staleness = 1 (40 days since update, 7-30d range)
+
+PRIO = (4×3) + (3×2) + (5×2) - (7×1) - (1×1) = 12 + 6 + 10 - 7 - 1 = **20 (MEDIUM)**
+
+**Sorting algorithm (after all PRIOs calculated):**
+
+1. Sort by PRIO descending
+2. Secondary sort by Tier (T0 → T3)
+3. Tertiary sort by Type (Bug/Security before Epic/Story for execution readiness)
+
+Result: Top 20 items in backlog.md are highest-value executable work.
 
 ---
 
@@ -120,6 +202,35 @@ To aktualizuje položky + regeneruje backlog index.
 
 ## Postup
 
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="orientation"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-prio. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$BACKLOG_FILE"
+# validate_path "$PRIO_REPORT"
+```
+
 ### 1) Načti vizi (pro Impact)
 
 Z `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` vytáhni:
@@ -128,9 +239,23 @@ Z `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` vytáhni:
 
 ### 2) Načti backlog items
 
+**K2 Fix: Backlog Item Iteration with Counter**
+
+```bash
+MAX_ITEMS=${MAX_ITEMS:-200}
+ITEM_COUNTER=0
+```
+
 Projdi všechny soubory:
 ```bash
-find {WORK_ROOT}/backlog -maxdepth 1 -type f -name "*.md"
+find {WORK_ROOT}/backlog -maxdepth 1 -type f -name "*.md" | while read backlog_file; do
+  ITEM_COUNTER=$((ITEM_COUNTER + 1))
+  if [ "$ITEM_COUNTER" -ge "$MAX_ITEMS" ]; then
+    echo "WARN: max backlog items reached ($ITEM_COUNTER/$MAX_ITEMS)"
+    break
+  fi
+  # ... process item
+done
 ```
 
 Pokud počet backlog itemů je velký (např. > 200), použij **dvoufázové skórování**, aby to škálovalo:
@@ -226,8 +351,23 @@ Seřaď:
 
 ## Self-check
 
-- Každý aktivní backlog item má `prio` integer
-- backlog.md je seřazený podle PRIO
-- report existuje
+### Existence checks
+- [ ] Report existuje: `{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md`
+- [ ] Report má validní YAML frontmatter se schematem `fabric.report.v1`
+- [ ] Backlog index aktualizován: `{WORK_ROOT}/backlog.md` reflektuje nové prio
+- [ ] Protocol log má START a END záznam s `skill: prio`
 
-Pokud ne → vytvoř intake item `intake/prio-failed-{date}.md` + CRITICAL v reportu.
+### Quality checks
+- [ ] **Každý aktivní backlog item má `prio` integer** (1–100, bez duplicit na stejné úrovni)
+- [ ] **Backlog.md je seřazený podle PRIO** (vzestupně nebo sestupně, konsistentně)
+- [ ] **Report obsahuje**: Summary (N itemů reprioritizováno), Before/After tabulka, Justification per item, Warnings
+- [ ] **Prio justifikace**: Každá velká změna (jump >20) má vysvětlení (risk/value/dependency)
+- [ ] **Backlog item metadatas aktualizovány** v `backlog/*.md` frontmatter: `prio: N`
+
+### Invariants
+- [ ] Žádný backlog item smazán nebo duplikován (jen prio změněn)
+- [ ] State.md NENÍ modifikován (prio nesmí měnit phase/step)
+- [ ] Config.md NENÍ modifikován
+- [ ] Protocol log má START i END záznam
+
+Pokud ANY check FAIL → **FAIL + vytvoř intake item `intake/prio-failed-{date}.md`** (CRITICAL v reportu).

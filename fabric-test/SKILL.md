@@ -212,6 +212,35 @@ T-101 AC checklist:
 
 ## Postup
 
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="implementation"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-test. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$TEST_FILE"
+# validate_path "$BRANCH_NAME"
+```
+
 1. Načti `state.md` → `id = wip_item`, `branch = wip_branch`
 2. Checkoutni branch (bez změn):
    ```bash
@@ -490,8 +519,20 @@ grep -rn "except Exception:" {TEST_ROOT} --include='*.py' | head -10
 
 ## Self-check
 
-- report existuje v `{WORK_ROOT}/reports/`
-- **Notes sekce je neprázdná** (alespoň 1 věta)
-- pokud FAIL, report obsahuje aspoň 1 jasný root cause nebo next action
-- pokud PASS, report říká kolik testů prošlo a co pokrývaly
-- **version field present** in YAML frontmatter
+### Existence checks
+- [ ] Report existuje: `{WORK_ROOT}/reports/test-{wip_item}-{YYYY-MM-DD}-{run_id}.md`
+- [ ] Report má validní YAML frontmatter se schematem `fabric.report.v1`
+- [ ] Protocol log má START záznam s `skill: test`
+- [ ] Protocol log má END záznam s `skill: test` a status OK/WARN/FAIL
+
+### Quality checks
+- [ ] Report obsahuje povinné sekce: Summary, Test Results, Coverage metrics, Warnings
+- [ ] **Notes sekce je neprázdná** (alespoň 1 věta vysvětlující výsledky)
+- [ ] Pokud FAIL, report obsahuje aspoň 1 jasný root cause nebo next action
+- [ ] Pokud PASS, report říká kolik testů prošlo a co pokrývaly
+- [ ] **version field present** in YAML frontmatter (`version: "1.0"`)
+
+### Invariants
+- [ ] Žádný soubor mimo `{WORK_ROOT}/` nebyl modifikován (fabric-test je read-only)
+- [ ] Backlog item `{WORK_ROOT}/backlog/{wip_item}.md` není smazán
+- [ ] Git working tree status není změněn (testy nesmí modifikovat kód)

@@ -14,6 +14,120 @@ description: "Convert Sprint Targets into Task Queue + per-task analyses with ex
 - Explicitně uvést **Constraints** (které ADR/spec ovlivňují task).
 - Když chybí informace → vytvořit intake item (clarification / blocker) místo vymýšlení.
 
+## K10 Fix: Per-task Analysis Example with Real LLMem Data
+
+Here is a concrete example of a completed per-task analysis for a Sprint-2 task:
+
+**File:** `{ANALYSES_ROOT}/T-TRI-02-analysis.md`
+
+```yaml
+---
+schema: fabric.report.v1
+kind: analysis
+version: "1.0"
+run_id: "analyze-2026-03-06-run42"
+created_at: "2026-03-06T10:15:00Z"
+task_id: "T-TRI-02"
+source_target: "BACKLOG-021"
+status: "READY"
+effort_estimate: "M"
+---
+
+# T-TRI-02 — Analysis (Triage Heuristics Implementation)
+
+## Goal
+
+Implement deterministic triage heuristics that extract secrets, PII, preferences, and decisions from ObservationEvents without LLM calls. Enable capture→triage→store pipeline with gating via allow_secrets=false default on recall.
+
+## 1. Constraints (POVINNÉ)
+
+| ADR/Spec | Requirement | How this task satisfies it |
+|----------|-------------|---------------------------|
+| D0001 (secrets-policy) | Secrets stored plaintext (MVP); allow_secrets=false by default on recall | Task adds secret detection patterns; gating applied in RecallService.filter_secrets() |
+| D0003 (event-sourcing) | All writes append to JSONL log before store mutation | CaptureService.capture() logs before calling triage heuristics |
+| D0004 (deterministic IDs) | IDs from content_hash, no LLM | Heuristics use regex only, hash computed in models.py |
+
+## 2. Data Flow (POVINNÉ)
+
+ASCII diagram:
+```
+ObservationEvent → [Secret/PII/Pref/Decision regex] → MemoryItems → Store/JSONL
+                 ↓ no match                                          ↓ error
+                 [log as UNKNOWN]                                  [retry]
+```
+
+## 3. Module Dependency Table
+
+| Module | Type | Upstream | Downstream | Risk |
+|--------|------|----------|-----------|------|
+| `src/llmem/triage/heuristics.py::triage_event()` | CREATE | `services/capture.py` | `models.MemoryItem` | MEDIUM |
+| `src/llmem/triage/patterns.py` | CREATE | `heuristics.py` | regex compilation | LOW |
+| `tests/test_triage_heuristics.py` | CREATE | pytest | — | LOW |
+
+## 4. Entity Lifecycle
+
+ObservationEvent → TRIAGED (heuristics extract) → STORED (upsert) → INDEXED (embedding) → RECALLED → EXPIRED
+
+## 5. Affected Processes
+
+Write Path (capture → triage → store) — heuristics is core to triage step. Test recommendation: `test_e2e_capture_to_triage_to_store`.
+
+## 6. Design & Pseudocode
+
+Implement `triage_event(event: ObservationEvent, instance_id: str) → list[MemoryItem]`:
+- Step 1: Detect secret (OpenAI, GitHub, AWS, Bearer, password)
+- Step 2: Detect PII (email, phone, SSN)
+- Step 3: Extract preference (patterns: "prefer", "avoid", "want")
+- Step 4: Extract decision (patterns: "decided", "plan to", "will")
+- Step 5: Return MemoryItem[] (tier, type, content_hash, instance_id)
+
+## 7. Alternatives
+
+| # | Approach | Complexity | Risk | ADR | Test | Total | Pros | Cons | Chosen |
+|---|----------|-----------|------|-----|------|-------|------|------|--------|
+| A | Regex-only heuristics (no LLM) | 2 | 1 | 5 | 5 | 18 | Fast, deterministic, no API calls | False positives possible | ✅ |
+| B | LLM-based extraction | 4 | 3 | 2 | 2 | 11 | High precision, context-aware | D0004 violation, cost, latency | — |
+
+## 8. Test Strategy
+
+**Unit Tests (≥3):**
+- `test_secret_detection_openai_key()`
+- `test_pii_detection_email()`
+- `test_preference_extraction_prefer_pattern()`
+
+**Integration Tests:**
+- `test_triage_with_real_patterns()`
+
+**E2E Tests:**
+- `test_e2e_capture_to_triage()`
+
+**Edge Cases:**
+- `test_triage_edge_empty_event()`
+- `test_triage_edge_unicode_normalization()`
+
+## 9. Effort Estimate
+
+FILES_TOUCHED=2 (heuristics.py, patterns.py); NEW_TESTS=8; MAX_COMPLEXITY=3
+→ Estimate: M (4-8 hours)
+
+## 10. Acceptance Criteria Mapping
+
+| AC | How Satisfied |
+|----|---------------|
+| Capture triggers triage | CaptureService.capture() calls triage_event() |
+| Secrets detected | test_secret_detection_openai_key PASS |
+| No LLM calls in hot path | Zero openai/anthropic imports in heuristics.py |
+
+## 11. Risks & Open Questions
+
+**Risk:** Regex false positives (e.g., AWS key pattern matches random strings)
+**Mitigation:** Test against 50+ real + 50+ synthetic non-matches (97% precision target)
+
+**Open:** Should heuristics normalize unicode before matching? (DESIGN, needs clarification)
+```
+
+---
+
 ## Downstream Contract (WQ7)
 
 **fabric-analyze** contracts with **downstream skills:**
@@ -49,6 +163,55 @@ description: "Convert Sprint Targets into Task Queue + per-task analyses with ex
 - `{ANALYSES_ROOT}/{task_id}-analysis.md` pro každý task v Task Queue
 - 0..N intake items v `{WORK_ROOT}/intake/` (clarifications / blockers)
 - `{WORK_ROOT}/reports/analyze-{YYYY-MM-DD}-{run_id}.md` (souhrn)
+
+## Preconditions
+
+```bash
+# --- Precondition 1: Config existuje ---
+if [ ! -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 2: State existuje ---
+if [ ! -f "{WORK_ROOT}/state.md" ]; then
+  echo "STOP: {WORK_ROOT}/state.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 3: Sprint plan existuje ---
+CURRENT_SPRINT=$(grep '^sprint:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}')
+if [ -z "$CURRENT_SPRINT" ]; then
+  echo "STOP: Current sprint not found in state.md"
+  exit 1
+fi
+
+SPRINT_FILE="{WORK_ROOT}/sprints/sprint-${CURRENT_SPRINT}.md"
+if [ ! -f "$SPRINT_FILE" ]; then
+  echo "STOP: Sprint plan $SPRINT_FILE not found — run fabric-sprint first"
+  exit 1
+fi
+
+# --- Precondition 4: Backlog index existuje ---
+if [ ! -f "{WORK_ROOT}/backlog.md" ]; then
+  echo "STOP: {WORK_ROOT}/backlog.md not found — run fabric-intake first"
+  exit 1
+fi
+
+# --- Precondition 5: Governance resources exist ---
+if [ ! -f "{WORK_ROOT}/decisions/INDEX.md" ]; then
+  echo "WARN: decisions/INDEX.md not found — governance constraints unavailable"
+fi
+if [ ! -f "{WORK_ROOT}/specs/INDEX.md" ]; then
+  echo "WARN: specs/INDEX.md not found — specs constraints unavailable"
+fi
+```
+
+**Dependency chain:** `fabric-sprint` → [fabric-analyze] → `fabric-implement`
+
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.
 
 ## Kanonická pravidla
 
@@ -870,6 +1033,35 @@ Calculation:
 
 ## Postup
 
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="planning"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-analyze. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$TASK_FILE"
+# validate_path "$ANALYSIS_FILE"
+```
+
 ### 0) Deterministická příprava (rychlá)
 
 ```bash
@@ -896,15 +1088,44 @@ fi
 
 **Co:** Rozložit targety na implementovatelné tasky s jasným scope a testovatelností.
 
+**K2 Fix: Loop termination with numeric validation**
+```bash
+# Counter initialization with MAX from config
+MAX_ANALYSIS_TASKS=${MAX_ANALYSIS_TASKS:-200}
+ANALYSIS_COUNTER=0
+
+# Validate MAX_ANALYSIS_TASKS is numeric (K2 tight validation)
+if ! echo "$MAX_ANALYSIS_TASKS" | grep -qE '^[0-9]+$'; then
+  MAX_ANALYSIS_TASKS=200
+  echo "WARN: MAX_ANALYSIS_TASKS not numeric, reset to default (200)"
+fi
+```
+
 **Size guard (P2 fix): Skip oversized backlog items to prevent parsing performance issues:**
 ```bash
-# Size guard: skip oversized backlog items (P2 fix)
-FILE_SIZE=$(wc -c < "{WORK_ROOT}/backlog/${target}.md" 2>/dev/null || echo 0)
-MAX_SIZE=102400  # 100KB
-if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
-  echo "WARN: backlog item ${target}.md exceeds ${MAX_SIZE} bytes — skipping"
-  continue
-fi
+# Per-target processing loop with counter guard
+for target in $TARGETS; do
+  ANALYSIS_COUNTER=$((ANALYSIS_COUNTER + 1))
+
+  # Numeric validation of counter (K2 strict check)
+  if ! echo "$ANALYSIS_COUNTER" | grep -qE '^[0-9]+$'; then
+    ANALYSIS_COUNTER=0
+    echo "WARN: ANALYSIS_COUNTER corrupted, reset to 0"
+  fi
+
+  if [ "$ANALYSIS_COUNTER" -gt "$MAX_ANALYSIS_TASKS" ]; then
+    echo "WARN: max analysis iterations ($ANALYSIS_COUNTER) reached — stopping"
+    break
+  fi
+
+  # Size guard: skip oversized backlog items (P2 fix)
+  FILE_SIZE=$(wc -c < "{WORK_ROOT}/backlog/${target}.md" 2>/dev/null || echo 0)
+  MAX_SIZE=102400  # 100KB
+  if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
+    echo "WARN: backlog item ${target}.md exceeds ${MAX_SIZE} bytes — skipping"
+    continue
+  fi
+done
 ```
 
 Pro každý target:
@@ -1299,7 +1520,17 @@ python skills/fabric-init/tools/fabric.py plan-apply --plan "{WORK_ROOT}/sprints
   - jaké ADR/SPEC constraints byly použity
   - jaké clarifications jsi vytvořil do intake
 
-Ulož do `{WORK_ROOT}/reports/analyze-{YYYY-MM-DD}-{run_id}.md` (schema `fabric.report.v1`).
+Ulož do `{WORK_ROOT}/reports/analyze-{YYYY-MM-DD}-{run_id}.md` (schema `fabric.report.v1`) s kompletním frontmatter:
+
+```yaml
+---
+schema: fabric.report.v1
+kind: analyze
+run_id: "analyze-{YYYY-MM-DD}-{RUN_ID}"
+created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
+status: PASS
+---
+```
 
 ## Self-check (VŠECHNY položky MUSÍ být ✅ ANTES publish)
 

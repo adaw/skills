@@ -228,6 +228,54 @@ fi
 
 ## §7 — Postup (JÁDRO SKILLU — zde žije kvalita práce)
 
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="orientation"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-process. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$PROCESS_FILE"
+# validate_path "$MAP_PATH"
+```
+
+### K2 Fix: External Process Extraction with Counter
+
+```bash
+MAX_PROCESSES=${MAX_PROCESSES:-200}
+PROCESS_COUNTER=0
+```
+
+When iterating over routes/commands found during extraction:
+```bash
+while read -r route; do
+  PROCESS_COUNTER=$((PROCESS_COUNTER + 1))
+  if [ "$PROCESS_COUNTER" -ge "$MAX_PROCESSES" ]; then
+    echo "WARN: max process extraction iterations reached ($PROCESS_COUNTER/$MAX_PROCESSES)"
+    break
+  fi
+  # ... extract process details
+done
+```
+
 ### 7.1) P1: Extract External Processes
 
 **Co:** Identifikuj VŠECHNY vnější interakce — kdo systém používá, přes jaké rozhraní, s jakým výsledkem.

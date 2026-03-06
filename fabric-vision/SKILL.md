@@ -23,6 +23,72 @@ Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
 Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 - loguj `--event error --status ERROR` a dej krátké `--message` (1 věta).
 
+## K10 Fix: Vision Analysis Example with Real LLMem Data
+
+Here is a concrete example of a completed vision report for LLMem:
+
+**File:** `{WORK_ROOT}/reports/vision-2026-03-06.md`
+
+```yaml
+---
+schema: fabric.report.v1
+kind: vision
+version: "1.0"
+created_at: "2026-03-06T09:00:00Z"
+status: "COMPLETE"
+---
+
+# LLMem Vision Analysis Report
+
+## Project Purpose
+
+LLMem is a local-first long-term memory infrastructure for AI agents. It captures observations from agent runtimes, triages them into memories using deterministic heuristics, and provides a recall API returning budgeted XML injection blocks.
+
+## Pillars & Assessment
+
+### Pillar 1: Local-First Storage
+
+**Goals:** ≥2 (MVP InMemoryBackend, Production Qdrant)
+**Backlog Coverage:** 2/2 (100%)
+**Done Items:** 1 (InMemoryBackend complete)
+**Verdict:** ON_TRACK (Qdrant planned for T1)
+
+### Pillar 2: Deterministic Triage
+
+**Goals:** ≥4 (secret, PII, preference, decision detection)
+**Backlog Coverage:** 4/4 (100%)
+**Done Items:** 0 (Triage implementation is Sprint-2 target)
+**Verdict:** ON_TRACK (Sprint-2 critical path)
+
+### Pillar 3: Security & Governance
+
+**Goals:** ≥3 (secrets gating, access control, audit logging)
+**Backlog Coverage:** 3/3 (100%)
+**Done Items:** 1 (secrets policy ADR-001 approved)
+**Verdict:** CAUTION (Access control not yet designed)
+
+## Success Metrics
+
+| Metric | Target | Status | Deadline |
+|--------|--------|--------|----------|
+| Core API stable | MVP (4 endpoints) | 3/4 complete | Q1 2026 |
+| Test coverage | ≥70% on core modules | 62% (triage: 0%) | Q1 2026 |
+| Documentation | Full API + examples | 40% (design phase) | Q2 2026 |
+| Performance | <100ms /recall latency | TBD (benchmark planned) | Q2 2026 |
+
+## Risks & Mitigations
+
+| Risk | Impact | Mitigation | Owner |
+|------|--------|-----------|-------|
+| Regex false positives in triage | LOW (false memory creation) | 97% precision target in test strategy | T-TRI team |
+| Qdrant deployment complexity | MEDIUM (ops burden) | Docker compose template, E2E test | DevOps (T1) |
+| Token budget exhaustion | HIGH (truncated recall) | Smart prioritization in recall/scoring.py | Core team |
+
+## Vision Realism Verdict
+
+REALISTIC — 5 foundational tasks (T-TRI, T-CAP, T-TEST, T-API, T-DOC) fit Sprint-2 (40h capacity). Track pillar 3 (security) closely — access control design needed by T1.
+```
+
 ## Downstream Contract (WQ7 fix)
 
 **Which downstream skills consume the vision report and which fields they read:**
@@ -62,7 +128,68 @@ Bez kvalitní vize se backlog rozpadne na náhodnou práci.
 
 ---
 
+## Preconditions
+
+```bash
+# --- Precondition 1: Config existuje ---
+if [ ! -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 2: State existuje ---
+if [ ! -f "{WORK_ROOT}/state.md" ]; then
+  echo "STOP: {WORK_ROOT}/state.md not found — run fabric-init first"
+  exit 1
+fi
+
+# --- Precondition 3: Vision dokument existuje ---
+if [ ! -f "{WORK_ROOT}/vision.md" ]; then
+  echo "WARN: {WORK_ROOT}/vision.md not found — vision skill cannot validate non-existent vision"
+  echo "STOP: Run fabric-init with vision template first"
+  exit 1
+fi
+
+# --- Precondition 4: Visions directory exists (for sub-visions) ---
+mkdir -p "{WORK_ROOT}/fabric/visions"
+```
+
+**Dependency chain:** `fabric-init` → [fabric-vision] → `fabric-gap` (and others)
+
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.
+
 ## Postup
+
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="orientation"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-vision. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$VISION_FILE"
+# validate_path "$VISION_REPORT"
+```
 
 ### 1) Načti a strukturalizuj vizi — Operacionalizovaná extrakce
 

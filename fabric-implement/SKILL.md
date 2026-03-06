@@ -252,6 +252,35 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/reports/implement-p
 
 ## Postup
 
+### State Validation (K1: State Machine)
+
+```bash
+# State validation — check current phase is compatible with this skill
+CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+EXPECTED_PHASES="implementation"
+if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-implement. Expected: $EXPECTED_PHASES"
+  exit 1
+fi
+```
+
+### Path Traversal Guard (K7: Input Validation)
+
+```bash
+# Path traversal guard — reject any input containing ".."
+validate_path() {
+  local INPUT_PATH="$1"
+  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
+    echo "STOP: path traversal detected in: $INPUT_PATH"
+    exit 1
+  fi
+}
+
+# Apply to all dynamic path inputs:
+# validate_path "$TASK_FILE"
+# validate_path "$BRANCH_NAME"
+```
+
 ### 1) Vyber task (WIP=1)
 
 1. Načti `state.md`.
@@ -480,28 +509,29 @@ Pokud task mění veřejné rozhraní, MUSÍ mít odpovídající integrační t
 
 | Typ změny | Testovací soubor | Vzor testu |
 |-----------|-----------------|------------|
-| Nový/změněný API endpoint | `tests/test_api_{module}.py` | `async def test_{endpoint}_{method}(): response = client.{method}("/path"); assert response.status_code == {expected}` |
-| Nový/změněný CLI command | `tests/test_cli.py` | `def test_cli_{command}(): result = runner.invoke(app, ["{command}", ...]); assert result.exit_code == 0` |
-| Nový/změněný service | `tests/test_{service}_integration.py` | `def test_{service}_{operation}(): svc = {Service}(real_backend); result = svc.{method}(input); assert result == expected` |
-| Nový storage backend | `tests/test_{backend}_integration.py` | `def test_{backend}_roundtrip(): backend.store(item); retrieved = backend.get(item.id); assert retrieved == item` |
-| Změna modelu (Pydantic) | `tests/test_models.py` | `def test_{model}_validation(): valid = {Model}(**valid_data); assert valid.field == expected` |
-| Změna triage/heuristics | `tests/test_triage_{pattern}.py` | `def test_{pattern}_detection(): result = triage(input_with_pattern); assert result.tier == expected` |
+| Nový/změněný API endpoint | `{TEST_ROOT}/test_api_{module}.py` | `async def test_{endpoint}_{method}(): response = client.{method}("/path"); assert response.status_code == {expected}` |
+| Nový/změněný CLI command | `{TEST_ROOT}/test_cli.py` | `def test_cli_{command}(): result = runner.invoke(app, ["{command}", ...]); assert result.exit_code == 0` |
+| Nový/změněný service | `{TEST_ROOT}/test_{service}_integration.py` | `def test_{service}_{operation}(): svc = {Service}(real_backend); result = svc.{method}(input); assert result == expected` |
+| Nový storage backend | `{TEST_ROOT}/test_{backend}_integration.py` | `def test_{backend}_roundtrip(): backend.store(item); retrieved = backend.get(item.id); assert retrieved == item` |
+| Změna modelu (Pydantic) | `{TEST_ROOT}/test_models.py` | `def test_{model}_validation(): valid = {Model}(**valid_data); assert valid.field == expected` |
+| Změna triage/heuristics | `{TEST_ROOT}/test_triage_{pattern}.py` | `def test_{pattern}_detection(): result = triage(input_with_pattern); assert result.tier == expected` |
 
 **Enforcement check (POVINNÉ)**:
 ```bash
 # Po zapsání kódu ověř, že test soubor existuje
+TEST_ROOT="${TEST_ROOT:-.}"  # From config.md, default to current dir
 AFFECTED_FILES=$(git diff --name-only "${main_branch}...HEAD" -- '*.py' | grep -v test)
 for FILE in $AFFECTED_FILES; do
   # Detekuj typ souboru a požadovaný test soubor
   if echo "$FILE" | grep -qE 'api/.*\.py'; then
-    TEST_FILE="tests/test_api_$(basename "$FILE" .py).py"
+    TEST_FILE="${TEST_ROOT}/test_api_$(basename "$FILE" .py).py"
   elif echo "$FILE" | grep -qE 'services/.*\.py'; then
-    TEST_FILE="tests/test_$(basename "$FILE" .py)_integration.py"
+    TEST_FILE="${TEST_ROOT}/test_$(basename "$FILE" .py)_integration.py"
   elif echo "$FILE" | grep -qE 'triage/.*\.py'; then
-    TEST_FILE="tests/test_triage_$(basename "$FILE" .py).py"
+    TEST_FILE="${TEST_ROOT}/test_triage_$(basename "$FILE" .py).py"
   else
     # Ostatní moduly — alespoň test_{module}.py
-    TEST_FILE="tests/test_$(basename "$FILE" .py).py"
+    TEST_FILE="${TEST_ROOT}/test_$(basename "$FILE" .py).py"
   fi
 
   # Ověř, že test soubor existuje
@@ -907,34 +937,29 @@ if [ $TEST_EXIT -eq 124 ]; then echo "TIMEOUT: test exceeded 300s"; GATE_RESULT=
 
 ## Self-check
 
-**BLOCKING ENFORCEMENT (WQ10: CRITICAL findings MUST fail implementation):**
+### Existence checks
+- [ ] Report existuje: `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md`
+- [ ] Report má validní YAML frontmatter se schematem `fabric.report.v1`
+- [ ] Git branch `{wip_branch}` existuje a obsahuje commit(y)
+- [ ] Backlog item `{WORK_ROOT}/backlog/{wip_item}.md` existuje a je aktualizován
+- [ ] Protocol log má START a END záznam s `skill: implement`
 
-Před návratem — VŠECHNY položky MUSÍ být ✅:
-
-- ❌ CRITICAL: Working tree DIRTY (git status shows changes) → **EXIT 1** (commit all changes first)
-  ```bash
-  if [ -n "$(git status --porcelain)" ]; then
-    echo "ERROR: working tree not clean — commit or stash changes"
-    exit 1
-  fi
-  ```
-- ❌ CRITICAL: `COMMANDS.test` FAIL → **EXIT 1** (coverage metrics invalid, cannot proceed to review)
+### Quality checks (BLOCKING ENFORCEMENT)
+- [ ] **Report obsahuje povinné sekce**: Summary, Changes, Test Results, Coverage metrics
+- [ ] **Working tree CLEAN** (git status --porcelain je prázdný) — všechny změny committed
+- [ ] **COMMANDS.test PASS** — testy musí projít, ne jen kompilace
   ```bash
   timeout 300 {COMMANDS.test}
-  TEST_EXIT=$?
-  if [ $TEST_EXIT -ne 0 ]; then
-    echo "ERROR: tests FAIL — fix before commit"
-    exit 1
-  fi
+  if [ $? -ne 0 ]; then echo "FAIL: tests"; exit 1; fi
   ```
-- ❌ CRITICAL: Coverage <60% for CORE modules (services/, api/, recall/, triage/) → **EXIT 1** (unacceptable, must add tests)
-- ❌ CRITICAL: Backlog item status NOT `IN_REVIEW` after commit → **EXIT 1** (downstream review will skip)
-- ❌ CRITICAL: Baseline tests were already failing → **EXIT 1** (do not introduce new regressions)
-- ❌ CRITICAL: Stubs/pass/TODO found in production code → **EXIT 1** (incomplete implementation)
+- [ ] **Coverage ≥60%** pro CORE moduly (services/, api/, recall/, triage/)
+- [ ] **Žádné stubs/pass/TODO** v production kódu (jen v testech)
+- [ ] **Backlog item status = IN_REVIEW** po commit (pro downstream review)
+- [ ] **Baseline tests nezhoršeny** — neintrodukoval jsem nové regrese
 
-**Non-critical (warnings that don't fail, but document):**
-- ⚠️ WARN: Coverage <60% for non-core modules (acceptable, but log)
-- ⚠️ WARN: Lint/format skipped (bootstrap mode)
-- ⚠️ WARN: Pre-existing fixups committed separately (note in report)
+### Invariants
+- [ ] Žádný soubor mimo `{CODE_ROOT}/` modifikován (exception: backlog + report)
+- [ ] state.md aktualizován: `wip_item` a `wip_branch` nastaveny
+- [ ] Commit message má format: `feat/fix({task_id}): {popis}` s task ID odkazem
 
-Pokud ne → **FAIL + vytvoř intake item `intake/implement-selfcheck-failed-{id}.md`**.
+Pokud self-check FAIL → **EXIT 1 + vytvoř intake item `intake/implement-selfcheck-failed-{id}.md`**.
