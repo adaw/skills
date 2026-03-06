@@ -1,6 +1,8 @@
 ---
 name: fabric-gap
 description: "Detect gaps between vision, backlog, and reality (code, tests, docs). Produces a gap report and generates actionable intake items (source=gap) for the most important missing pieces (features, tests, docs, security, reliability)."
+depends_on:
+  - fabric-process
 ---
 
 # GAP — Mezera mezi vizí, backlogem a realitou
@@ -35,6 +37,7 @@ A z toho vytvořit:
 - `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md`
 - `{WORK_ROOT}/backlog.md` + `{WORK_ROOT}/backlog/*.md`
 - `{CODE_ROOT}/`, `{TEST_ROOT}/`, `{DOCS_ROOT}/`
+- `{WORK_ROOT}/fabric/processes/process-map.md` (optional)
 
 ---
 
@@ -144,6 +147,72 @@ Každý identifikovaný gap musí mít:
 - Severity (CRITICAL/HIGH/MEDIUM/LOW)
 - Doporučená akce (ne jen “opravit” — konkrétně co a kde)
 - Ověřitelné kritérium (jak poznat že gap je uzavřen)
+
+### 5.5) Process Coverage Check
+
+Ověř, že všechny zdokumentované externí procesy mají implementaci v kódu.
+
+```bash
+PROCESS_MAP=”{WORK_ROOT}/fabric/processes/process-map.md”
+
+if [ ! -f “$PROCESS_MAP” ]; then
+  echo “WARN: $PROCESS_MAP does not exist (optional input), skipping process coverage check”
+else
+  echo “Checking process coverage...”
+
+  # Extrahuj dokumentované externí procesy ze process-map.md
+  # Format: Předpokládá seznam externích procesů s jejich identifikátory
+  DOCUMENTED_PROCESSES=$(grep -E '^- \[' “$PROCESS_MAP” | sed 's/^- \[//;s/\].*//' | sort | uniq)
+
+  PROCESS_GAPS=0
+  while IFS= read -r proc_id; do
+    [ -z “$proc_id” ] && continue
+
+    # Ověř, že proces má implementaci v {CODE_ROOT}
+    # Hledej v config, handler registry, nebo process-specific modulech
+    PROC_FOUND=$(grep -r “process.*$proc_id\|$proc_id.*handler” {CODE_ROOT}/ --include='*.py' 2>/dev/null | grep -v test | grep -v __pycache__ | head -1)
+
+    if [ -z “$PROC_FOUND” ]; then
+      echo “GAP: External process '$proc_id' documented but no implementation found in code”
+
+      # Vytvoř intake item pro chybějící implementaci
+      INTAKE_FILE=”{WORK_ROOT}/intake/process-impl-$proc_id-$(date +%s).md”
+      cat > “$INTAKE_FILE” << 'EOF'
+---
+title: “Implement external process: $proc_id”
+source: gap
+initial_type: Task
+raw_priority: 7
+---
+
+## Problem
+
+External process `$proc_id` is documented in `fabric/processes/process-map.md` but has no implementation in the codebase.
+
+## Evidence
+
+- Documented in: `fabric/processes/process-map.md`
+- Missing handler/implementation in `{CODE_ROOT}/`
+
+## Acceptance Criteria
+
+- [ ] Process handler created with clear input/output contracts
+- [ ] Handler registered in configuration or process registry
+- [ ] Basic tests verify handler can be invoked
+- [ ] Documentation updated with implementation details
+
+EOF
+      PROCESS_GAPS=$((PROCESS_GAPS + 1))
+    fi
+  done <<< “$DOCUMENTED_PROCESSES”
+
+  if [ $PROCESS_GAPS -gt 0 ]; then
+    echo “Found $PROCESS_GAPS process coverage gaps”
+  else
+    echo “All documented processes have implementation coverage”
+  fi
+fi
+```
 
 ### 6) Gap report
 

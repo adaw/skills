@@ -72,6 +72,26 @@ status: "DRAFT"  # DRAFT | READY
 - Files likely touched: {FILES}
 - Risks: {RISKS}
 
+## Affected Processes
+> If `process-map.md` exists in `{WORK_ROOT}/fabric/`, cross-reference this task's modules with documented process chains.
+
+- Processes affected: {PROCESS_NAMES_OR_NONE}
+- Contract modules touched: {MODULES_FROM_PROCESS_MAP_OR_NONE}
+- Causal dependencies impacted: {DEPENDENCY_CHAIN_OR_NONE}
+- Recommendation: {TEST_COVERAGE_RECOMMENDATION_OR_NONE}
+
+**Procedure (fail-open):**
+```bash
+PROCESS_MAP="{WORK_ROOT}/fabric/processes/process-map.md"
+if [ -f "$PROCESS_MAP" ]; then
+  # Extract processes that contain any of the task's touched files
+  grep -E "({touched_files_regex})" "$PROCESS_MAP" | cut -d'|' -f1 | sort -u
+  # Build causal chain from process map for each affected process
+else
+  echo "NOTE: process-map.md not found — skipping process cross-reference"
+fi
+```
+
 ## Plan
 1. {STEP_1}
 2. {STEP_2}
@@ -194,10 +214,55 @@ CREATED → VALIDATED → STORED → [RECALLED] → EXPIRED
 ```
 Pokud task nemění lifecycle entity → napiš "N/A — task nemění entity lifecycle".
 
+**D) Process-map cross-reference (Affected Processes check):**
+
+Pro KAŽDÝ task proveď procesní mapování:
+```bash
+# 1. Prepare touched files list
+TOUCHED_FILES="{files_list}"  # e.g., "api/routes/capture.py services/capture.py"
+
+# 2. Load process map if exists
+PROCESS_MAP="{WORK_ROOT}/fabric/processes/process-map.md"
+if [ ! -f "$PROCESS_MAP" ]; then
+  echo "NOTE: process-map.md not found at $PROCESS_MAP — skipping process cross-reference"
+  exit 0
+fi
+
+# 3. Find affected processes (grep for touched files in process-map)
+AFFECTED_PROCESSES=$(
+  for file in $TOUCHED_FILES; do
+    # Search for process chain containing this file
+    grep -B 5 -A 5 "$file" "$PROCESS_MAP" 2>/dev/null | \
+      grep -E "^##\s|^###\s" | head -1
+  done | sort -u
+)
+
+# 4. For each affected process, extract contract_modules
+if [ -n "$AFFECTED_PROCESSES" ]; then
+  echo "Affected processes:"
+  echo "$AFFECTED_PROCESSES"
+
+  # Extract causal dependencies from process map
+  while IFS= read -r process; do
+    echo "  Process: $process"
+    # Find contract modules in the process chain
+    awk "/$process/,/^##/" "$PROCESS_MAP" | grep -E "contract_modules|dependencies" || true
+  done <<< "$AFFECTED_PROCESSES"
+fi
+```
+
+Zapiš do analýzy sekci `## Affected Processes` s:
+- Seznamem dotčených procesů (nebo "None — task je izolován")
+- Contract modules z process-map, které se mění
+- Kauzální závislostmi (např. "Write Path se změní, musíš ověřit Recall Path")
+- Doporučením: "Ensure tests cover {PROCESS_CHAIN}, especially {CRITICAL_STEP}" (nebo "N/A — single-module task")
+
 **Anti-patterns:**
 - ❌ "Files likely touched: models.py, api/" — VÁGNÍ (musí být konkrétní modul + typ změny + závislosti)
 - ❌ Přeskočit datový tok protože "je to jednoduchý task" — i jednoduchý task má vstup→výstup
+- ❌ Ignorovat proces mapování pokud process-map.md chybí (napiš "NOTE: process-map.md not found")
 - ✅ ASCII diagram VŽDY, i kdyby měl jen 3 boxy
+- ✅ Fail-open: chybí process-map → pokračuj, jen zaznamenej NOTE do analýzy
 
 ### 3) Governance constraints per task
 
@@ -225,6 +290,7 @@ MISSING=""
 grep -q "^## Constraints" "$ANALYSIS_FILE" || MISSING="${MISSING} Constraints"
 grep -q "^## Plan" "$ANALYSIS_FILE" || MISSING="${MISSING} Plan"
 grep -q "^## Tests" "$ANALYSIS_FILE" || MISSING="${MISSING} Tests"
+grep -q "^## Affected Processes" "$ANALYSIS_FILE" || MISSING="${MISSING} AffectedProcesses"
 if [ -n "$MISSING" ]; then
   echo "WARN: analysis missing sections:${MISSING} — keeping status DESIGN"
   # Nastav DESIGN, ne READY — implement by jinak dostal neúplnou analýzu
@@ -343,5 +409,7 @@ Ulož do `{WORK_ROOT}/reports/analyze-{YYYY-MM-DD}-{run_id}.md` (schema `fabric.
 ## Self-check
 
 - [ ] Každý task má per-task analýzu a má sekci `Constraints`.
+- [ ] Každý task má sekci `Affected Processes` s procesní analýzou (cross-reference s `process-map.md`, nebo NOTE že soubor chybí).
 - [ ] Každý task v Task Queue je implementovatelný bez dalších otázek, nebo je označen `DESIGN` a má intake item.
 - [ ] Governance indexy existují a jsou čitelné (`decisions/INDEX.md`, `specs/INDEX.md`).
+- [ ] Pro tasks dotýkající se kritických procesů (Write Path, Recall Path) jsou testy explicitně zaměřeny na process chain coverage.

@@ -341,6 +341,62 @@ Pro každý finding v audit reportu přidej confidence level:
 
 Formát v reportu: `| Finding | Severity | Confidence | Detail |`
 
+### 7.6) Process Map Freshness validation
+
+Ověř existenci a kvalitu process map dokumentace:
+
+```bash
+PROCESS_MAP="{WORK_ROOT}/fabric/processes/process-map.md"
+TODAY_EPOCH=$(date +%s)
+PROCESS_MAP_FINDINGS=""
+
+# Kontrola existence process-map.md
+if [ ! -f "$PROCESS_MAP" ]; then
+  # Process map chybí — kritické jen pokud je projekt za Sprint 1
+  CURRENT_SPRINT=$(grep '^sprint:' {WORK_ROOT}/state.md 2>/dev/null | awk '{print $2}')
+  CURRENT_SPRINT=${CURRENT_SPRINT:-1}
+  if [ "$CURRENT_SPRINT" -gt 1 ]; then
+    echo "CRITICAL: process-map.md is missing (Sprint ${CURRENT_SPRINT} > 1)"
+    PROCESS_MAP_FINDINGS="${PROCESS_MAP_FINDINGS}
+- **CRITICAL:** Process map chybí (Sprint ${CURRENT_SPRINT} > 1) → intake: process-map-missing"
+  else
+    echo "INFO: process-map.md doesn't exist yet (Sprint 1)"
+  fi
+else
+  # Kontrola freshness (updated field)
+  UPDATED=$(grep '^updated:' "$PROCESS_MAP" | awk '{print $2}')
+  if [ -n "$UPDATED" ]; then
+    UPDATED_EPOCH=$(date -d "$UPDATED" +%s 2>/dev/null || echo 0)
+    DAYS_OLD=$(( (TODAY_EPOCH - UPDATED_EPOCH) / 86400 ))
+    if [ "$DAYS_OLD" -gt 7 ]; then
+      echo "WARN: process-map.md is ${DAYS_OLD}d old (>7d stale)"
+      PROCESS_MAP_FINDINGS="${PROCESS_MAP_FINDINGS}
+- **HIGH:** Process map stale (${DAYS_OLD}d old) → intake: process-map-stale"
+    else
+      echo "PASS: process-map.md is fresh (${DAYS_OLD}d old)"
+    fi
+  else
+    echo "WARN: process-map.md missing 'updated:' field"
+    PROCESS_MAP_FINDINGS="${PROCESS_MAP_FINDINGS}
+- **MEDIUM:** Process map missing updated field"
+  fi
+
+  # Kontrola orphan count (UNIMPLEMENTED/ORPHAN markers)
+  ORPHAN_COUNT=$(grep -c 'UNIMPLEMENTED\|ORPHAN' "$PROCESS_MAP" 2>/dev/null || echo 0)
+  if [ "$ORPHAN_COUNT" -gt 0 ]; then
+    echo "INFO: process-map.md has $ORPHAN_COUNT orphan/unimplemented entries"
+    PROCESS_MAP_FINDINGS="${PROCESS_MAP_FINDINGS}
+- **INFO:** Process map contains ${ORPHAN_COUNT} UNIMPLEMENTED/ORPHAN entries"
+  fi
+fi
+```
+
+Výstupy:
+- Pokud `process-map.md` neexistuje a `state.sprint > 1` → vytvoř intake item `intake/check-process-map-missing.md`, reportuj **CRITICAL**
+- Pokud `process-map.md` existuje ale `updated` je >7 dní starý → vytvoř intake item `intake/check-process-map-stale.md`, reportuj **HIGH**
+- Pokud `process-map.md` má >0 UNIMPLEMENTED/ORPHAN → zaznamenej do reportu jako INFO (orientační)
+- Přílož `$PROCESS_MAP_FINDINGS` do audit reportu
+
 ### 8) Vygeneruj audit report
 
 Vytvoř `{WORK_ROOT}/reports/check-{YYYY-MM-DD}.md` dle `{WORK_ROOT}/templates/audit-report.md`:

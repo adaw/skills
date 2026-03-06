@@ -1,9 +1,9 @@
 ---
 name: fabric-review
-description: "Perform automated code review for the current WIP task across 8 dimensions (R1–R8). Uses config COMMANDS.lint + COMMANDS.format_check as objective gates, then performs a structured diff review. Writes a review report, updates backlog item review_report, and creates intake items for systemic improvements."
+description: "Perform automated code review for the current WIP task across 9 dimensions (R1–R9). Uses config COMMANDS.lint + COMMANDS.format_check as objective gates, then performs a structured diff review including process-chain validation. Writes a review report, updates backlog item review_report, and creates intake items for systemic improvements."
 ---
 
-# REVIEW — Code review (R1–R8) + verdikt
+# REVIEW — Code review (R1–R9) + verdikt
 
 ## Účel
 
@@ -306,7 +306,21 @@ Dimenze s konkrétními checklisty (POVINNÉ — projdi KAŽDÝ bod):
 - [ ] API changes → aktualizuj specs (nebo vytvoř intake item)
 - [ ] Arch decisions → existuje ADR nebo je v analýze zdůvodnění
 
-**R8 Compliance** — dodržení config konvencí + **accepted ADR** + **active specs** (porušení = CRITICAL)
+**R8 Compliance** — dodržení config konvencí + **accepted ADR** + **active specs** (porušení = CRITICAL):
+- [ ] Načti `{WORK_ROOT}/decisions/INDEX.md` — identifikuj všechny `accepted` ADR
+- [ ] Načti `{WORK_ROOT}/specs/INDEX.md` — identifikuj `active` a `draft` specs
+- [ ] Ověř, že diff neodporuje žádné accepted ADR či active spec
+- [ ] Pro každý changed file: zkontroluj proti GOVERNANCE registry z `{WORK_ROOT}/config.md`
+- [ ] Porušení accepted ADR/active spec = CRITICAL finding
+
+**R9 Process Chain Validation** — detekce changes v process-contract modules:
+- [ ] Pokud existuje `{WORK_ROOT}/fabric/processes/process-map.md`: načti jej
+- [ ] Extrahuj seznam všech procesů s jejich `contract_modules`
+- [ ] Pro KAŽDÝ changed file v diffu: srovnej s `contract_modules` z každého procesu
+- [ ] Pokud je changed file v `contract_modules` procesu P: ALERT se jménem procesu
+- [ ] Ověř, že proces-chain unit testy (test_P) z `{WORK_ROOT}/tests/test_processes/` projdou
+- [ ] Pokud process-map.md NEEXISTUJE: INFO (fail-open, skip check)
+- [ ] Pokud proces-testy neexistují/failují: HIGH finding
 
 
 #### R8 Compliance — konkrétně (povinné)
@@ -361,6 +375,77 @@ Dimenze s konkrétními checklisty (POVINNÉ — projdi KAŽDÝ bod):
 
    - Porušení `accepted` ADR nebo `active` spec bez odpovídajícího supersede = **CRITICAL**
    - Porušení `draft` spec = **HIGH** (severity dle `GOVERNANCE.specs.draft_enforcement` v config.md)
+
+### 3b) R9 Process Chain Validation (mandatory if process-map.md exists)
+
+```bash
+# Zjisti changed files
+git diff --name-only {main_branch}...{wip_branch} > /tmp/changed-files.txt
+
+PROCESS_MAP="{WORK_ROOT}/fabric/processes/process-map.md"
+
+if [ ! -f "$PROCESS_MAP" ]; then
+  echo "INFO: process-map.md not found — R9 check skipped (fail-open)"
+  R9_STATUS="SKIPPED"
+else
+  R9_STATUS="PASS"
+  R9_ALERTS=""
+
+  # Pro každý changed file, zkontroluj proces-mapu
+  while IFS= read -r changed_file; do
+    [ -z "$changed_file" ] && continue
+
+    # Extrahuj všechny procesy a jejich contract_modules z process-map.md
+    # Format: assuming YAML-like nebo markdown list — grep pro "[contract_modules:" a následující řádky
+    PROCESSES=$(grep -B2 "contract_modules:" "$PROCESS_MAP" | grep "^[a-zA-Z_-]*:" | sed 's/:$//')
+
+    for process_name in $PROCESSES; do
+      # Načti contract_modules seznam pro daný proces
+      #假定struktura:
+      #   process_name:
+      #     contract_modules:
+      #       - "path/to/module1.py"
+      #       - "path/to/module2.py"
+
+      CONTRACT_MODULES=$(awk "/^$process_name:/,/^[a-zA-Z]/ {print}" "$PROCESS_MAP" \
+        | grep -A 100 "contract_modules:" \
+        | grep '^\s*- "' \
+        | sed 's/^\s*- "//' | sed 's/".*//')
+
+      # Srovnání: je changed_file v CONTRACT_MODULES?
+      if echo "$CONTRACT_MODULES" | grep -qF "$changed_file"; then
+        echo "ALERT: Changed file '$changed_file' is in process '$process_name' contract"
+        R9_ALERTS="${R9_ALERTS}
+- **ALERT:** File \`$changed_file\` is a \`contract_module\` in process **$process_name** — verify process-chain tests pass"
+        R9_STATUS="ALERT"
+
+        # Ověř, že proces-chain testy existují a projdou
+        PROCESS_TEST="{WORK_ROOT}/tests/test_processes/test_${process_name}.py"
+        if [ -f "$PROCESS_TEST" ]; then
+          echo "Running process-chain test for $process_name..."
+          timeout 60 python -m pytest "$PROCESS_TEST" -v 2>&1 | head -20
+          TEST_EXIT=$?
+          if [ $TEST_EXIT -ne 0 ] && [ $TEST_EXIT -ne 124 ]; then
+            echo "CRITICAL: Process-chain test FAILED: $PROCESS_TEST"
+            R9_STATUS="CRITICAL"
+          fi
+        else
+          echo "INFO: Process-chain test not found: $PROCESS_TEST (skipped)"
+        fi
+      fi
+    done
+  done < /tmp/changed-files.txt
+
+  if [ "$R9_STATUS" = "ALERT" ] || [ "$R9_STATUS" = "CRITICAL" ]; then
+    echo "R9 Finding: $R9_STATUS"
+    echo "$R9_ALERTS"
+  fi
+fi
+```
+
+> **R9 Fail-open design:** Pokud `process-map.md` neexistuje (early sprints bez procesů), R9 se skipne s INFO statusem a neblokuje review. Jakmile procesy existují, kontrola se spustí automaticky.
+
+> **Process contract violation severity:** Pokud changed file je v `contract_modules` procesu, je to **HIGH** finding (minimum). Pokud proces-chain testy failují, eskaluj na **CRITICAL**.
 
 
 ### 4) Verdikt (jednoznačně)
@@ -442,6 +527,8 @@ Když verdikt je REWORK, review report MUSÍ obsahovat per-finding konkrétní f
 | R7 | Stale documentation | Aktualizuj docs na shodu s kódem. Přidej `<!-- last-verified: {date} -->` tag. |
 | R8 | ADR violation | Buď (a) uprav kód na shodu s ADR, nebo (b) vytvoř nový ADR superseding starý (s odůvodněním). |
 | R8 | Spec violation | Oprav kód na shodu se spec. Pokud spec je zastaralý → vytvoř intake item pro spec update. |
+| R9 | Process contract violation | Ověř, že proces-chain testy projdou. Pokud selhávají: (a) oprav implementaci procesu, (b) aktualizuj proces definici, nebo (c) vytvoř intake item pro proces refaktor. |
+| R9 | Process-test missing/failing | Pokud test pro proces neexistuje: vytvoř test v `tests/test_processes/test_{process_name}.py`. Pokud test failuje: debuguj proces-chain, oprav modul, rerun test. |
 
 **Anti-patterns (ZAKÁZÁNO v REWORK doporučeních):**
 - ❌ „Oprav bug v souboru X" (neříká JAK)
@@ -485,7 +572,7 @@ python skills/fabric-init/tools/fabric.py report-new \
 
 ## Checklist (co musí být v reportu — vše povinné)
 
-- **Per-dimension R1–R8 tabulka** — VŽDY, i pro triviální změny. Minimální formát:
+- **Per-dimension R1–R9 tabulka** — VŽDY, i pro triviální změny. Minimální formát:
 
   ```markdown
   | Dim | Score | Findings |
@@ -498,20 +585,22 @@ python skills/fabric-init/tools/fabric.py report-new \
   | R6 Maintainability | 5/5 | No issues |
   | R7 Documentation | 5/5 | No issues |
   | R8 Compliance | 5/5 | No ADR/spec conflicts |
+  | R9 Process Chain | 5/5 | No process contract violations |
   ```
 
 - **CRITICAL/HIGH findings** — pokud existují, vypiš konkrétně (soubor, řádek, důvod)
 - **Verdict** — explicitně: `Verdict: CLEAN` nebo `Verdict: REWORK`
 - **Suggested next step** — 1 věta
 
-> **Zkrácený review ("All 5/5, no findings") je skill violation.** I pro triviální change musíš uvést R1–R8 tabulku, aby bylo jasné, že jsi každou dimenzi reálně prověřil.
+> **Zkrácený review ("All 5/5, no findings") je skill violation.** I pro triviální change musíš uvést R1–R9 tabulku, aby bylo jasné, že jsi každou dimenzi reálně prověřil.
 
 ---
 
 ## Self-check
 
 - review report exists
-- **R1–R8 tabulka je přítomna** (ne jen souhrnné "All 5/5")
+- **R1–R9 tabulka je přítomna** (ne jen souhrnné "All 5/5")
+- R9 status je recorded (SKIPPED / PASS / ALERT / CRITICAL)
 - backlog item has `review_report`
 - verdict is explicit (CLEAN/REWORK/REDESIGN)
 

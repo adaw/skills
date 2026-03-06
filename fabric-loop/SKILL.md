@@ -321,7 +321,7 @@ Během běhu do reportu průběžně doplň:
 ### Kanonická sekvence (z config.md)
 ```
 FÁZE 0: ORIENTACE
-  vision → status → architect → gap → generate → intake → prio
+  vision → status → architect → process → gap → generate → intake → prio
 
 FÁZE 1: PLÁNOVÁNÍ
   sprint → analyze
@@ -419,7 +419,7 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
    - pokud chybí důkazy nebo je kontrakt porušen → nastaví `state.error` a vrátí non‑zero → **STOP + ESCALATE**.
 
    Mapování `step → phase`:
-   - **orientation:** vision, status, architect, gap, generate, intake, prio
+   - **orientation:** vision, status, architect, process, gap, generate, intake, prio
    - **planning:** sprint, analyze
    - **implementation:** implement, test, review
    - **closing:** close, docs, check, archive
@@ -578,7 +578,8 @@ Pokud kdykoliv nastavíš `state.error` nebo vytvoříš CRITICAL intake (kontra
 |--------------|-----------|
 | vision | status |
 | status | architect |
-| architect | gap |
+| architect | process |
+| process | gap |
 | gap | generate |
 | generate | intake |
 | intake | prio |
@@ -1020,7 +1021,7 @@ Fabric-loop předpokládá **single-instance** operaci — v jednu chvíli smí 
 ## State Diagram (textual)
 
 ```
-idle ──→ vision → status → architect → gap → generate → intake → prio
+idle ──→ vision → status → architect → process → gap → generate → intake → prio
                                                                     │
   ┌─────────────────────────────────────────────────────────────────┘
   v
