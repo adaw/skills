@@ -25,6 +25,44 @@ Bez process mapy:
 2. **Vnitřní procesy (internal):** Entry point → Validation → Service → Storage → Side effects → Response (kauzální řetězce)
 3. **Cross-mapping:** Propojení vnější→vnitřní, identifikace orphanů (kód bez rozhraní, rozhraní bez kódu)
 
+## Downstream Contract
+
+**Kdo konzumuje výstupy fabric-process a jaká pole čte:**
+
+- **fabric-gap** reads:
+  - `process-map.md` → External Processes table (columns: ID, Actor, Entry Point, Status)
+  - Checks each external process has matching code implementation
+  - Missing implementation → gap finding
+
+- **fabric-analyze** reads:
+  - Individual process files (`fabric/processes/{id}.md`) → field `contract_modules[]`
+  - Cross-references task's touched modules against contract_modules → "Affected Processes" section
+
+- **fabric-review** reads:
+  - Individual process files → field `contract_modules[]`
+  - If task modifies contract_module → requires test evidence for that process chain
+
+- **fabric-check** reads:
+  - `process-map.md` → field `updated` (date)
+  - If older than 7 days → intake item for freshness update
+
+- **fabric-implement** reads:
+  - Individual process files → context on which processes the current task affects
+
+**Contract fields in process-map.md:**
+```yaml
+schema: fabric.process-map.v1
+version: "1.0"
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+validation_status: VALID | STALE
+external_count: int
+internal_count: int
+external_processes: [{id, actor, trigger, entry_point, output, status}]
+internal_processes: [{id, trigger, call_chain, dependencies, side_effects}]
+orphans: [{type, name, classification, action}]
+```
+
 ---
 
 ## §2 — Protokol (povinné — NEKRÁTIT)
@@ -227,17 +265,50 @@ Pro každý nalezený proces vyplň tabulku:
 - Vnitřní: `int-{flow}-{popis}` (např. `int-capture-triage-store`, `int-recall-multi-layer`)
 - Cross: `cross-{vnější}-to-{vnitřní}` (odkaz, ne samostatný process)
 
+**Complete filled-in example with real LLMem data (WQ2 fix):**
+
+All external processes from 7.1 and their internal mappings are shown below. Here's the core mapping structure:
+
 **Minimum:**
 - Každý API route MUSÍ mít odpovídající external process
 - Každý CLI command MUSÍ mít odpovídající external process
 - Tabulka MUSÍ obsahovat: ID, Actor, Trigger, Entry Point, Status
 
-**Anti-patterns:**
+**Anti-patterns with detection bash + fix (WQ4):**
+
+**Anti-pattern A: Endpoint not in process-map**
+- Detection bash: `grep -rE '@router\.(get|post|put|delete|patch)' ${CODE_ROOT}/api/routes/ --include="*.py" | grep -oP '(?<=['\\''])/[^'\\'']*(?\([\'\\''])' | sort -u | while read r; do grep -q "ext-.*$r" {WORK_ROOT}/fabric/processes/process-map.md || echo "UNMAPPED: $r"; done`
+- Fix: Add missing routes as ext-{domain}-{action} rows to process-map.md
+
+**Anti-pattern B: CLI command undocumented**
+- Detection bash: `grep -rE '@click\.command|@app\.command' ${CODE_ROOT}/ --include="*.py" -A1 | grep "def " | sed 's/def //' | sed 's/(.*/:/' | while read cmd; do grep -q "ext-cli-$cmd" {WORK_ROOT}/fabric/processes/process-map.md || echo "UNDOCUMENTED_CLI: $cmd"; done`
+- Fix: Add ext-cli-{cmd} rows with actor, trigger, entry point
+
+**Anti-pattern C: Internal process missing contract_modules**
+- Detection bash: `find {WORK_ROOT}/fabric/processes/ -name "int-*.md" -exec grep -L 'contract_modules:' {} \;`
+- Fix: For each file, trace code flow and list all .py files in the chain
+
+**Anti-patterns (original):**
 - NEZAPISUJ procesy, které neexistují v kódu (to jsou PLANNED, ne ACTIVE)
 - NEVYNECHÁVEJ "nudné" endpointy (healthz, metrics) — ty jsou kritické pro operations
 - NEPŘESKAKUJ system-to-system interakce (database, cache) — ty jsou vnitřní procesy
 
-**Šablona:**
+**VALIDATION CHECK — Process count verification:**
+```bash
+# Po vytvoření process-map.md ověř pokrytí (WQ3 fix)
+MAP_EXT=$(grep -c "^| ext-" {WORK_ROOT}/fabric/processes/process-map.md 2>/dev/null || echo 0)
+CODE_ROUTES=$(grep -rE '@router\.(get|post|put|delete|patch)' ${CODE_ROOT}/api/routes/ --include="*.py" 2>/dev/null | wc -l)
+CODE_CLI=$(grep -rE '@(click\.command|app\.command|click\.option)' ${CODE_ROOT}/ --include="*.py" 2>/dev/null | grep -c '@\(click\|app\)\.command' || echo 0)
+EXPECTED=$((CODE_ROUTES + CODE_CLI))
+
+if [ "$MAP_EXT" -ge "$EXPECTED" ]; then
+  echo "PASS: External processes ($MAP_EXT) match code routes ($CODE_ROUTES) + CLI ($CODE_CLI)"
+else
+  echo "WARN: Process map ($MAP_EXT external) may be incomplete vs code ($EXPECTED expected)"
+fi
+```
+
+**Šablona — Real LLMem Example (WQ2 fix):**
 
 ```markdown
 ## External Processes
@@ -246,16 +317,25 @@ Pro každý nalezený proces vyplň tabulku:
 
 | Process ID | Actor(s) | Trigger | Entry Point | Response | Status |
 |---|---|---|---|---|---|
-| ext-capture-event | agent, tool | Tool execution completes | POST /capture/event | CaptureResponse (event_id, stored_memories) | ACTIVE |
-| ext-recall-query | agent | Before agent turn | POST /recall | RecallResponse (XML injection block) | ACTIVE |
-| ext-health-check | monitoring | Health probe (periodic) | GET /healthz | HealthResponse (status, version) | ACTIVE |
+| ext-capture-event | agent, client | Tool execution completes | POST /capture/event | CaptureResponse (event_id, stored_memories, ok) | ACTIVE |
+| ext-capture-batch | agent, client | Batch observation upload | POST /capture/batch | list[CaptureResponse] (per-event statuses) | ACTIVE |
+| ext-recall-query | agent, client | Before agent turn, context needed | POST /recall | RecallResponse (xml_block, memory_count, budget_used) | ACTIVE |
+| ext-memory-create | admin, client | Direct memory insertion | POST /memories | MemoryItem (id, content, tier, sensitivity) | ACTIVE |
+| ext-memory-get | admin, client | Retrieve specific memory | GET /memories/{instance_id}/{memory_id} | MemoryItem (full record) | ACTIVE |
+| ext-memory-tombstone | admin, system | Soft-delete memory (privacy) | POST /memories/{instance_id}/{memory_id}/tombstone | TombstoneResponse (deleted_id, timestamp) | ACTIVE |
+| ext-health-check | monitoring, orchestration | Liveness probe (periodic ~30s) | GET /healthz | HealthResponse (status, version, instance_id) | ACTIVE |
+| ext-health-check-v1 | monitoring, orchestration | API v1 health endpoint | GET /api/v1/healthz | HealthResponse (status, version) | ACTIVE |
 
 ### CLI Commands
 
 | Process ID | Actor(s) | Trigger | Entry Point | Output | Status |
 |---|---|---|---|---|---|
-| ext-cli-serve | sysadmin | Manual start | `llmem serve` | HTTP server listening on :8080 | ACTIVE |
-| ext-cli-capture | user, script | Manual/scripted | `llmem capture --text "..."` | Memory stored confirmation | ACTIVE |
+| ext-cli-serve | sysadmin, operator | Manual start (docker/systemd) | `llmem serve` | HTTP server listening on 127.0.0.1:8080 | ACTIVE |
+| ext-cli-capture | user, script | Manual/scripted event submission | `llmem capture --text "..."` | Stored memory ID + triage results | ACTIVE |
+| ext-cli-recall | user, operator | Manual context retrieval | `llmem recall --query "..."` | XML-formatted recall block | ACTIVE |
+| ext-cli-healthz | monitoring, script | Health check via CLI | `llmem healthz` | Status output (HEALTHY/DEGRADED) | ACTIVE |
+| ext-cli-doctor | sysadmin | Diagnostic check | `llmem doctor` | Report of configuration + backend health | ACTIVE |
+| ext-cli-rebuild | operator, dba | Event-source rebuild from JSONL log | `llmem rebuild --instance <id>` | Rebuilt collection + validation report | ACTIVE |
 ```
 
 ---
@@ -306,9 +386,22 @@ Contract modules: [routes/capture.py, services/capture_service.py, triage/heuris
 Governance: D0001 (secrets), D0002 (IDs), D0003 (event-sourcing)
 ```
 
+**WQ5 enforcement — Explicit definition of "significant process" (WQ5 fix):**
+
+A process is SIGNIFICANT (requires detailed trace) if:
+1. **API route or CLI command** (external-facing) — OR
+2. **Has ≥3 downstream function calls** (depth ≥3: handler→service→helper) — OR
+3. **Modifies persisted state** (writes to JSONL, DB, cache) — OR
+4. **Critical to agent execution** (memory capture, recall, health check)
+
+Thresholds:
+- `POST /capture/event` → SIGNIFICANT (API + 4-level depth + JSONL write)
+- `GET /healthz` → SIGNIFICANT (API endpoint, even if 1-level deep)
+- Helper `score_importance()` → NOT significant (internal, called from significant process but traced via parent)
+
 **Minimum:**
 - KAŽDÝ vnější proces (ACTIVE) MUSÍ mít traced vnitřní chain
-- Chain MUSÍ být ≥3 kroky hluboký (handler→service→storage minimum)
+- Chain MUSÍ být ≥3 kroky hluboký (handler→service→storage minimum) POKUD je to SIGNIFICANT
 - Contract_modules MUSÍ být vyplněné (downstream skills je potřebují)
 - Kauzální závislosti MUSÍ být explicitně popsané
 
@@ -318,7 +411,7 @@ Governance: D0001 (secrets), D0002 (IDs), D0003 (event-sourcing)
 - NEPIŠ vágní "calls service" — uveď PŘESNOU metodu a soubor
 - NEHÁDEJ — pokud si nejsi jistý call chainem, přečti kód
 
-**Šablona individuálního process souboru:**
+**Šablona individuálního process souboru — s verzí a deprecation (WQ4, WQ9 fixes):**
 
 ```markdown
 ---
@@ -327,6 +420,17 @@ id: int-capture-triage-store
 category: internal
 actors: [agent, tool]
 status: ACTIVE
+version: "1.2"                    # WQ9 fix: track process signature version
+version_history:                   # WQ9 fix: when did signature change
+  - version: "1.2"
+    date: 2026-03-06
+    change: "Added sensitivity.elevated_risk field for new secret patterns"
+  - version: "1.1"
+    date: 2025-12-15
+    change: "Introduced PII hashing in triage"
+  - version: "1.0"
+    date: 2025-06-01
+    change: "Initial process definition"
 entry_point: "CaptureService.capture()"
 contract_modules: [services/capture_service.py, triage/heuristics.py, triage/patterns.py, storage/log_jsonl.py]
 related_external: [ext-capture-event, ext-capture-batch, ext-cli-capture]
@@ -357,6 +461,15 @@ Single-event capture pipeline: validates input, triages importance, masks secret
 - Unit: tests/test_capture_service.py
 - Integration: tests/test_triage_and_recall.py
 - E2E: tests/e2e/ (if present)
+
+## Deprecation (if applicable)
+status: DEPRECATED                # WQ9 fix: if process is being retired
+migration_to: int-capture-v2-async # Which new process replaces it
+sunset_date: 2026-06-01           # When old process will be removed
+migration_notes: |
+  Use int-capture-v2-async for new integrations.
+  Existing code can call int-capture-triage-store until sunset_date.
+  See ADR-0005 for migration guide.
 ```
 
 ---
@@ -378,13 +491,65 @@ Single-event capture pipeline: validates input, triages importance, masks secret
    - Pokud vnější proces nemá žádný traced vnitřní řetězec → ORPHAN EXTERNAL
    - Akce: Zkontroluj jestli endpoint má implementaci. Pokud ne → intake item (source=process, type=Bug)
 
-3. **Orphan detection — vnitřní bez vnějšího:**
-   - Projdi `{CODE_ROOT}` a hledej public functions/classes, které NEJSOU volané z žádného traced chain
-   - Zvlášť pozor na: utility moduly, helper funkce, deprecated kód
-   - Pokud nalezneš kód bez vnějšího rozhraní → klasifikuj:
-     - **INTERNAL_ONLY** (správně — interní helper, např. `score_importance()`)
-     - **DEAD_CODE** (nikdo to nevolá → intake item, type=Chore)
-     - **UNDOCUMENTED** (volá se, ale z kódu který není v žádném procesu → rozšíř process mapu)
+3. **Orphan detection — vnitřní bez vnějšího — Deterministic Classification Algorithm (WQ5 fix):**
+
+   Pro každou public funkcí/třídu v `{CODE_ROOT}`, které NEJSOU ve žádném traced chain:
+
+   **Algoritmus klasifikace:**
+   ```bash
+   # Parametr: FUNCTION_NAME (e.g. "score_importance")
+
+   # Krok 1: Zjisti, zda se funkce volá z NĚČEHO
+   CALLERS=$(grep -rn "${FUNCTION_NAME}(" "${CODE_ROOT}" --include="*.py" | grep -v "^[^:]*def ${FUNCTION_NAME}")
+
+   if [ -z "$CALLERS" ]; then
+     # Nikdo to nevolá → DEAD_CODE
+     CLASSIFICATION="DEAD_CODE"
+     INTAKE_TYPE="Chore"
+     ACTION="Remove or document why exists"
+   else
+     # Krok 2: Zjisti, zda je volající z test souborů POUZE
+     TEST_ONLY=$(echo "$CALLERS" | grep -E "(tests/|test_|_test\.py)" | wc -l)
+     TOTAL=$(echo "$CALLERS" | wc -l)
+
+     if [ "$TEST_ONLY" -eq "$TOTAL" ] && [ "$TOTAL" -gt 0 ]; then
+       # Volá se jen z testů → INTERNAL_ONLY (test helper)
+       CLASSIFICATION="INTERNAL_ONLY"
+       ACTION="Correct — test helper, no intake item needed"
+     else
+       # Krok 3: Zjisti, zda všechny callery jsou v process-map contract_modules
+       UNDOCUMENTED=0
+       while IFS= read -r caller_line; do
+         CALLER_FILE=$(echo "$caller_line" | cut -d: -f1)
+         # Normalizuj cestu (odstran CODE_ROOT prefix)
+         CALLER_FILE=$(echo "$CALLER_FILE" | sed "s|${CODE_ROOT}/||")
+
+         # Najdi, zda je soubor v contract_modules nějakého procesu
+         if ! grep -q "$CALLER_FILE" "${WORK_ROOT}/fabric/processes/process-map.md" 2>/dev/null; then
+           UNDOCUMENTED=$((UNDOCUMENTED + 1))
+         fi
+       done <<< "$CALLERS"
+
+       if [ "$UNDOCUMENTED" -gt 0 ]; then
+         CLASSIFICATION="UNDOCUMENTED"
+         ACTION="Extend process-map (add calling chain), or reclassify as INTERNAL_ONLY if helper"
+       else
+         CLASSIFICATION="DOCUMENTED"
+         ACTION="Function is properly in process chain — no action"
+       fi
+     fi
+   fi
+
+   echo "Function: ${FUNCTION_NAME} → Classification: ${CLASSIFICATION}"
+   echo "  Callers: $(echo "$CALLERS" | wc -l) found"
+   echo "  Action: ${ACTION}"
+   ```
+
+   **Kategorické výsledky:**
+   - **INTERNAL_ONLY** (správně) — Není orphan. Interní helper volný z testuů nebo z procesů (ale nemusí být v process-map)
+   - **DEAD_CODE** — ORPHAN: nikdo to nevolá. Intake item (type=Chore) → удалить nebo zdokumentovat
+   - **UNDOCUMENTED** — ORPHAN: volá se, ale callery nejsou v process-map. Intake item (type=Task) → rozšíř process-map nebo proveď refaktor
+   - **DOCUMENTED** — Není orphan. Funkce je v procesu.
 
 4. **Vision cross-reference:**
    - Pokud existuje `vision.md`, porovnej:
@@ -578,20 +743,21 @@ fi
 - PASS: Schema přítomné a parsovatelné
 - FAIL: Vytvoř intake item + report FAIL
 
-### Gate 2: Route Coverage
+### Gate 2: Route Coverage (WQ10 fix — BLOCKING if <80%)
 ```bash
 # Počet routes v kódu vs. počet external processes v mapě
 CODE_ROUTES=$(grep -rE '@router\.(get|post|put|delete|patch)' "${CODE_ROOT}/api/routes/" --include="*.py" 2>/dev/null | wc -l)
 MAP_EXTERNALS=$(grep -c "^| ext-" "$PROCESS_MAP" 2>/dev/null || echo 0)
+COVERAGE=$((MAP_EXTERNALS * 100 / CODE_ROUTES))
 
-if [ "$MAP_EXTERNALS" -ge "$CODE_ROUTES" ]; then
-  echo "PASS: All $CODE_ROUTES routes documented ($MAP_EXTERNALS in map)"
+if [ "$COVERAGE" -ge 80 ]; then
+  echo "PASS: $COVERAGE% routes documented ($MAP_EXTERNALS / $CODE_ROUTES)"
 else
-  echo "WARN: $CODE_ROUTES routes in code but only $MAP_EXTERNALS in process map"
+  echo "FAIL: $COVERAGE% routes covered (<80% threshold) — create intake item + return FAIL"
 fi
 ```
-- PASS: Všechny routes mají odpovídající external process
-- WARN: Chybí → vytvoř intake item (nesmí blokovat)
+- PASS: ≥80% routes documented
+- FAIL: <80% coverage → must create intake items for missing routes + block report status
 
 ### Gate 3: No Duplicate Process IDs
 ```bash
@@ -617,7 +783,8 @@ schema: fabric.report.v1
 kind: process
 run_id: "{run_id}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
-status: {PASS|WARN|FAIL}
+version: "1.0"                                    # WQ9 fix: track report version
+status: {PASS|WARN|FAIL}                         # WQ10 fix: route coverage <80% OR orphans detected → FAIL
 ---
 
 # process — Report {YYYY-MM-DD}

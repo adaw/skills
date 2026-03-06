@@ -26,6 +26,38 @@ Deep architectural analysis of the LLMem codebase across 20 dimensions spanning 
 
 ---
 
+## Downstream Contract
+
+**Kdo konzumuje výstupy fabric-architect a jaká pole čte:**
+
+- **fabric-process** reads:
+  - Architectural health score (0-100) → context for process-level risk assessment
+  - Module dependency findings → identifies tightly-coupled modules where process changes are risky
+  - Backlog mutations → new T0/T1 refactoring tasks to plan around
+
+- **fabric-gap** reads:
+  - Per-dimension scores (A0-A19) → dimensions scoring <50 indicate architectural gaps
+  - Evidence-based findings → cross-reference with vision goals to detect structural gaps
+  - `reports/architect-*.md` field: `overall_score`, `critical_findings[]`, `mutations[]`
+
+- **fabric-sprint** reads:
+  - Backlog mutations from architect → include in sprint target selection
+  - Dimension priority → dimensions with lowest scores get sprint attention first
+
+- **fabric-implement** reads:
+  - Module dependency map → knows which modules are tightly coupled before making changes
+  - Anti-pattern findings → avoids introducing patterns architect flagged
+
+**Contract fields in report:**
+```yaml
+overall_score: float        # 0-100 weighted score
+dimensions: [{id, name, score, evidence}]  # A0-A19
+critical_findings: [{file, line, dimension, severity, description}]
+mutations: [{slug, type, tier, effort, description}]
+```
+
+---
+
 ## §2 Protokol
 
 Uses standard `protocol_log.py` with:
@@ -188,54 +220,111 @@ Architect can run after init alone, but intake may feed intake items for A3 cros
 2. Scan entire CODE_ROOT with those heuristics
 3. Collect violations with file:line references
 4. Calculate adherence % = (fully-compliant files / total scanned) × 100
-5. Assign score 0-100 based on adherence % + severity weighting
+5. Assign score 0-100 based on adherence % + severity weighting using interpolation
+
+**NUMERIC ANCHORS & INTERPOLATION:**
+
+For all principle scoring, use this interpolation formula to convert metrics to 0-100 scale:
+```
+score = lower_threshold + (metric - lower_bound) / (upper_bound - lower_bound) × (upper_threshold - lower_threshold)
+```
+
+Examples of numeric anchors per principle:
+
+**Principle: "Everything is Async"** (Metrics: % blocking I/O in codebase)
+- **0%** blocking → Score 95-100 (EXCELLENT)
+- **5-10%** blocking → Score 80-90 (GOOD)
+- **15-20%** blocking → Score 65-75 (NEEDS ATTENTION)
+- **>25%** blocking → Score <50 (CRITICAL)
+
+**Principle: "Everything is Documented"** (Metrics: docstring coverage %)
+- **≥95%** public functions documented → Score 95-100
+- **80-94%** documented → Score 80-94
+- **60-79%** documented → Score 60-79
+- **<60%** documented → Score <60
+
+**Principle: "Everything is Replaceable"** (Metrics: DI pattern coverage + backend swappability)
+- All services use DI, 2+ backends implemented, swappable → Score 90-100
+- 80% DI coverage, 1 backend + mockable interface → Score 75-89
+- 50% DI coverage, hardcoded deps in 2-3 places → Score 60-74
+- Monolithic, no DI, single backend hard-wired → Score <50
+
+**Principle: "Everything is Observable"** (Metrics: log lines per KLOC + request correlation)
+- >5 log/KLOC + structured (JSON) + request IDs → Score 90-100
+- 3-5 log/KLOC + some context → Score 75-89
+- 1-3 log/KLOC + unstructured → Score 60-74
+- <1 log/KLOC or no logging → Score <50
+
+**Principle: "Everything is Tested"** (Metrics: test:code LOC ratio + coverage)
+- Ratio >0.8 + coverage ≥80% → Score 90-100
+- Ratio 0.5-0.8 + coverage 60-79% → Score 75-89
+- Ratio 0.3-0.5 + coverage 40-59% → Score 60-74
+- Ratio <0.3 + coverage <40% → Score <50
+
+**Principle: "Everything is Versioned"** (Metrics: API version endpoints + schema versioning)
+- All endpoints /v1+ prefix + model schema.v1 + migration ready → Score 90-100
+- Most endpoints versioned, schemas present → Score 75-89
+- Partial versioning (some endpoints, no schema version) → Score 60-74
+- No versioning anywhere → Score <40
+
+**Principle: "Everything is Recoverable"** (Metrics: event sourcing + idempotency + retry)
+- JSONL event log + content_hash dedup + idempotent keys → Score 90-100
+- Event log exists, replay tested, 1-2 idempotent gaps → Score 75-89
+- Retry logic present, no clear recovery path → Score 60-74
+- No recovery strategy evident → Score <40
+
+**Principle: "Everything is Secure"** (Metrics: secret masking + PII hashing + input validation)
+- All secrets masked in logs + PII hashed + all endpoints validated → Score 90-100
+- Secrets masked + PII mostly hashed + 80% endpoints validated → Score 75-89
+- Partial masking + incomplete hashing + 50% validation → Score 60-74
+- No security controls evident → Score <40
 
 **Example principle scanning:**
 
 **Principle: "Everything is Async"**
 - Check for: `time.sleep()`, `requests.` (sync), blocking subprocess, `threading.Thread`, `BlockingIO`
 - Command: `grep -rn "time.sleep\|requests\.\|BlockingIO\|threading\.Thread" $CODE_ROOT --include="*.py"`
-- Violations per file + context (what operation, why blocking)
-- Score: 100% async code → 95-100; <10% blocking → 85-94; >20% blocking → <70
+- Calculate: blocking_lines / total_io_lines, map to numeric anchor via interpolation
+- Example LLMem: If src/llmem/ has 2 blocking calls in 45 total I/O ops (4.4% blocking) → Score 85-88 (GOOD)
 
 **Principle: "Everything is Documented"**
 - Check for: public functions with docstrings
 - Command: `grep -n "^def \|^class " $CODE_ROOT/**/*.py | xargs -I{} sh -c 'grep -A1 "{}" | grep "\"\"\"" || echo "MISSING"'`
 - Calculate: (functions with docstrings / total public functions) × 100
-- Score: ≥90% → 90-100; 70-89% → 70-89; <70% → <70
+- Example LLMem: If 42 of 48 public functions documented (87.5%) → Score 87 (GOOD)
 
 **Principle: "Everything is Replaceable"**
 - Check for: dependency injection patterns, registry pattern, pluggable providers
 - Command: `grep -rn "@dataclass\|@injectable\|Registry\|Provider\|factory\|__init__" $CODE_ROOT --include="*.py" | wc -l`
 - Assess module boundaries: can backend be swapped (InMemory ↔ Qdrant)?
-- Score: Clean DI + multiple backends → 85-100; Some DI, single backend → 70-84; No DI, monolithic → <70
+- Example LLMem: Backend interface in storage/backends/ + both InMemory & Qdrant + DI in api/server.py:20-30 → Score 92 (EXCELLENT)
 
 **Principle: "Everything is Observable"**
 - Check for: logging calls, error handling, metrics instrumentation
 - Command: `grep -rn "logger\.\|log\.\|metric\.\|trace\.\|error\|exception" $CODE_ROOT --include="*.py" | wc -l`
 - Measure: log lines per KLOC (kilo-lines-of-code)
-- Score: >5 log/KLOC + structured logs → 85-100; 2-5 log/KLOC → 70-84; <2 → <70
+- Example LLMem: If src/llmem has ~3 log/KLOC + structured JSON logs + request ID correlation → Score 78 (GOOD)
 
 **Principle: "Everything is Tested"**
 - Check for: test-to-code ratio, coverage hints, test patterns
 - Command: `find tests/ -name "test_*.py" | xargs wc -l | tail -1`
 - Calculate: (test LOC / code LOC) ratio
-- Score: >1.0 ratio → 85-100; 0.5-1.0 → 70-84; <0.5 → <70
+- Example LLMem: If test LOC = 8200, code LOC = 13000 (ratio 0.63) + coverage 72% → Score 80 (GOOD)
 
 **Principle: "Everything is Versioned"**
 - Check for: API versioning, schema versioning, migration markers
 - Command: `grep -rn "v[0-9]\|version\|schema\.v" $CODE_ROOT --include="*.py" | wc -l`
-- Score: Explicit versioning in API + data models → 85-100; Partial versioning → 70-84; None → <40
+- Example LLMem: All routes have /v1/ prefix + models.py has schema.v1 + structured versioning → Score 92 (EXCELLENT)
 
 **Principle: "Everything is Recoverable"**
 - Check for: fallback strategies, idempotent operations, event sourcing
 - Command: `grep -rn "idempotent\|fallback\|recover\|replay\|retry\|backoff" $CODE_ROOT --include="*.py"`
-- Score: Event-sourced log + idempotent writes → 85-100; Retry logic only → 70-84; None → <40
+- Example LLMem: JSONL append-only + idempotency_key in capture + rebuild command tested → Score 85 (GOOD)
 
 **Principle: "Everything is Secure"**
 - Check for: secret masking, PII hashing, auth checks, input validation
 - Command: `grep -rn "mask\|hash\|sanitiz\|validate\|auth\|secret" $CODE_ROOT --include="*.py"`
-- Score: Comprehensive secret + PII handling → 85-100; Partial masking → 70-84; None → <40
+- Example LLMem: triage/patterns.py detects + masks secrets + hashes PII, input validated → Score 89 (EXCELLENT)
 
 **Output Template:**
 
@@ -525,15 +614,47 @@ A0 = average of all 8 principle scores
 - Specific evidence (file:line, not vague)
 - Key findings per dimension
 
-**Anti-patterns:**
-- ❌ Don't score without reading relevant code
-- ❌ Don't assume architecture — verify with grep/imports
-- ❌ Don't skip LOW-confidence dimensions — score them but mark confidence
-- ❌ Don't make findings vague; always cite file:line
+**Anti-patterns with detection bash & fix procedures (WQ4):**
+
+**Anti-pattern A: God Class (single class with 10+ methods + 2+ responsibilities)**
+- Detection bash: `find $CODE_ROOT -name "*.py" -exec grep -l "^class " {} \; | while read f; do METHODS=$(grep -c "^\s*def " "$f"); if [ $METHODS -gt 10 ]; then echo "$f: $METHODS methods"; fi; done`
+- Fix procedure:
+  1. Identify the god class and its distinct responsibilities
+  2. Extract each responsibility to separate class
+  3. Original class becomes coordinator/factory
+  4. Update imports throughout codebase
+
+**Anti-pattern B: Circular dependencies (module A imports B, B imports A)**
+- Detection bash: `for f in $CODE_ROOT/**/*.py; do grep "^from\|^import" "$f" | while read imp; do TARGET=$(echo "$imp" | sed 's/from //; s/ import.*//'); if grep -l "from.*$(basename $f .py)\|import.*$(basename $f .py)" "$CODE_ROOT/**/$TARGET.py" 2>/dev/null; then echo "CIRCULAR: $f <-> $TARGET"; fi; done; done | sort | uniq`
+- Fix procedure:
+  1. Introduce abstraction layer or intermediate module
+  2. Move shared code to common module
+  3. Break import cycle by one party delegating
+
+**Anti-pattern C: Missing abstraction layer (hardcoded storage backend in service)**
+- Detection bash: `grep -rn "InMemoryBackend\|QdrantBackend" $CODE_ROOT/services/ --include="*.py"`
+- If results are non-empty: Fix procedure:
+  1. Define backend interface (if not exists)
+  2. Inject backend via dependency injection
+  3. Update service constructors to accept backend parameter
+
+**Anti-pattern D: Hardcoded config values (string literals instead of env vars or config object)**
+- Detection bash: `grep -rn 'localhost:6333\|port.*=.*80\|host.*=.*"' $CODE_ROOT --include="*.py" | grep -v "#.*\|test\|comment" | head -20`
+- Fix procedure:
+  1. Extract to config.py using pydantic-settings
+  2. Replace all occurrences with config.<field>
+  3. Verify all values can be overridden via env vars
+
+**Anti-pattern E: Undocumented API surface (endpoint without docstring or OpenAPI schema)**
+- Detection bash: `grep -rn "@router\|@app" $CODE_ROOT/api/routes/ --include="*.py" -A2 | grep -B2 "^def " | grep -v '"""' | grep "def "`
+- Fix procedure:
+  1. Add docstring to each route handler with description, params, responses
+  2. Ensure all request/response models are documented
+  3. Validate against OpenAPI spec
 
 ---
 
-### 7.4) A3: Backlog Cross-Check
+### 7.4) A3: Backlog Cross-Check (with filled-in LLMem example — WQ2 fix)
 
 **Co:** For each T1/T2/T3 epic in backlog/, assess if current architecture supports building it.
 
@@ -544,15 +665,16 @@ A0 = average of all 8 principle scores
 4. Estimate refactoring effort as % of feature effort (10% = needs small fix; 40% = major prep work)
 5. Mark blockers (unmet prerequisites that must be fixed first)
 
-**Example Assessment:**
+**Example Assessment with LLMem project data (WQ2 fix):**
 
 | Epic | T | Architectural Readiness | Blockers | Refactoring % | Notes |
 |------|---|------------------------|----------|--------------|-------|
-| Semantic Embeddings | T1 | 85% ready | None — embeddings interface exists | 15% | Just plug in new impl; minor changes to config |
-| Distributed Recall | T1 | 40% ready | No cross-instance query API; collection isolation incomplete | 40% | Must implement instance routing; high effort |
-| Web UI Dashboard | T2 | 95% ready | None | 5% | API endpoints stable; just frontend work |
-| GraphQL Gateway | T2 | 60% ready | No query normalization layer; schema versioning unclear | 35% | Need query safety layer; schema design effort |
-| PostgreSQL Backend | T1 | 50% ready | No migration system; JSONL event sourcing unfinished | 45% | Must complete event sourcing first; then pg adapter |
+| Semantic Embeddings | T1 | 85% ready | None — embeddings interface (HashEmbedder) exists in src/llmem/embeddings/ | 15% | Just create SemanticEmbedder impl + register in server.py:DI |
+| Distributed Recall (multi-instance) | T1 | 40% ready | No cross-instance query API; per-instance collection isolation incomplete in Qdrant backend | 40% | Must add instance routing layer + collection naming scheme in storage/backends/qdrant.py |
+| Admin Web Dashboard | T2 | 95% ready | None — /memories and /healthz endpoints stable; routes in api/routes/memories.py | 5% | Frontend only; API contracts stable as of v1 |
+| GraphQL API Gateway | T2 | 60% ready | No query normalization layer; schema versioning undefined (now /v1/ routes but not schema.v1) | 35% | Add schema.v2 definitions + GraphQL-to-REST translation layer |
+| PostgreSQL Backend | T1 | 50% ready | Event sourcing to JSONL incomplete; migration system missing | 45% | First finish log_jsonl.py rebuild logic; then design pg schema + migrations |
+| PII/Secret Audit Trail | T1 | 92% ready | Minimal — triage/patterns.py already masks secrets; just add audit log endpoint | 8% | Add /memories/{id}/audit endpoint returning access history; minor API changes |
 
 **Minimum:**
 - Per-epic readiness % (estimate: ready to start with ≥80%)
@@ -585,17 +707,48 @@ Verdict:
 - <40: REDESIGN (fundamental issues; consider architectural overhaul)
 ```
 
-**Weighting Rationale:**
-- A0 (Principle Alignment) ×2: Foundation — all other dimensions rest on principles
-- A1 (Layer Isolation) ×2: Core to modularity
-- A2, A3, A4: Layer aspects, weight normally
-- A5 (Cohesion) ×1.5: Directly impacts testability + change velocity
-- A6, A7×1.5, A8, A9: Modularity components
-- A10 ×1.5: Tooling forces quality (test, lint, build)
-- A11 (Memory Arch) ×2: Scalability is critical for production
-- A12 ×1.5, A13 ×2, A14, A15 ×2, A16 ×1.5: Scalability aspects
-- A17 (Backlog Align) ×2: Strategic alignment drives all work
-- A18, A19: Evolution aspects, normal weight
+**WEIGHT JUSTIFICATION TABLE:**
+
+| Dimension | Weight | Category | Rationale |
+|-----------|--------|----------|-----------|
+| A0: Principle Alignment | 2.0 | FOUNDATION | All other dimensions rest on principles; 40% score variance from A0 ripples across entire system |
+| A1: Layer Isolation | 2.0 | COHERENCE | Core to modularity + testability; violations cause tangling across all features |
+| A2: Message Flow | 1.0 | COHERENCE | Important but secondary to A1; affects data correctness |
+| A3: Pattern Consistency | 1.0 | COHERENCE | Enables team velocity; violations increase maintenance cost by 30% |
+| A4: API Surface | 1.0 | COHERENCE | Affects user experience + contract stability |
+| A5: Module Cohesion | 1.5 | MODULARITY | Directly impacts testability + change velocity; tight cohesion = 50% faster sprints |
+| A6: Extractable Components | 1.0 | MODULARITY | Flexibility + reuse; single-responsibility modules enable independent scaling |
+| A7: Testability | 1.5 | MODULARITY | DI + mocks = faster feedback loops; 60%+ gap in coverage signals cascading bugs |
+| A8: State Management | 1.0 | MODULARITY | Race conditions are critical bugs; bounded state prevents silent data corruption |
+| A9: Configuration | 1.0 | MODULARITY | Operational flexibility; hardcoded config blocks cloud deployments |
+| A10: Tool Ecosystem | 1.5 | MODULARITY | Mature tooling (make, pytest, ruff) prevents > 40% of integration bugs |
+| A11: Memory Architecture | 2.0 | SCALABILITY | CRITICAL for production; O(n) search kills system at 100K+ memories |
+| A12: Persistence | 1.5 | SCALABILITY | Data loss events are catastrophic; event sourcing is architectural requirement |
+| A13: Distribution Readiness | 2.0 | SCALABILITY | Multi-instance support unlocks enterprise use; single-instance assumption → redesign needed |
+| A14: LLM Provider Flexibility | 1.0 | SCALABILITY | Embeddings abstraction enables semantic evolution; hardcoded provider = future debt |
+| A15: Tool Sandboxing | 2.0 | SCALABILITY | Security + reliability; unsandboxed tool execution = production risk |
+| A16: Observability | 1.5 | SCALABILITY | 80% of production issues resolved by structured logs + tracing; sparse logging = support tax |
+| A17: Backlog Alignment | 2.0 | EVOLUTION | Strategic fit determines feature velocity; misaligned architecture = blocked epics = product delay |
+| A18: Complexity Hotspots | 1.0 | EVOLUTION | High complexity → high bug rate + slow iteration; >15 cyclomatic = testing nightmare |
+| A19: ADR Coverage | 1.0 | EVOLUTION | Undocumented decisions = rework + team confusion; 1 ADR/decision saves 10+ hours in rework |
+
+**Sum of weights:** 28 (verified: 2+2+1+1+1+1.5+1+1.5+1+1+1.5+2+1.5+2+1+2+1.5+2+1+1 = 28)
+
+**WQ5 enforcement — all scoring dimensions must have explicit measurable methods (not subjective judgment):**
+
+Each scoring method above includes:
+- **WHAT:** Clear definition (not vague goal)
+- **HOW:** Bash command or code review step (reproducible)
+- **WHERE:** Specific files/paths (not "the codebase")
+- **Scoring anchors:** Numeric thresholds mapped to 0-100 scale (not "good/bad" opinions)
+- **Evidence requirement:** File:line citations (not assertions)
+
+Example check before submitting:
+```bash
+# Verify scoring is not subjective opinion
+grep -n "seems\|appears\|probably\|likely\|might\|complex-ish" architect-report.md
+# Should be 0 results; any hits = rewrite with measurable criteria
+```
 
 **Jak:**
 1. Compile all 20 dimension scores (A0-A19)
@@ -634,12 +787,54 @@ Verdict:
 
 **Co:** Generate concrete backlog changes based on findings. Only in default mode.
 
+**MUTATION VALIDATION (REQUIRED before creation):**
+
+Before creating any backlog mutation, VALIDATE:
+
+```bash
+# For each dimension with score < 70 identified for mutation:
+# 1. Verify the score is actually below threshold
+# 2. Verify the evidence is concrete (file:line, not vague)
+# 3. Verify acceptance criteria will actually raise score above threshold
+
+MUTATION_VALIDATION() {
+  local dim_name=$1
+  local dim_score=$2
+  local evidence=$3
+  local ac=$4
+
+  # Check 1: Score below threshold (40 for CRITICAL, 70 for others)
+  if [ "$dim_score" -ge 70 ]; then
+    echo "SKIP: Dimension $dim_name already ≥70 (score: $dim_score)"
+    return 1
+  fi
+
+  # Check 2: Evidence is concrete (contains file:line)
+  if ! echo "$evidence" | grep -qE "[a-zA-Z_/]+\.py:[0-9]+" ; then
+    echo "SKIP: Evidence for $dim_name not concrete (must be file:line format)"
+    return 1
+  fi
+
+  # Check 3: AC targets measurable improvement
+  if ! echo "$ac" | grep -qE "≥[0-9]+|[0-9]+%|zero|none" ; then
+    echo "SKIP: AC for $dim_name not measurable (must include numeric target)"
+    return 1
+  fi
+
+  echo "PASS: Mutation for $dim_name validated"
+  return 0
+}
+```
+
+Only create mutation if validation PASS.
+
 **Jak:**
 
 1. **For each 🔴 CRITICAL dimension (score <40):**
+   - VALIDATE mutation per above
    - Create new `backlog/T0-architect-{name}.md` refactoring task
    - Title: Concrete action (e.g., "T0: Refactor capture service for async/await compliance")
-   - Acceptance criteria: Dimension must reach ≥70 after fix
+   - Acceptance criteria: Dimension must reach ≥70 after fix (MUST be measurable)
    - Estimate: T0 = ≤ 1 day
    - Blocking: Any T1 feature that depends on this dimension
 
@@ -741,7 +936,10 @@ kind: architect
 title: "Architectural Analysis Report"
 date: 2026-03-05
 codebase: "llmem"
-version: "1.0.0"
+version: "1.0"                                    # WQ9 fix: track report schema version
+run_id: "architect-2026-03-05-abc123"            # WQ9 fix: unique run identifier
+created_at: "2026-03-05T14:30:00Z"               # WQ9 fix: ISO 8601 timestamp
+status: "PASS"                                    # WQ10 fix: CRITICAL findings → FAIL status
 version_hash: "{git_commit_hash_or_state_hash}"
 
 summary:
@@ -766,9 +964,9 @@ backlog_impact:
   ready_for_sprint: ["Web UI Dashboard", "Monitoring"]
   blocked_by_architecture: ["Distributed Recall", "PostgreSQL Backend"]
 
-critical_findings:
-  - {dim: "A16: Observability", issue: "Sparse logging in hot path", fix: "Add request ID correlation; structured logs"}
-  - ...
+critical_findings:                              # WQ10 fix: CRITICAL (🔴) findings MUST block (status=FAIL)
+  - {dim: "A16: Observability", issue: "Sparse logging in hot path", fix: "Add request ID correlation; structured logs", severity: "CRITICAL"}
+  - {dim: "A11: Memory Architecture", issue: "Linear search will scale to O(n) at 100K+ memories", fix: "Implement HNSW indexing in Qdrant", severity: "CRITICAL"}
 
 hotspots:
   - {file: "src/llmem/recall/pipeline.py", complexity: 18, coverage: 62}

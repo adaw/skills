@@ -45,6 +45,10 @@ Volitelné:
 
 ## Výstupy
 
+**Output schema (WQ9: version field):**
+
+All reports use schema `fabric.report.v1` with `version: "1.0"` field.
+
 - git branch s commit(y)
 - aktualizovaný backlog item `{WORK_ROOT}/backlog/{id}.md`:
   - `status: IN_PROGRESS` během práce
@@ -55,7 +59,118 @@ Volitelné:
   - `wip_item`
   - `wip_branch`
 
-- `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md` (vytvoř jako kopii `{WORK_ROOT}/templates/report.md`; shrň změny, test evidence, commit hash, otevřený PR/Review)
+- `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md`
+  ```yaml
+  ---
+  schema: fabric.report.v1
+  kind: implement
+  version: "1.0"
+  task_id: "{wip_item}"
+  branch: "{branch_name}"
+  created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
+  commit_hash: "{sha}"
+  test_result: "PASS"
+  coverage_pct: {percentage}
+  ---
+  ```
+  (vytvoř jako kopii `{WORK_ROOT}/templates/report.md`; shrň změny, test evidence, commit hash, otevřený PR/Review)
+
+**FILLED-IN EXAMPLE (Task T-TRI-02, LLMem triage heuristics):**
+
+```yaml
+---
+schema: fabric.report.v1
+kind: implement
+version: "1.0"
+task_id: "T-TRI-02"
+branch: "feature/tri-02-heuristics"
+created_at: "2026-03-06T14:30:00Z"
+---
+
+# T-TRI-02 Implementation Report
+
+## Summary
+
+Implemented deterministic triage heuristics for secret/PII/preference/decision detection. Added 8 unit tests covering regex patterns, 1 integration test (end-to-end capture→triage), edge cases (unicode, empty content), and error handling (invalid regex). Coverage increased from 62% to 78% in triage module (target ≥60% — PASS).
+
+## Changes
+
+### Modified Files
+- `src/llmem/triage/heuristics.py` — added `triage_event()` function with 4 regex patterns (secret, PII, preference, decision)
+- `src/llmem/triage/patterns.py` — added regex patterns for OpenAI, GitHub, AWS, Bearer token, password detection
+- `tests/test_triage_heuristics.py` — 8 new unit tests
+
+**Diff stats:**
+```
+ src/llmem/triage/heuristics.py   | 120 ++++++++++++++++++
+ src/llmem/triage/patterns.py     |  85 ++++++++++++
+ tests/test_triage_heuristics.py  | 180 +++++++++++++++++++++++++
+ 3 files changed, 385 insertions(+)
+```
+
+### Evidence
+
+**Tests (PASS):**
+```bash
+pytest tests/test_triage_heuristics.py -v
+test_triage_happy_path PASSED
+test_triage_secret_detection PASSED
+test_triage_pii_masking PASSED
+test_triage_preference_extraction PASSED
+test_triage_decision_extraction PASSED
+test_triage_edge_empty_content PASSED
+test_triage_edge_unicode_normalization PASSED
+test_triage_error_invalid_regex PASSED
+test_triage_integration_capture_to_triage PASSED
+
+====== 9 passed in 1.42s ======
+```
+
+**Coverage (PASS, ≥60%):**
+```
+src/llmem/triage/heuristics.py: 78% (target ≥60%)
+src/llmem/triage/patterns.py: 81%
+```
+
+**Lint (PASS):**
+```
+ruff check src/llmem/triage/ — 0 errors
+```
+
+**Commit:**
+```
+feat(T-TRI-02): implement deterministic triage heuristics with secret/PII/preference detection
+```
+
+## Risks & Follow-ups
+
+- **Regex performance**: Large event text (>10MB) may slow triage. Mitigated: added timeout in CaptureService (5s).
+- **Regex false positives**: Pattern for AWS key may match other strings. Mitigated: regex tested against 50+ real AWS keys + false positives (97% precision in tests).
+- **TODO**: Add performance benchmark test `test_triage_performance_large_event()` in next sprint.
+
+## Status
+
+Task status: **IN_REVIEW** (ready for review + testing by fabric-review skill).
+```
+
+---
+
+## Downstream Contract (WQ7)
+
+**fabric-implement** contracts with **downstream skills:**
+
+| Skill | Contract | Enforcement |
+|-------|----------|------------|
+| **fabric-test** (if separate) | Commit hash recorded in backlog. Branch exists and is clean. Coverage ≥60% (or documented exception). | Test skill queries backlog for commit_hash; missing = warning |
+| **fabric-review** | Status = IN_REVIEW. All tests PASS. Lint PASS (or skipped in bootstrap). | Review reads status + test results from backlog + reports |
+| **fabric-close** | Branch exists. Commit message follows conventional format. No stubs/TODO in code. | Close detects invalid branches or stubs via pre-merge scan |
+| **backlog index** | Backlog item updated with branch + status. Updated timestamp current. | Loop regenerates index after implement; verifies consistency |
+
+**Errors that break contract (CRITICAL):**
+- ❌ Branch not created or wrong name → close cannot find commits to merge
+- ❌ Status not set to IN_REVIEW → review skill skips task, implementation wasted
+- ❌ Tests not PASS → coverage metrics inaccurate, quality gates fail downstream
+- ❌ Stubs/pass left in code → review will reject, implements wasted time
 
 ---
 
@@ -279,21 +394,53 @@ Pokud baseline selže (exit ≠ 0, včetně timeout):
 
 **Minimum akceptovatelného výstupu:**
 - ≥3 testy (happy/edge/error) pro každou novou/změněnou komponentu
-- Coverage nových řádků ≥60% — **VYNUCENO příkazem:**
+- Coverage nových řádků ≥60% pro core modules (services/, api/, recall/, triage/) — **VYNUCENO a MUSÍ FAILNOUT:**
   ```bash
   # Coverage check (POVINNÉ po všech testech)
   CHANGED_MODULES=$(git diff --name-only "${main_branch}...HEAD" -- '*.py' | grep -v test | head -20)
+  CORE_MODULES_FAILED=0
   for MODULE in $CHANGED_MODULES; do
     MODULE_NAME=$(echo "$MODULE" | sed 's|/|.|g' | sed 's|\.py$||' | sed 's|^src\.||')
+    # Zjisti, jestli je core modul (services/, api/, recall/, triage/)
+    if echo "$MODULE" | grep -qE '(services/|api/|recall/|triage/)'; then
+      IS_CORE=1
+    else
+      IS_CORE=0
+    fi
+
     timeout 120 pytest --cov="$MODULE_NAME" --cov-report=term-missing --cov-fail-under=60 -q 2>/dev/null
     COV_EXIT=$?
     if [ $COV_EXIT -ne 0 ] && [ $COV_EXIT -ne 124 ]; then
-      echo "WARN: coverage <60% for $MODULE_NAME"
+      if [ "$IS_CORE" -eq 1 ]; then
+        echo "FAIL: coverage <60% for CORE module $MODULE_NAME — MUST FIX BEFORE COMMIT"
+        CORE_MODULES_FAILED=$((CORE_MODULES_FAILED + 1))
+      else
+        echo "WARN: coverage <60% for helper module $MODULE_NAME (non-blocking)"
+      fi
     fi
   done
+
+  # FAIL if any core module has insufficient coverage
+  if [ "$CORE_MODULES_FAILED" -gt 0 ]; then
+    echo "ERROR: $CORE_MODULES_FAILED core modules failed coverage threshold"
+    exit 1
+  fi
   ```
-  Pokud coverage <60% pro core modul (ne helper/util): oprav testy PŘED commitem.
+  Pokud coverage <60% pro core modul (services/, api/, recall/, triage/): MUSÍŠ opravit testy PŘED commitem.
   Pokud coverage <60% pro helper/util: zapiš WARNING do reportu, pokračuj.
+- Per-function quality check (POVINNÉ):
+  ```bash
+  # Check LOC per function
+  git diff "${main_branch}...HEAD" -- '*.py' | grep -E '^\+def |^\+class ' | while read line; do
+    # Spočítej LOC pro každou novou funkci
+    # (simplified: just warn on syntax level)
+    echo "INFO: new function/class: $(echo "$line" | cut -c2-80)"
+  done
+  ```
+  - ≤50 LOC per funkce (nebo split na menší)
+  - ≤3 parametry (nebo use dataclass)
+  - MUSÍ mít docstring
+  - MUSÍ mít type hints
 - Žádný `pass`, `# TODO`, `...` nebo stub v DONE kódu
 - Všechny nové funkce/metody mají type hints a docstring (min 1 věta)
 
@@ -327,9 +474,9 @@ class Test{ComponentName}:
             component.method(invalid_input)
 ```
 
-**Integration test mapping (POVINNÉ pro API/service/CLI změny):**
+**Integration test mapping (POVINNÉ pro API/service/CLI změny) — ENFORCEMENT:**
 
-Pokud task mění veřejné rozhraní, MUSÍ mít odpovídající integrační test. Mapping:
+Pokud task mění veřejné rozhraní, MUSÍ mít odpovídající integrační test. Po zapsání produkčního kódu MUSÍŠ ověřit, že test soubor existuje. Mapping:
 
 | Typ změny | Testovací soubor | Vzor testu |
 |-----------|-----------------|------------|
@@ -340,10 +487,38 @@ Pokud task mění veřejné rozhraní, MUSÍ mít odpovídající integrační t
 | Změna modelu (Pydantic) | `tests/test_models.py` | `def test_{model}_validation(): valid = {Model}(**valid_data); assert valid.field == expected` |
 | Změna triage/heuristics | `tests/test_triage_{pattern}.py` | `def test_{pattern}_detection(): result = triage(input_with_pattern); assert result.tier == expected` |
 
+**Enforcement check (POVINNÉ)**:
+```bash
+# Po zapsání kódu ověř, že test soubor existuje
+AFFECTED_FILES=$(git diff --name-only "${main_branch}...HEAD" -- '*.py' | grep -v test)
+for FILE in $AFFECTED_FILES; do
+  # Detekuj typ souboru a požadovaný test soubor
+  if echo "$FILE" | grep -qE 'api/.*\.py'; then
+    TEST_FILE="tests/test_api_$(basename "$FILE" .py).py"
+  elif echo "$FILE" | grep -qE 'services/.*\.py'; then
+    TEST_FILE="tests/test_$(basename "$FILE" .py)_integration.py"
+  elif echo "$FILE" | grep -qE 'triage/.*\.py'; then
+    TEST_FILE="tests/test_triage_$(basename "$FILE" .py).py"
+  else
+    # Ostatní moduly — alespoň test_{module}.py
+    TEST_FILE="tests/test_$(basename "$FILE" .py).py"
+  fi
+
+  # Ověř, že test soubor existuje
+  if ! git show HEAD:"$TEST_FILE" >/dev/null 2>&1 && [ ! -f "$TEST_FILE" ]; then
+    echo "ERROR: missing integration test for $FILE (expected $TEST_FILE)"
+    echo "CREATE: $TEST_FILE with mapping from table above"
+    exit 1
+  fi
+done
+```
+
 **Anti-patterns:**
 - ❌ Pouze unit testy pro API endpoint změnu (MUSÍ mít integrační test s HTTP klientem)
 - ❌ Mock VŠECHNO — integrační test má testovat reálnou interakci (mock jen external deps)
+- ❌ Přeskočit mapping enforcement check (je POVINNÝ)
 - ✅ Pro KAŽDOU API změnu: ≥1 integrační test který volá endpoint přes HTTP client
+- ✅ Test soubor MUSÍ existovat před commitem (enforce via check výše)
 
 Během práce nastav backlog status:
 - `status: IN_PROGRESS`
@@ -381,11 +556,63 @@ if [ $TEST_EXIT -eq 124 ]; then echo "TIMEOUT: test exceeded 300s"; TEST_RESULT=
 elif [ $TEST_EXIT -ne 0 ]; then TEST_RESULT="FAIL"; else TEST_RESULT="PASS"; fi
 ```
 
-#### Auto-fix (pokud gates failnou)
+#### Auto-fix (pokud gates failnou) — DECISION TREE
 
-Pokud lint nebo format check failne a config má příslušný fix příkaz, **spusť auto-fix a opakuj gate**:
+Pokud lint nebo format check failne a config má příslušný fix příkaz, **spusť auto-fix a opakuj gate** PODLE tohoto stromu rozhodnutí:
 
-1. **Lint fail** + `COMMANDS.lint_fix` není prázdné → spusť `timeout 120 {COMMANDS.lint_fix}` (exit 124 = timeout → FAIL, nepokouš se znovu), pak znovu `{COMMANDS.lint}`.
+**Auto-fix decision tree (konkrétní):**
+```
+Lint errors count:
+  ≤5:        auto-fix all, then re-run. If new errors → revert, manual fix.
+  6-20:      auto-fix, re-run. If ≥30% regression (nové errors) → revert, manual fix.
+  >20:       DON'T auto-fix. Create intake item, manual fix required.
+```
+
+**Implementace (konkrétní):**
+```bash
+# Count lint errors PŘED auto-fixem
+LINT_ERROR_COUNT=$(timeout 120 {COMMANDS.lint} 2>&1 | grep -cE '^[^:]+:[0-9]+:[0-9]+:' || echo 0)
+
+if [ "$LINT_ERROR_COUNT" -le 5 ]; then
+  # AUTO-FIX ALL
+  echo "Lint errors ≤5 ($LINT_ERROR_COUNT) — attempting auto-fix all"
+  timeout 120 {COMMANDS.lint_fix}
+  AUTOFIX_EXIT=$?
+  if [ $AUTOFIX_EXIT -eq 0 ]; then
+    # Re-run lint
+    timeout 120 {COMMANDS.lint}
+    LINT_RERUN_EXIT=$?
+    if [ $LINT_RERUN_EXIT -ne 0 ]; then
+      echo "WARN: lint still fails after auto-fix, reverting auto-fix changes"
+      git checkout -- .
+    fi
+  fi
+elif [ "$LINT_ERROR_COUNT" -le 20 ]; then
+  # AUTO-FIX WITH REGRESSION CHECK
+  echo "Lint errors 6-20 ($LINT_ERROR_COUNT) — auto-fix with regression check"
+  timeout 120 {COMMANDS.lint_fix}
+  AUTOFIX_EXIT=$?
+  if [ $AUTOFIX_EXIT -eq 0 ]; then
+    # Count errors AFTER auto-fix
+    LINT_ERROR_AFTER=$(timeout 120 {COMMANDS.lint} 2>&1 | grep -cE '^[^:]+:[0-9]+:[0-9]+:' || echo 0)
+    # Calculate regression percentage
+    if [ "$LINT_ERROR_COUNT" -gt 0 ]; then
+      REGRESSION_PCT=$((($LINT_ERROR_AFTER - $LINT_ERROR_COUNT) * 100 / $LINT_ERROR_COUNT))
+      if [ "$REGRESSION_PCT" -gt 30 ]; then
+        echo "WARN: regression detected (+${REGRESSION_PCT}% errors), reverting auto-fix"
+        git checkout -- .
+      fi
+    fi
+  fi
+else
+  # DON'T AUTO-FIX — >20 errors
+  echo "Lint errors >20 ($LINT_ERROR_COUNT) — DO NOT auto-fix, requires manual fix"
+  python skills/fabric-init/tools/fabric.py intake-new --source "implement" --slug "implement-lint-too-many-${date}" \
+    --title "Too many lint errors ($LINT_ERROR_COUNT) — requires manual fix (auto-fix disabled for >20 errors)"
+fi
+```
+
+1. **Lint fail** + `COMMANDS.lint_fix` není prázdné → spusť auto-fix podle stromu výše.
 2. **Format fail** + `COMMANDS.format` není prázdné → spusť `timeout 120 {COMMANDS.format}` (exit 124 = timeout → FAIL), pak znovu `{COMMANDS.format_check}`.
 
 Pokud lint/format fail a příslušný fix příkaz **je prázdný** (`""`) → auto-fix není možný. Vytvoř intake item `intake/implement-recommend-lint-fix-command.md` (jednorázově, jen pokud ještě neexistuje) a oprav chyby manuálně.
@@ -452,6 +679,41 @@ fi
 
 > **Proč:** Auto-fix (lint_fix, format) může zavést nekompatibilní změny (např. import re-ordering, trailing comma v multiline). Regression detection zabraňuje tichému zhoršení.
 
+#### Blocked dependencies detection (POVINNÉ)
+
+Pokud task závisí na jiném tasku (field `depends_on` v backlog):
+```bash
+DEPENDS=$(grep 'depends_on:' {WORK_ROOT}/backlog/{id}.md | sed 's/depends_on://' | tr -d '[],' | xargs)
+if [ -n "$DEPENDS" ]; then
+  for DEP in $DEPENDS; do
+    DEP_STATUS=$(grep 'status:' "{WORK_ROOT}/backlog/${DEP}.md" 2>/dev/null | awk '{print $2}')
+    if [ "$DEP_STATUS" != "DONE" ]; then
+      echo "BLOCKED: dependency $DEP not DONE (status=$DEP_STATUS)"
+      python skills/fabric-init/tools/fabric.py intake-new --source "implement" --slug "blocked-dep-${DEP}" \
+        --title "Task $id blocked: dependency $DEP status=$DEP_STATUS (not DONE)"
+      exit 1  # FAIL this task, move to next
+    fi
+  done
+fi
+```
+
+#### Spec/ADR drift detection (POVINNÉ)
+
+Během implementace pokud zjistíš, že se plán LIŠÍ od aktuálního ADR/SPEC:
+```bash
+# Kontrola: pokud implementation discovery reveals ADR/SPEC drift
+if [ -f "{ANALYSES_ROOT}/{id}-analysis.md" ]; then
+  # Hledej nesrovnalosti mezi analysis a skutečným kódem
+  # Např. analysis říká "use InMemoryBackend" ale codebase potřebuje Qdrant
+  if grep -q "InMemoryBackend" "{ANALYSES_ROOT}/{id}-analysis.md" && \
+     grep -q "QdrantBackend" {CODE_ROOT}/storage/backends/*.py; then
+    echo "WARN: analysis vs implementation drift detected"
+    python skills/fabric-init/tools/fabric.py intake-new --source "implement" --slug "impl-spec-drift-${id}" \
+      --title "ADR/SPEC drift detected during $id implementation — requires ADR update or analysis correction"
+  fi
+fi
+```
+
 #### Separace pre-existing fixů (povinné)
 
 Pokud auto-fix opravil soubory, rozliš, které změny patří k tasku a které jsou pre-existing:
@@ -492,6 +754,50 @@ Pokud něco selže:
 - neopouštěj branch
 - oprav (v rámci stejného tasku)
 - opakuj gates
+
+**Code complexity metrics validation (WQ8 ENFORCEMENT):**
+
+Po zapsání všeho kódu proveď complexity check (POVINNÉ):
+
+```bash
+# Cyclomatic complexity check (radon — optional install)
+if command -v radon &> /dev/null; then
+  echo "Running complexity analysis..."
+  radon cc -a -nc src/llmem/ | grep -E "src/llmem/(services|api|recall|triage)/" | while read line; do
+    # Extract function name and CC score
+    FUNC=$(echo "$line" | awk '{print $1}')
+    CC=$(echo "$line" | grep -oE "[0-9]+" | head -1)
+
+    # Warn if CC > 10 (complex function)
+    if [ "$CC" -gt 10 ]; then
+      echo "WARN: high cyclomatic complexity in $FUNC: CC=$CC (consider refactoring if >15)"
+    fi
+  done
+else
+  echo "SKIP: radon not installed (optional complexity check)"
+fi
+
+# Function length distribution
+echo "Function length analysis:"
+git diff "${main_branch}...HEAD" -- '*.py' | \
+  grep -E '^\+def |^\+class ' | \
+  while read line; do
+    FUNC=$(echo "$line" | sed 's/^\+//' | cut -c2-60)
+    echo "New function: $FUNC (verify ≤50 LOC)"
+  done
+```
+
+**Enforcement criteria:**
+- ✅ PASS: Cyclomatic complexity ≤10 for most functions (≤15 acceptable for complex business logic)
+- ✅ PASS: Function length ≤50 lines (or documented exception)
+- ✅ PASS: Max nesting depth ≤3 (else split to helper function)
+- ❌ FAIL: CC >15 without justification + comment
+- ❌ FAIL: Function >50 LOC without docstring explaining why
+
+**Anti-patterns (WQ8):**
+- ❌ Long functions with nested loops/conditions (split to helpers)
+- ❌ Same complexity pattern repeated (extract shared logic)
+- ❌ No comments on complex sections (add "# Why this complexity: ...")
 
 ### 6) Commit
 
@@ -601,10 +907,34 @@ if [ $TEST_EXIT -eq 124 ]; then echo "TIMEOUT: test exceeded 300s"; GATE_RESULT=
 
 ## Self-check
 
-Před návratem:
-- working tree čistý (`git status` nic)
-- `COMMANDS.test` PASS
-- backlog item aktualizovaný (branch/status/updated)
-- implement report existuje v `{WORK_ROOT}/reports/implement-{wip_item}-{YYYY-MM-DD}-{run_id}.md`
+**BLOCKING ENFORCEMENT (WQ10: CRITICAL findings MUST fail implementation):**
 
-Pokud ne → FAIL + vytvoř intake item `intake/implement-selfcheck-failed-{id}.md`.
+Před návratem — VŠECHNY položky MUSÍ být ✅:
+
+- ❌ CRITICAL: Working tree DIRTY (git status shows changes) → **EXIT 1** (commit all changes first)
+  ```bash
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "ERROR: working tree not clean — commit or stash changes"
+    exit 1
+  fi
+  ```
+- ❌ CRITICAL: `COMMANDS.test` FAIL → **EXIT 1** (coverage metrics invalid, cannot proceed to review)
+  ```bash
+  timeout 300 {COMMANDS.test}
+  TEST_EXIT=$?
+  if [ $TEST_EXIT -ne 0 ]; then
+    echo "ERROR: tests FAIL — fix before commit"
+    exit 1
+  fi
+  ```
+- ❌ CRITICAL: Coverage <60% for CORE modules (services/, api/, recall/, triage/) → **EXIT 1** (unacceptable, must add tests)
+- ❌ CRITICAL: Backlog item status NOT `IN_REVIEW` after commit → **EXIT 1** (downstream review will skip)
+- ❌ CRITICAL: Baseline tests were already failing → **EXIT 1** (do not introduce new regressions)
+- ❌ CRITICAL: Stubs/pass/TODO found in production code → **EXIT 1** (incomplete implementation)
+
+**Non-critical (warnings that don't fail, but document):**
+- ⚠️ WARN: Coverage <60% for non-core modules (acceptable, but log)
+- ⚠️ WARN: Lint/format skipped (bootstrap mode)
+- ⚠️ WARN: Pre-existing fixups committed separately (note in report)
+
+Pokud ne → **FAIL + vytvoř intake item `intake/implement-selfcheck-failed-{id}.md`**.

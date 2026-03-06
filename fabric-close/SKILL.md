@@ -51,7 +51,20 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 ## Výstupy
 
+**Output schema (WQ9: version field):**
+
+All reports use schema `fabric.report.v1` with optional `version: "1.0"` field for evolution tracking.
+
 - **Per-task:** `{WORK_ROOT}/reports/close-{wip_item}-{YYYY-MM-DD}-{run_id}.md` *(pro každý mergovaný task — NESMÍ se přepisovat)*
+  ```yaml
+  ---
+  schema: fabric.report.v1
+  kind: close
+  version: "1.0"
+  task_id: "{wip_item}"
+  created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
+  ---
+  ```
   ```bash
   # Overwrite guard (povinné):
   CLOSE_REPORT="{WORK_ROOT}/reports/close-{wip_item}-{YYYY-MM-DD}-{run_id}.md"
@@ -60,6 +73,15 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
   fi
   ```
 - **Sprint summary:** `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md` *(aktualizuj po každém close — append-only tabulky, přepiš jen Summary/Next)*
+  ```yaml
+  ---
+  schema: fabric.report.v1
+  kind: sprint-close
+  version: "1.0"
+  sprint_number: {N}
+  created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
+  ---
+  ```
   ```bash
   # Append-only guard: sprint summary může existovat z předchozího task close
   # Přidávej řádky do tabulky, neprůpiš existující data
@@ -80,7 +102,7 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
   - `updated`
 - regenerovaný `{WORK_ROOT}/backlog.md` *(po každém merge, ne jen na konci)*
 - aktualizovaný `{WORK_ROOT}/sprints/sprint-{N}.md` (Task Queue statusy → DONE)
-- (doporučeno) reset `state.wip_item` + `state.wip_branch` na null
+- (povinné) reset `state.wip_item` + `state.wip_branch` na null
 
 ---
 
@@ -199,21 +221,81 @@ Z `sprints/sprint-{N}.md` načti tabulku `Task Queue` a získej ordered list:
 
 Ignoruj řádky, které nejsou Task-like typy.
 
-### 2) Klasifikuj tasks: MERGEABLE vs CARRY-OVER
+### 2) Klasifikuj tasks: MERGEABLE vs CARRY-OVER (KONKRÉTNÍ PRAVIDLA)
 
 Task je **MERGEABLE**, pokud:
-- backlog item `{WORK_ROOT}/backlog/{id}.md` existuje
-- `branch:` je vyplněný a branch existuje lokálně nebo na remote
-- `review_report:` existuje a obsahuje `Verdict: CLEAN`
+```
+MERGEABLE = backlog.status ∈ {IN_REVIEW, DONE}
+  AND branch exists
+  AND review verdict = CLEAN (not REWORK, not FAIL)
+  AND test result = PASS
+  AND no stubs in task files (grep pass/NotImplementedError)
+```
+
+Konkrétní kontrola:
+```bash
+TASK_STATUS=$(grep 'status:' "{WORK_ROOT}/backlog/${id}.md" | awk '{print $2}')
+TASK_BRANCH=$(grep 'branch:' "{WORK_ROOT}/backlog/${id}.md" | awk '{print $2}')
+REVIEW_VERDICT=$(grep 'review_verdict:' "{WORK_ROOT}/backlog/${id}.md" | awk '{print $2}')
+
+# Status check
+if [ "$TASK_STATUS" != "IN_REVIEW" ] && [ "$TASK_STATUS" != "DONE" ]; then
+  CARRY_OVER_REASON="STATUS_NOT_READY (status=$TASK_STATUS)"
+fi
+
+# Branch check
+if ! git rev-parse --verify "$TASK_BRANCH" >/dev/null 2>&1; then
+  CARRY_OVER_REASON="NO_BRANCH"
+fi
+
+# Review verdict check
+if [ "$REVIEW_VERDICT" = "REWORK" ]; then
+  CARRY_OVER_REASON="REWORK"
+elif [ "$REVIEW_VERDICT" = "FAIL" ]; then
+  CARRY_OVER_REASON="REVIEW_FAIL"
+fi
+
+# Stubs check
+STUBS=$(git diff "${main_branch}...${TASK_BRANCH}" -- '*.py' 2>/dev/null | grep -cE 'pass$|raise NotImplementedError')
+if [ "$STUBS" -gt 0 ]; then
+  CARRY_OVER_REASON="STUBS_FOUND ($STUBS stubs)"
+fi
+
+# Decision
+if [ -n "$CARRY_OVER_REASON" ]; then
+  echo "CARRY_OVER: $id — reason: $CARRY_OVER_REASON"
+else
+  echo "MERGEABLE: $id"
+fi
+```
 
 Jinak je **CARRY-OVER** s důvodem:
-- missing branch
-- review missing
-- review verdict REWORK
-- blocked dependencies
-- status není IN_REVIEW (typicky není hotovo)
+- `NO_BRANCH`: branch missing/deleted
+- `NO_REVIEW`: review not completed
+- `REWORK`: review verdict REWORK
+- `BLOCKED`: external dependency not DONE
+- `STUBS`: contains stubs/TODO
+- `STATUS_NOT_READY`: status nije IN_REVIEW ani DONE
 
-### 3) Mergeable tasks mergeuj sekvenčně (bezpečně)
+### 3) Pre-merge security scan (POVINNÉ na KAŽDÝ task)
+
+Před merge proveď bezpečnostní kontrolu:
+```bash
+# Security scan na diff
+git diff "${main_branch}...${branch}" -- '*.py' | grep -nE \
+  'eval\(|exec\(|subprocess.*shell=True|__import__|pickle\.loads|yaml\.load\(|os\.system\(|input\(' \
+  > /tmp/security-scan.txt 2>/dev/null
+
+if [ -s /tmp/security-scan.txt ]; then
+  echo "CRITICAL: potential security issues found in $id diff:"
+  cat /tmp/security-scan.txt
+  # Zapiš do intake pro review
+  python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "security-scan-${id}" \
+    --title "Security scan found potential issues in $id (review diff before merge)"
+fi
+```
+
+### 4) Mergeable tasks mergeuj sekvenčně (bezpečně)
 
 Pro každý MERGEABLE task v pořadí:
 
@@ -322,7 +404,65 @@ Pro každý MERGEABLE task v pořadí:
    - Označ task jako CARRY-OVER (reason: squash merge conflict)
    - **Nepokračuj** na commit / quality gates — přeskoč na další MERGEABLE task
    - Tím se zajistí, že merge conflict jednoho tasku nezablokuje celý sprint
-6. Spusť quality gates na main (bezpečně, podle `QUALITY.mode`):
+
+**Commit message quality validation (WQ8 ENFORCEMENT):**
+
+Všechny merge commity MUSÍ splňovat:
+```bash
+# Pattern: feat({id}): {description} nebo fix({id}): {description}
+# Requirements:
+#   1. Format: type({id}): description (conventional commits)
+#   2. Description: ≥10 characters (ne "fix stuff")
+#   3. No generic verbs: "fix", "add", "update" alone (musí být specifické)
+
+COMMIT_MSG=$(git log -1 --format=%B)
+if ! echo "$COMMIT_MSG" | grep -qE '^(feat|fix|chore|refactor)\([A-Z]+-[0-9]+\): .{10,}'; then
+  echo "ERROR: commit message format invalid: $COMMIT_MSG"
+  echo "Expected: feat({id}): {description} (≥10 chars)"
+  exit 1
+fi
+
+# Additional check: no lazy descriptions
+if echo "$COMMIT_MSG" | grep -qE '(fix stuff|add code|update file|implement feature)'; then
+  echo "WARN: commit message too generic: $COMMIT_MSG"
+  echo "→ Better examples: feat(T-CAP-01): add instance_id validation in CaptureService"
+fi
+```
+
+**Enforcement:**
+- ✅ PASS: `feat(T-STR-01): add in-memory backend with thread-safe upsert`
+- ✅ PASS: `fix(T-TRI-02): correct regex pattern for AWS secret detection`
+- ❌ FAIL: `feat(T-ID): fix`
+- ❌ FAIL: `feat: add feature without task id`
+- ❌ WARN: `feat(T-ID): add code` (generic, but still accepted; encourage specificity)
+
+6. **Post-merge rollback procedure (POVINNÉ — IF GATES FAIL)**:
+   ```bash
+   # Pokud se gates po merge failnou, rollback je MANDATORY
+   # NEVER ponech failed code na main — vždy revert
+   MERGE_COMMIT=$(git rev-parse HEAD)
+   if [ "$GATE_RESULT" != "PASS" ]; then
+     echo "ERROR: gates failed post-merge, initiating rollback"
+     git revert -m 1 --no-edit "$MERGE_COMMIT"
+     REVERT_EXIT=$?
+     if [ $REVERT_EXIT -eq 0 ]; then
+       # Verify tests pass na main AFTER revert
+       timeout 300 {COMMANDS.test}
+       VERIFY_EXIT=$?
+       if [ $VERIFY_EXIT -eq 0 ]; then
+         echo "SUCCESS: rollback complete, main is green again"
+         # Vytvoř intake item pro triage
+         python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "post-merge-rollback-${id}" \
+           --title "Post-merge rollback for $id — gates failed, needs investigation"
+       else
+         echo "CRITICAL: tests FAIL after rollback — main is broken"
+         echo "Manual intervention required: git log main, git diff main"
+         exit 1
+       fi
+     fi
+   fi
+   ```
+7. Spusť quality gates na main (bezpečně, podle `QUALITY.mode`):
    - **Poznámka:** v `bootstrap` režimu mohou být `lint` / `format_check` vypnuté (`""`) → ber jako `SKIPPED`.
      Ve `strict` režimu musí být nakonfigurované (nesmí být `""` ani `TBD`).
 
@@ -357,7 +497,7 @@ Pro každý MERGEABLE task v pořadí:
 
    > **Timeout (exit 124) se NESMÍ zaměnit za normální test FAIL.** Timeout = killed externally, FAIL = test assertion failed. Odlišná příčina, odlišná remediace.
 
-6. Pokud gates FAIL:
+8. Pokud gates FAIL:
 
    **6a) Pokus o auto-fix (max 1× per close run, jen pro lint/format):**
    Pokud selhaly lint nebo format_check (ne test), zkus auto-fix před revertem:
@@ -410,7 +550,7 @@ Pro každý MERGEABLE task v pořadí:
    Pokud po auto-fixu všechny gates PASS → pokračuj krokem 8 (úspěch).
    Pokud stále FAIL (stejné chyby jako před auto-fixem) → pokračuj revertem níže.
 
-   **7b) Revert (pokud auto-fix nepomohl nebo selhaly testy):**
+   **8b) Revert (pokud auto-fix nepomohl nebo selhaly testy):**
    - **NEPOUŽÍVEJ** `git reset --hard` ani force push.
    - rollback proveď přes **revert commit** (zachová historii main):
      ```bash
@@ -432,7 +572,7 @@ Pro každý MERGEABLE task v pořadí:
    - označ task jako carry-over (reason: merge gates failed)
    - pokračuj dalším taskem (nesmí to zablokovat celý sprint)
 
-8. Pokud gates PASS:
+9. Pokud gates PASS:
    - získej commit SHA: `SHA=$(git rev-parse HEAD)`
    - **merge_commit enforcement (P2 fix #27):**
      ```bash
@@ -466,7 +606,7 @@ Pro každý MERGEABLE task v pořadí:
 
 > Poznámka: Když má projekt CI, je vhodné po merge udělat `git push origin main` (pokud má agent práva). Pokud ne, aspoň to uveď v reportu jako next action.
 
-### 4) Regeneruj backlog index (po KAŽDÉM merge)
+### 10) Regeneruj backlog index (po KAŽDÉM merge)
 
 Deterministicky:
 ```bash
@@ -477,7 +617,7 @@ python skills/fabric-init/tools/fabric.py backlog-index
 
 Tím se `{WORK_ROOT}/backlog.md` synchronizuje se skutečným stavem backlog items. Nečekej na konec sprintu — **regeneruj po každém merge**, aby byl backlog.md vždy aktuální.
 
-### 5) Per-task close report (povinné)
+### 11) Per-task close report (povinné)
 
 Pro KAŽDÝ mergovaný task vytvoř **samostatný** report:
 
@@ -490,18 +630,92 @@ Obsah:
 
 > **NESMÍŠ přepisovat existující per-task close report.** Každý task = 1 soubor. To zajišťuje kompletní audit trail.
 
-### 6) Sprint summary report (append-only)
+### 12) Sprint summary report (append-only, strukturovaný)
 
-`{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md` dle `{WORK_ROOT}/templates/close-report.md`:
+`{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md` — MUSÍ MAJÍ tuto strukturu:
 
-Po KAŽDÉM merge aktualizuj tento soubor:
-- **Completed & Merged** — tabulka (append řádek pro nový task)
-- **Carry-over** — aktualizuj zbývající tasky
-- **Not started** / **Blocked**
-- **Quality evidence** (jaké commands běžely, PASS/FAIL)
-- **Summary** + **Next** — přepiš aktuální stav
+```markdown
+## Sprint {N} Summary
 
-### 7) Reset WIP (povinné — ATOMIC WRITE)
+### Merged Tasks
+| ID | Title | Branch | Merge Commit | Coverage Delta | Status |
+|---|---|---|---|---|---|
+| {id} | {title} | {branch} | {sha} | +2% | DONE |
+
+### Carry-over Tasks
+| ID | Title | Reason | Next Action |
+|---|---|---|---|
+| {id2} | {title2} | REWORK | Address review feedback, re-run review |
+
+### Quality Metrics
+- Coverage: {CURRENT_COV}% (delta: {COV_DELTA}%)
+- Lint: PASS | SKIPPED
+- Format: PASS | SKIPPED
+- Tests: PASS
+- E2E: PASS | SKIPPED
+
+### Risk Register
+- {any regressions detected}
+- {security findings}
+
+### Summary
+Sprint {N} merged {N_DONE} tasks, {N_CARRY} carry-over. Coverage trend: {up|stable|down}. No critical blockers.
+
+### Next
+For sprint {N+1}: {carry-over recommendations}
+```
+
+**FILLED-IN EXAMPLE (Sprint 1, LLMem project):**
+
+```markdown
+## Sprint 1 Summary
+
+### Merged Tasks
+| ID | Title | Branch | Merge Commit | Coverage Delta | Status |
+|---|---|---|---|---|---|
+| T-CAP-01 | Add ObservationEvent schema validation | feature/cap-01-validation | 5a8c2d9 | +3% | DONE |
+| T-TRI-02 | Implement deterministic triage heuristics | feature/tri-02-heuristics | 7b4f1e2 | +5% | DONE |
+| T-STR-01 | Add in-memory backend for dev/test | feature/str-01-inmem | 3c9e6b5 | +2% | DONE |
+
+### Carry-over Tasks
+| ID | Title | Reason | Next Action |
+|---|---|---|---|
+| T-REC-01 | Add recall scoring + injection | REWORK | Review found missing error handling in scoring edge cases; revise ≥2 tests, re-run review |
+
+### Quality Metrics
+- Coverage: 74% (delta: +3% vs Sprint 0)
+- Lint: PASS
+- Format: PASS
+- Tests: PASS
+- E2E: SKIPPED (not configured)
+
+### Risk Register
+- **Deterministic ID generation**: SHA256-based; depends on stable content hash (low risk, unit tested)
+- **Secrets in triage output**: No new secrets leaked in non-secret items; regex patterns validated
+
+### Summary
+Sprint 1 merged 3 tasks (T-CAP-01, T-TRI-02, T-STR-01), 1 carry-over (T-REC-01 pending rework). Coverage improved +3% to 74% (target: ≥70%). Core capture/triage/store pipeline validated end-to-end. No critical blockers.
+
+### Next
+For sprint 2: Start with T-REC-01 rework (should be quick), then tackle T-REC-01 again + new tasks from recall path. Consider adding E2E test suite to catch integration gaps earlier.
+```
+
+**Enforcement (konkrétní):**
+```bash
+# Vytvoř sprint summary na ZAČÁTKU close (jedna instance per sprint)
+SPRINT_REPORT="{WORK_ROOT}/reports/close-sprint-${N}-$(date +%Y-%m-%d).md"
+if [ ! -f "$SPRINT_REPORT" ]; then
+  # Create fresh from template
+  cp {WORK_ROOT}/templates/close-report.md "$SPRINT_REPORT"
+fi
+
+# Nyní append do tabulek, NEPŘEPISUJ existující
+# Po KAŽDÉM merge: aktualizuj "Merged Tasks" tabulka
+# Po ALL merges: update "Carry-over" tabulka
+# At END: update "Quality Metrics" + "Summary" + "Next"
+```
+
+### 13) Reset WIP (povinné — ATOMIC WRITE)
 
 Po uzavření každého tasku (merge PASS nebo carry-over) resetuj WIP přes deterministický tool (atomický zápis):
 
@@ -523,11 +737,11 @@ fi
 > Nesahej na `phase/step`. WIP reset je **mandatory** — fabric-loop předpokládá, že po close je WIP čistý pro výběr dalšího tasku.
 > **NIKDY nepiš do state.md přímo (sed -i state.md).** Vždy tmp → mv pro atomicitu.
 
-### 8) Sprint-wide quality gates (povinné)
+### 14) Sprint-wide quality gates (povinné — BLOCKING)
 
 Po zpracování VŠECH tasks (merge/carry-over) a PŘED finálním sprint summary spusť sprint-wide quality gates:
 
-#### 8a) Coverage delta check
+#### 14a) Coverage delta check (BLOCKING — delta < -5% = FAIL)
 
 ```bash
 # Spusť coverage na main po všech mergích
@@ -546,21 +760,38 @@ if [ -n "{COMMANDS.test}" ] && [ "{COMMANDS.test}" != "TBD" ]; then
   COV_DELTA=$((CURRENT_COV - BASELINE_COV))
   echo "Coverage: ${CURRENT_COV}% (delta: ${COV_DELTA}% vs sprint $PREV_SPRINT)"
 
-  # WARN pokud coverage klesla o ≥5%
+  # BLOCKING GATE: coverage delta < -5% = FAIL sprint close
   if [ "$COV_DELTA" -lt -5 ]; then
-    echo "WARN: coverage regression detected (${COV_DELTA}%)"
-    python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "coverage-regression-sprint-${N}" \
-      --title "Coverage regression: ${CURRENT_COV}% (was ${BASELINE_COV}%, delta ${COV_DELTA}%)"
+    echo "CRITICAL: coverage regression ${COV_DELTA}% detected — BLOCKING close"
+    python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "coverage-regression-block-sprint-${N}" \
+      --title "Coverage regression BLOCKS close: ${CURRENT_COV}% (was ${BASELINE_COV}%, delta ${COV_DELTA}%, threshold -5%)"
+    exit 1  # FAIL entire close operation
+  # WARN pokud coverage klesla o 0-5%
+  elif [ "$COV_DELTA" -lt 0 ]; then
+    echo "WARN: coverage regressed ${COV_DELTA}% (acceptable, delta > -5%)"
+    python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "coverage-warn-sprint-${N}" \
+      --title "Coverage regressed ${COV_DELTA}% — acceptable but investigate"
   fi
 fi
 ```
 
 **Anti-patterns:**
 - ❌ Přeskočit coverage check protože „testy prošly"
-- ❌ Akceptovat coverage < 50% bez WARN
+- ❌ Akceptovat delta < -5% bez FAIL
 - ✅ Vždy zaznamenat coverage_pct do sprint summary reportu
+- ✅ BLOCKING gate: delta < -5% = FAIL sprint close
 
-#### 8b) E2E verification (pokud definován)
+**Carry-over anti-patterns (WQ4: detection + fix):**
+
+| Anti-pattern | Description | Detection Bash | Remediation |
+|---|---|---|---|
+| **Same task carried 2+ sprints** | Task in CARRY-OVER for ≥2 consecutive sprints = scope/priority issue | `grep -r "^id: T-ID$" {WORK_ROOT}/reports/close-sprint-*.md \| wc -l` (if ≥2, WARN) | 1. Assess if task is still valuable (consider removing). 2. If yes: split into smaller sub-tasks with clearer AC. 3. Add blocker intake item: `task-stuck-{N}-sprints.md` |
+| **Reason not documented** | Carry-over without explicit reason = unclear what blocks it | `grep -A1 "T-ID\|" {WORK_ROOT}/reports/close-sprint-*.md \| grep -q "Reason"` (if no match, FAIL) | 1. Retrospectively document reason in close report. 2. File intake item: `carry-over-reason-missing-{id}.md` with details. |
+| **No concrete next action** | "Address feedback" is too vague; should be: "Fix line 42 in models.py, add 2 edge case tests" | `grep "Next Action" {WORK_ROOT}/reports/close-sprint-*.md \| grep -cE "^(fix|add|refactor)\s+" ` (count concrete verbs) | Rewrite next action with: concrete file/line + specific test to add + estimated effort for sprint N+1. |
+| **REWORK carried >1 sprint** | REWORK verdict but task not re-reviewed yet = review blocker not cleared | For each REWORK in close report: `ls -t {WORK_ROOT}/reports/review-${id}-*.md \| head -1 | xargs grep "verdict:" \| grep -q "REWORK"` then check if review_report updated in backlog; if no new review, CRITICAL | 1. Schedule immediate re-review with explicit feedback addressed. 2. Update backlog `review_report:` field with path to new review when available. 3. Create intake item: `rework-stuck-${id}.md`. |
+| **Dependency never resolves** | Task blocked on DEP that is also CARRY-OVER or never reaches DONE | `for task in $(grep "depends_on:" {WORK_ROOT}/backlog/{id}.md); do grep "status: DONE" {WORK_ROOT}/backlog/${task}.md || echo "UNRESOLVED: $task"; done` | 1. Break circular dependency: reassign blockers to separate sprint. 2. Or: implement task without blocker (architectural change). 3. Create intake item: `dependency-blocker-{id}-{dep}.md` with options. |
+
+#### 14b) E2E verification (WARN + INTAKE, ne BLOCKING)
 
 ```bash
 # E2E smoke test na main po všech mergích
@@ -571,11 +802,15 @@ if [ -n "{COMMANDS.test_e2e}" ] && [ "{COMMANDS.test_e2e}" != "TBD" ]; then
   if [ $E2E_EXIT -eq 124 ]; then
     echo "TIMEOUT: E2E sprint verification exceeded 600s"
     E2E_SPRINT_RESULT="TIMEOUT"
+    # WARN + INTAKE, ne FAIL close
+    python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "e2e-sprint-timeout-${N}" \
+      --title "E2E sprint verification TIMEOUT (600s) — investigate performance"
   elif [ $E2E_EXIT -ne 0 ]; then
     echo "WARN: E2E sprint verification FAILED"
     E2E_SPRINT_RESULT="FAIL"
+    # WARN + INTAKE, ne FAIL close
     python skills/fabric-init/tools/fabric.py intake-new --source "close" --slug "e2e-sprint-fail-${N}" \
-      --title "E2E sprint verification failed after all merges (sprint ${N})"
+      --title "E2E sprint verification failed after all merges (sprint ${N}) — investigate flakiness"
   else
     E2E_SPRINT_RESULT="PASS"
   fi
@@ -584,7 +819,9 @@ else
 fi
 ```
 
-#### 8c) Sprint-diff review (doporučeno)
+**Note:** E2E FAIL/TIMEOUT je WARN + INTAKE, NENÍ blocking close. Close pokračuje, ale E2E failure se sleduje jako issue.
+
+#### 14c) Sprint-diff review (doporučeno, WARN na security)
 
 Celkový diff sprintu může odhalit problémy, které per-task review nechytil (cross-task interakce, duplicitní kód, nekonzistentní naming):
 
@@ -636,15 +873,47 @@ fi
 
 ---
 
+## Downstream Contract (WQ7)
+
+**fabric-close** contracts with **downstream skills:**
+
+| Skill | Contract | Enforcement |
+|-------|----------|------------|
+| **fabric-loop** | Sprint must end with: all tasks DONE or CARRY-OVER (no BLOCKED/PAUSED). WIP fields reset to null. Close report + sprint summary present. | Loop detects malformed state via `state.md` validation; fails if wip_item not null after close |
+| **fabric-implement** (rework cycle) | CARRY-OVER tasks have explicit reason + next action. Review report path in backlog updated (if rework). | Implement reads CARRY-OVER reason; if missing, creates intake item + skips task |
+| **fabric-review** (next sprint) | Merge commits recorded in backlog (`merge_commit:` field). Task status = DONE. Branch deleted or documented as remote. | Review may query merge_commit for cherry-pick decisions; if missing, raises WARN |
+| **backlog index** | All DONE items updated in index. Coverage metrics in sprint report. | `fabric-loop` runs backlog-index after close; verifies DONE count consistency |
+
+**Errors that break contract (CRITICAL):**
+- ❌ WIP fields not reset (wip_item or wip_branch not null) → loop cannot select next task
+- ❌ Sprint summary missing or malformed → no metrics for decision-making
+- ❌ CARRY-OVER task without documented reason → implement cannot decide if to retry
+- ❌ Merge commit missing in backlog DONE tasks → loss of audit trail
+
+---
+
 ## Fail conditions
 
-- sprint plan nemá Task Queue
-- `COMMANDS.test` je `TBD` nebo prázdné
-- `COMMANDS.lint` je `TBD`
-- `COMMANDS.format_check` je `TBD`
-- git working tree není čistý na main při merge
+**BLOCKING ENFORCEMENT (WQ10: CRITICAL findings MUST fail close):**
 
-V těchto případech: vytvoř intake item + CRITICAL v close reportu.
+- ❌ CRITICAL: `COMMANDS.test` je `TBD` nebo prázdné → **EXIT 1** (entire close fails)
+  ```bash
+  if [ -z "{COMMANDS.test}" ] || [ "{COMMANDS.test}" = "TBD" ]; then
+    echo "CRITICAL: COMMANDS.test not configured"
+    exit 1
+  fi
+  ```
+- ❌ CRITICAL: Coverage regression ≥ -5% → **EXIT 1** (sprint close blocked)
+- ❌ CRITICAL: Security scan finds ≥1 critical issue (eval, exec, pickle.loads) → **EXIT 1** (merge blocked for that task, intake created)
+- ❌ CRITICAL: Tests FAIL on main post-merge AND revert fails → **EXIT 1** (manual intervention required)
+- ❌ CRITICAL: Git corruption detected (merge-in-progress, index error) → **EXIT 1** (manual recovery)
+
+**Non-blocking (warnings that don't fail close):**
+- ⚠️ WARN: Coverage regressed 0–4% (acceptable)
+- ⚠️ WARN: E2E test timeout (investigate, but don't block)
+- ⚠️ WARN: Lint/format skipped (mode=bootstrap)
+
+V těchto CRITICAL případech: vytvoř intake item + loguj error + **exit 1 (FAIL entire close dispatch)**.
 
 ### Idempotence a recovery
 

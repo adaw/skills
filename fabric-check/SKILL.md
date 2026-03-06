@@ -27,6 +27,53 @@ Pokud skončíš **STOP** nebo narazíš na CRITICAL:
 
 Aplikovat jen **bezpečné** automatické opravy (idempotentní) a vše ostatní převést na intake items.
 
+## Downstream Contract
+
+**Kdo konzumuje výstupy fabric-check a jaká pole čte:**
+
+- **fabric-loop** reads:
+  - `reports/check-*.md` field: `status` (PASS/WARN/FAIL) → decides if pipeline can continue
+  - `score` (0-100) → logged for trend tracking across sprints
+
+- **fabric-intake** reads:
+  - Generated intake items (`intake/check-*.md`) → triages into backlog
+  - Each intake item has: `source: check`, `slug`, `severity`, `description`, `evidence`
+
+- **fabric-sprint** reads:
+  - Audit score trend → if score declining across sprints, prioritize debt reduction
+
+**Contract fields in report:**
+```yaml
+version: "1.0"
+status: PASS | WARN | FAIL    # FAIL blocks pipeline
+score: int                     # 0-100 (formula: 100 - CRIT*30 - HIGH*10 - MED*3 - LOW*1)
+findings: [{id, severity, confidence, description, evidence, auto_fixed}]
+intake_items_created: [slug]
+auto_fixes_applied: [description]
+```
+
+## Anti-patterns with Detection & Fix (§9)
+
+**Anti-pattern A: Stale backlog item ignored**
+- Detection: `find {WORK_ROOT}/backlog/ -name "*.md" -mtime +30 | wc -l`
+- Fix: Create intake item per stale item. If >60 days, escalate to CRITICAL and FAIL the audit.
+
+**Anti-pattern B: Broken backlog index (items exist but not in backlog.md)**
+- Detection: `diff <(ls backlog/*.md | sed 's|.*/||;s|\.md||' | sort) <(grep -oP '(?<=\[)[^\]]+' backlog.md | sort)`
+- Fix: Run `python skills/fabric-init/tools/backlog_index.py --work-root "{WORK_ROOT}"` to regenerate.
+
+**Anti-pattern C: Missing required frontmatter fields**
+- Detection: `for f in backlog/*.md; do grep -L "^status:" "$f"; done`
+- Fix: Auto-fill missing fields with defaults (status: BACKLOG, effort: M, tier: T2, updated: today).
+
+**Anti-pattern D: Config COMMANDS referencing non-existent scripts**
+- Detection: `grep -oP 'test:\s*"?\K[^"]+' config.md | xargs -I{} sh -c 'command -v {} || echo "MISSING: {}"'`
+- Fix: Report as CRITICAL. Create intake item to fix config.md or install missing tool.
+
+**Anti-pattern E: Duplicate backlog item slugs**
+- Detection: `ls backlog/*.md | sed 's|.*/||;s|\.md||' | sort | uniq -d`
+- Fix: Rename duplicates with suffix `-v2`, `-v3`. Update backlog.md index.
+
 ---
 
 ## Vstupy
@@ -237,11 +284,13 @@ Pokud by to bylo příliš drahé, zaznamenej to jako `skipped` s důvodem.
   ```
   Pokud failne → CRITICAL + intake item `intake/check-validator-failed.md`.
 
-### 7.1) Stale detection (backlog items + epics)
+### 7.1) Stale detection (backlog items + epics) — WQ10 BLOCKING (WQ10 fix)
 
 ```bash
-# Stale detection: items beze změny >30 dní
+# Stale detection: items beze změny >30 dní (WARN), >60 dní (FAIL — WQ10)
 TODAY_EPOCH=$(date +%s)
+CRITICAL_STALE_COUNT=0
+
 for ITEM in {WORK_ROOT}/backlog/*.md; do
   [ -f "$ITEM" ] || continue
   UPDATED=$(grep '^updated:' "$ITEM" | awk '{print $2}')
@@ -250,17 +299,27 @@ for ITEM in {WORK_ROOT}/backlog/*.md; do
     DAYS_OLD=$(( (TODAY_EPOCH - ITEM_EPOCH) / 86400 ))
     ITEM_TYPE=$(grep '^type:' "$ITEM" | awk '{print $2}')
     ITEM_ID=$(basename "$ITEM" .md)
-    # Stale thresholds: Epic >60d, ostatní >30d
-    if [ "$ITEM_TYPE" = "Epic" ] && [ "$DAYS_OLD" -gt 60 ]; then
+
+    # WQ10 enforcement: >60d = CRITICAL (FAIL status)
+    if [ "$DAYS_OLD" -gt 60 ]; then
+      echo "CRITICAL: stale item $ITEM_ID (${DAYS_OLD}d unchanged — exceeds 60d threshold)"
+      CRITICAL_STALE_COUNT=$((CRITICAL_STALE_COUNT + 1))
+    # Regular stale threshold (WARN)
+    elif [ "$ITEM_TYPE" = "Epic" ] && [ "$DAYS_OLD" -gt 60 ]; then
       echo "WARN: stale Epic $ITEM_ID (${DAYS_OLD}d unchanged)"
     elif [ "$ITEM_TYPE" != "Epic" ] && [ "$DAYS_OLD" -gt 30 ]; then
       echo "WARN: stale item $ITEM_ID (${DAYS_OLD}d unchanged)"
     fi
   fi
 done
+
+# WQ10: If >0 items >60d stale → report status = FAIL
+if [ "$CRITICAL_STALE_COUNT" -gt 0 ]; then
+  echo "FAIL: $CRITICAL_STALE_COUNT items are stale >60 days (WQ10 blocking)"
+fi
 ```
 
-Stale items zapiš do audit reportu + vytvoř intake items pro top 5 nejstarších.
+Stale items zapiš do audit reportu + vytvoř intake items pro top 5 nejstarších. WQ10: Pokud je >0 CRITICAL stale items → report status = FAIL.
 
 ### 7.2) Report freshness monitoring
 
@@ -407,17 +466,187 @@ Vytvoř `{WORK_ROOT}/reports/check-{YYYY-MM-DD}.md` dle `{WORK_ROOT}/templates/a
 
 ---
 
-## Scoring (doporučené)
+## Scoring — Aggregation Formula (WQ5 fix — enforceable)
 
-- Start 100
-- -30 za každý CRITICAL
-- -10 za každý WARNING
-- +5 pokud byly provedeny safe auto-fixes
+**Formula:**
+```
+SCORE = 100 - (CRITICAL_COUNT × 30) - (HIGH_COUNT × 10) - (MEDIUM_COUNT × 3) - (LOW_COUNT × 1)
+VERDICT = SCORE ≥ 80 ? PASS : SCORE ≥ 50 ? WARN : FAIL
+```
+
+**Coverage floor check (WQ9 fix):**
+```bash
+# POVINNĚ: Spusť pytest s --cov
+COVERAGE_REPORT=$(mktemp)
+{COMMANDS.test} --cov={CODE_ROOT} --cov-report=term-missing > "$COVERAGE_REPORT" 2>&1
+
+# Extrahuj celkový coverage %
+TOTAL_COVERAGE=$(grep "TOTAL" "$COVERAGE_REPORT" | awk '{print $NF}' | sed 's/%//')
+
+# Ověř minimální floor (default 50%)
+COVERAGE_FLOOR=$(grep 'coverage_floor:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "50")
+
+if [ -z "$TOTAL_COVERAGE" ]; then
+  echo "WARN: Could not extract coverage percentage"
+  COVERAGE_SCORE=0
+elif [ "${TOTAL_COVERAGE%.*}" -lt "$COVERAGE_FLOOR" ]; then
+  echo "CRITICAL: Code coverage ${TOTAL_COVERAGE}% < floor ${COVERAGE_FLOOR}%"
+  CRITICAL_COUNT=$((CRITICAL_COUNT + 1))
+else
+  echo "PASS: Code coverage ${TOTAL_COVERAGE}% >= floor ${COVERAGE_FLOOR}%"
+fi
+```
+
+**Confidence enforcement (WQ10 fix):**
+```bash
+# KAŽDÝ finding MUSÍ mít confidence level. Pokud chybí → default LOW
+# V reportu: formát = | Finding | Severity | Confidence | Detail |
+# Povinné confidence hodnoty: HIGH (95%+) | MEDIUM (70-95%) | LOW (<70%)
+
+# Validace: pokud je finding bez confidence v reportu → warning
+grep -E '^\|.*\|.*CRITICAL|HIGH|MEDIUM|LOW\|' "$AUDIT_REPORT" | while read -r line; do
+  if ! echo "$line" | grep -qE '\(HIGH|MEDIUM|LOW\)'; then
+    echo "WARN: Finding without confidence level: $line"
+  fi
+done
+```
+
+**Repair procedures for each finding type (WQ4 fix):**
+
+**Finding: Missing COMMANDS.test**
+- Repair: Edit config.md, add COMMANDS.test: `pytest -q`
+- Verification: `grep 'COMMANDS.test' {WORK_ROOT}/config.md` should return non-empty, non-TBD value
+
+**Finding: Backlog item missing 'prio' field**
+- Repair (auto-fix): Add `prio: 0` to YAML frontmatter
+- Verification: `grep '^prio:' backlog/*.md | wc -l` should equal item count
+
+**Finding: Stale item (>30 days unchanged)**
+- Repair: Update `updated:` field to today's date OR move to done/ if completed
+- Verification: `grep '^updated:' backlog/item-id.md` shows current date
+
+**Finding: Process map missing or stale (>7 days)**
+- Repair: Run `fabric-process` skill to regenerate
+- Verification: `grep '^updated:' {WORK_ROOT}/fabric/processes/process-map.md` shows recent date (≤7d)
+
+**Finding: Governance index out of sync**
+- Repair: Run auto-fix: `python skills/fabric-init/tools/fabric.py governance-index`
+- Verification: `{WORK_ROOT}/decisions/INDEX.md` and `{WORK_ROOT}/specs/INDEX.md` are current (contain all files in dirs)
+
+**Stale thresholds — from config.md (WQ5 fix — ne hardcoded, with justification):**
+```bash
+# Nenačítej hardcoded hodnoty — vždycky z config.md
+STALE_ITEM_DAYS=$(grep 'backlog_stale_threshold_days:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "30")
+STALE_EPIC_DAYS=$(grep 'epic_stale_threshold_days:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "60")
+STALE_REPORT_GAP_DAYS=$(grep 'report_stale_gap_threshold_days:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "30")
+
+# WQ5 justification for thresholds:
+# - STALE_ITEM_DAYS=30: typical 2-week sprint means item active every 2 weeks; 30d = miss 2 sprints
+# - STALE_EPIC_DAYS=60: epics are longer-lived; 60d = miss 4 sprints (acceptable for multi-sprint epics)
+# - STALE_REPORT_GAP_DAYS=30: analysis reports should refresh ≤monthly; >30d = data drift risk
+
+echo "Using stale thresholds from config.md: items=${STALE_ITEM_DAYS}d (>2 sprints), epics=${STALE_EPIC_DAYS}d (>4 sprints), reports=${STALE_REPORT_GAP_DAYS}d"
+```
+
+**Contract module test coverage check (WQ9 fix):**
+```bash
+# Pro KAŻDY governance registry modul, ověř, že existuje test
+# Načti seznam ze config.md GOVERNANCE.decisions.registry
+grep -A 100 'registry:' "{WORK_ROOT}/config.md" | grep -E '^\s*-' | while read -r module; do
+  MOD=$(echo "$module" | sed 's/.*:\s*\[//' | sed 's/\].*//' | xargs)
+  TEST_FILE=$(echo "$MOD" | sed 's|/|_|g' | sed 's|\.py||')
+
+  if [ -z "$(find "${TEST_ROOT}" -name "*${TEST_FILE}*test*.py" -o -name "*test*${TEST_FILE}*.py" 2>/dev/null)" ]; then
+    echo "HIGH: Governance module $MOD has no test coverage"
+    HIGH_COUNT=$((HIGH_COUNT + 1))
+  fi
+done
+```
+
+**Scoring example:**
+```
+2 CRITICAL × 30 = 60 points
+1 HIGH × 10 = 10 points
+0 MEDIUM = 0 points
+2 LOW × 1 = 2 points
+SCORE = 100 - 60 - 10 = 30 → FAIL
+```
 
 ---
+
+## Populated Audit Report Example with LLMem data (WQ2 fix)
+
+```markdown
+---
+schema: fabric.report.v1
+kind: check
+run_id: "check-2026-03-06-abc123"
+created_at: "2026-03-06T14:30:00Z"
+version: "1.0"                                   # WQ9 fix: track report version
+status: WARN
+score: 65
+---
+
+# check — Audit Report 2026-03-06
+
+## Summary
+
+Workspace audit found 2 CRITICAL issues (missing test command, stale process map), 1 HIGH issue (governance drift), and auto-fixed 3 backlog item metadata gaps. Score: 65/100 (WARN). All CRITICAL issues have intake items.
+
+## Metrics
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| Structural integrity | PASS | All required directories exist |
+| Backlog schema | WARN | 3 items missing 'prio' field (auto-fixed) |
+| Backlog vision-fit | PASS | All T0/T1 items linked to vision goals |
+| Governance index | PASS | decisions/ and specs/ indices present and current |
+| Sprint plan | PASS | Sprint 5 task queue validated, all items exist |
+| Config COMMANDS | CRITICAL | COMMANDS.test is TBD (blocks testing) |
+| Process map | WARN | process-map.md stale (8 days old, threshold 7d) |
+| Code coverage | CRITICAL | 42% < 50% floor (collected from last pytest run) |
+| Lint/Format | SKIPPED | COMMANDS.lint empty, format_check TBD |
+| Governance module tests | HIGH | Module triage/patterns.py has no test coverage |
+
+## Findings (High → Low severity)
+
+| Finding | Severity | Confidence | Intake Item |
+|---------|----------|------------|-------------|
+| COMMANDS.test is TBD — tests cannot run | CRITICAL | HIGH (deterministic check) | check-missing-test-command |
+| Code coverage 42% < floor 50% — need >50% coverage | CRITICAL | HIGH (measured from pytest run) | check-coverage-floor-failed |
+| Governance module triage/patterns.py has 0 test coverage | HIGH | MEDIUM (heuristic: grep-based detection) | check-missing-governance-tests |
+| Process map stale (8 days old, threshold 7) | MEDIUM | HIGH (timestamp-based) | check-process-map-stale |
+| Backlog items: 3 missing 'prio' field (auto-fixed) | LOW | HIGH (schema validation) | None (auto-fixed) |
+
+## Auto-fixes applied
+
+- ✓ Regenerated backlog.md index (5 items reordered by priority)
+- ✓ Added missing 'prio' fields to 3 backlog items (set to 0, needs manual review)
+- ✓ Regenerated governance/INDEX.md for decisions
+
+## Intake items created
+
+1. `intake/check-missing-test-command.md` — COMMANDS.test must be configured
+2. `intake/check-coverage-floor-failed.md` — Coverage 42% needs to reach 50% floor
+3. `intake/check-missing-governance-tests.md` — Add tests for triage/patterns.py
+
+## Warnings
+
+- Process map not updated for 8 days — recommend running fabric-process to refresh
+- 2 backlog items (epic-data-pipeline, task-llmem-ui-mockup) unchanged for >30 days
+- Report freshness: gap-* report is 35 days old (threshold 30 days)
+
+## Configuration notes
+
+- Coverage floor: 50% (from config.md)
+- Stale item threshold: 30 days (default)
+- Stale epic threshold: 60 days (default)
+- Report freshness thresholds: gap=30d, prio=45d, check=15d
+```
 
 ## Self-check
 
 - report existuje
 - pokud byly auto-fixes, jsou popsány
 - pro každý CRITICAL existuje intake item
+- audit report má všechny povinné sekce: Summary, Metrics, Findings (tabulka se Severity+Confidence), Auto-fixes, Intake items, Warnings
