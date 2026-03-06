@@ -102,6 +102,17 @@ Staleness (volitelné, 0–5):
 - 90–180 dní: 3
 - \> 180 dní: 5 (a vytvoř intake item `intake/prio-stale-{id}.md` — zvážit archivaci nebo zrušení)
 
+**Monotonicity guard:** `updated:` field NESMÍ být nastaveno na starší datum než aktuální hodnota. Při re-triáži:
+```bash
+# Monotonicity: updated field can only move forward
+CURRENT_UPDATED=$(grep '^updated:' "{WORK_ROOT}/backlog/${id}.md" | awk '{print $2}' | tr -d '"')
+NEW_UPDATED="{YYYY-MM-DD}"
+if [ -n "$CURRENT_UPDATED" ] && [ "$NEW_UPDATED" \< "$CURRENT_UPDATED" ]; then
+  echo "WARN: monotonicity violation — keeping updated=$CURRENT_UPDATED (newer than $NEW_UPDATED)"
+  NEW_UPDATED="$CURRENT_UPDATED"
+fi
+```
+
 Škály:
 - Impact: 0–10
 - Urgency: 0–10

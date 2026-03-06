@@ -817,6 +817,15 @@ fi
 # Po KAŽDÉM merge: aktualizuj "Merged Tasks" tabulka
 # Po ALL merges: update "Carry-over" tabulka
 # At END: update "Quality Metrics" + "Summary" + "Next"
+
+# Sprint summary dedup guard: check if task already closed in this sprint
+CLOSE_REPORT="{WORK_ROOT}/reports/close-sprint-${N}.md"
+if [ -f "$CLOSE_REPORT" ] && grep -q "^| ${TASK_ID} |" "$CLOSE_REPORT"; then
+  echo "WARN: task $TASK_ID already in sprint summary — skipping duplicate entry"
+else
+  # ... append task row to sprint summary table
+fi
+```
 ```
 
 ### 13) Reset WIP (povinné — ATOMIC WRITE)

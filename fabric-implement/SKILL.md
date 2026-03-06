@@ -310,12 +310,20 @@ validate_path() {
 **Unicode normalization (P2 fix): Sanitize branch name before git checkout:**
 ```bash
 # Unicode normalization (P2 fix): sanitize branch name
-branch_name=$(echo "${branch_name}" | LC_ALL=C sed 's/[^a-zA-Z0-9._/-]/-/g' | sed 's/--*/-/g')
+# Remove all non-alphanumeric, dash, underscore, dot characters
+branch_name=$(echo "${branch_name}" | LC_ALL=C sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/-*-/-/g' | sed 's/^-\|-$//')
 ```
 
 Git kroky:
 
 ```bash
+# Branch causality: verify branch exists before checkout
+if ! git rev-parse --verify "${WIP_BRANCH}" >/dev/null 2>&1; then
+  echo "STOP: branch '${WIP_BRANCH}' does not exist — implement may have crashed before creating it"
+  echo "  → Reset state.wip_branch and re-run implement"
+  exit 1
+fi
+
 git status --porcelain
 timeout 60 git fetch --all --prune || echo "WARN: git fetch failed/timeout (network?), continuing with local state"
 git checkout "${main_branch}"
@@ -648,6 +656,25 @@ fi
 Pokud lint/format fail a příslušný fix příkaz **je prázdný** (`""`) → auto-fix není možný. Vytvoř intake item `intake/implement-recommend-lint-fix-command.md` (jednorázově, jen pokud ještě neexistuje) a oprav chyby manuálně.
 
 Auto-fix smí proběhnout **max 1×** per gate per implement run. Pokud po auto-fixu gate stále failne → oprav manuálně (v rámci stejného tasku).
+
+**Auto-fix counter: reset at sprint boundary**
+```bash
+# Auto-fix counter: reset at sprint boundary
+AUTOFIX_COUNTER_FILE="{WORK_ROOT}/.autofix-counter-${TASK_ID}"
+if [ -f "$AUTOFIX_COUNTER_FILE" ]; then
+  AUTOFIX_COUNT=$(cat "$AUTOFIX_COUNTER_FILE" 2>/dev/null || echo 0)
+  echo "$AUTOFIX_COUNT" | grep -qE '^[0-9]+$' || AUTOFIX_COUNT=0
+else
+  AUTOFIX_COUNT=0
+fi
+if [ "$AUTOFIX_COUNT" -ge "${MAX_REWORK_ITERS:-3}" ]; then
+  echo "STOP: auto-fix limit reached ($AUTOFIX_COUNT/${MAX_REWORK_ITERS:-3}) for $TASK_ID"
+  echo "  → Create intake item for manual investigation"
+  exit 1
+fi
+AUTOFIX_COUNT=$((AUTOFIX_COUNT + 1))
+echo "$AUTOFIX_COUNT" > "$AUTOFIX_COUNTER_FILE"
+```
 
 **Persisted auto-fix counter (idempotence guard pro re-run):**
 ```bash

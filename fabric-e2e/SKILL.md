@@ -13,7 +13,21 @@ Run end-to-end tests against a live running LLMem system. Validates that the ful
 
 ## §2 Protokol
 
-Standard protocol_log.py with `skill="e2e"`. All major checkpoints (preconditions pass, server started, tests begin, server stopped) are logged with timestamp and status.
+```bash
+# START
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" --skill "e2e" --event start
+
+# ... E2E test execution ...
+
+# END
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" --skill "e2e" --event end \
+  --status {OK|WARN|ERROR} \
+  --report "{WORK_ROOT}/reports/e2e-{YYYY-MM-DD}.md"
+```
+
+All major checkpoints (preconditions pass, server started, tests begin, server stopped) are logged with timestamp and status.
 
 ## §3 Preconditions (bash code)
 
@@ -524,22 +538,22 @@ report_file: reports/e2e-2026-03-05.md
 ## §10 Self-check (12 items)
 
 **Existence:**
-- ✓ Report exists: `reports/e2e-{YYYY-MM-DD}.md`
-- ✓ Log file exists: `reports/e2e-{YYYY-MM-DD}.log`
-- ✓ Server process terminated: `! kill -0 $SERVER_PID 2>/dev/null`
-- ✓ Temp directory cleaned: `[ ! -d "$E2E_HOME" ]`
+- [ ] Report exists: `reports/e2e-{YYYY-MM-DD}.md`
+- [ ] Log file exists: `reports/e2e-{YYYY-MM-DD}.log`
+- [ ] Server process terminated: `! kill -0 $SERVER_PID 2>/dev/null`
+- [ ] Temp directory cleaned: `[ ! -d "$E2E_HOME" ]`
 
 **Quality:**
-- ✓ All test categories represented (≥5 of 8 categories in output)
-- ✓ Each failed test has intake item
-- ✓ Regression comparison done (if previous report exists)
-- ✓ Report has pass/fail counts, duration, provider info
+- [ ] All test categories represented (≥5 of 8 categories in output)
+- [ ] Each failed test has intake item
+- [ ] Regression comparison done (if previous report exists)
+- [ ] Report has pass/fail counts, duration, provider info
 
 **Invariants:**
-- ✓ Port `${E2E_PORT}` is free: `! lsof -i :${E2E_PORT}`
-- ✓ No orphan processes: `ps aux | grep -c "llmem\|uvicorn"` should be baseline
-- ✓ Protocol log has START and END: check protocol_log.py
-- ✓ No production data directory was used: all state is in temp `$E2E_HOME`
+- [ ] Port `${E2E_PORT}` is free: `! lsof -i :${E2E_PORT}`
+- [ ] No orphan processes: `ps aux | grep -c "llmem\|uvicorn"` should be baseline
+- [ ] Protocol log has START and END: check protocol_log.py
+- [ ] No production data directory was used: all state is in temp `$E2E_HOME`
 
 ## §11 Failure Handling
 

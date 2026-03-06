@@ -267,29 +267,29 @@ Pokud `{WORK_ROOT}/config.md` **neexistuje**:
 Vytvoř adresáře (pokud neexistují):
 
 ```bash
-mkdir -p {WORK_ROOT}/backlog
-mkdir -p {WORK_ROOT}/backlog/done
-mkdir -p {WORK_ROOT}/intake
-mkdir -p {WORK_ROOT}/intake/done
-mkdir -p {WORK_ROOT}/intake/rejected
-mkdir -p {WORK_ROOT}/sprints
-mkdir -p {WORK_ROOT}/reports
-mkdir -p {WORK_ROOT}/logs
-mkdir -p {WORK_ROOT}/analyses
-mkdir -p {WORK_ROOT}/templates
-mkdir -p {WORK_ROOT}/decisions
-mkdir -p {WORK_ROOT}/specs
-mkdir -p {WORK_ROOT}/reviews
+mkdir -p "{WORK_ROOT}/backlog"
+mkdir -p "{WORK_ROOT}/backlog/done"
+mkdir -p "{WORK_ROOT}/intake"
+mkdir -p "{WORK_ROOT}/intake/done"
+mkdir -p "{WORK_ROOT}/intake/rejected"
+mkdir -p "{WORK_ROOT}/sprints"
+mkdir -p "{WORK_ROOT}/reports"
+mkdir -p "{WORK_ROOT}/logs"
+mkdir -p "{WORK_ROOT}/analyses"
+mkdir -p "{WORK_ROOT}/templates"
+mkdir -p "{WORK_ROOT}/decisions"
+mkdir -p "{WORK_ROOT}/specs"
+mkdir -p "{WORK_ROOT}/reviews"
 
-mkdir -p {VISIONS_ROOT}             # Sub-vize (rozšíření core vision.md)
+mkdir -p "{VISIONS_ROOT}"             # Sub-vize (rozšíření core vision.md)
 
-mkdir -p {WORK_ROOT}/archive
-mkdir -p {WORK_ROOT}/archive/backlog
-mkdir -p {WORK_ROOT}/archive/sprints
-mkdir -p {WORK_ROOT}/archive/reports
-mkdir -p {WORK_ROOT}/archive/analyses
-mkdir -p {WORK_ROOT}/archive/visions
-mkdir -p {WORK_ROOT}/archive/quarantine
+mkdir -p "{WORK_ROOT}/archive"
+mkdir -p "{WORK_ROOT}/archive/backlog"
+mkdir -p "{WORK_ROOT}/archive/sprints"
+mkdir -p "{WORK_ROOT}/archive/reports"
+mkdir -p "{WORK_ROOT}/archive/analyses"
+mkdir -p "{WORK_ROOT}/archive/visions"
+mkdir -p "{WORK_ROOT}/archive/quarantine"
 ```
 
 ---

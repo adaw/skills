@@ -60,11 +60,18 @@ mutations: [{slug, type, tier, effort, description}]
 
 ## §2 Protokol
 
-Uses standard `protocol_log.py` with:
-```
-skill = "architect"
-phase = "orientation"
-action = "analyze"
+```bash
+# START
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" --skill "architect" --event start
+
+# ... architectural analysis (A0-A19) ...
+
+# END
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" --skill "architect" --event end \
+  --status {OK|WARN|ERROR} \
+  --report "{WORK_ROOT}/reports/architect-{YYYY-MM-DD}.md"
 ```
 
 Outputs:
@@ -1092,6 +1099,8 @@ dependencies_required:
   - fabric-init (must run first)
 dependencies_optional:
   - fabric-intake (if new observations to triage)
+depends_on: [fabric-init, fabric-vision]
+feeds_into: [fabric-process, fabric-gap, fabric-sprint, fabric-implement]
 may_modify_state: false
 may_modify_backlog: true    # default mode only — creates T0/T1 items, ADRs, priority shifts
 may_modify_code: false      # architect is read-only; never modifies source

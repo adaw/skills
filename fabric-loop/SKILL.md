@@ -184,6 +184,33 @@ python skills/fabric-init/tools/fabric.py backlog-scan --json-out "{WORK_ROOT}/r
 2) Vytvoř/aktualizuj 1 blocker report v `{WORK_ROOT}/reports/`.
 3) Nastav `state.error = "BLOCKED_ONLY: see <path>"` a **STOP**.
 
+## Downstream Contract
+
+**Kdo konzumuje výstupy fabric-loop a jaká pole čte:**
+
+- **Všechny fabric skills** read:
+  - `state.md` fields: `phase`, `step`, `sprint`, `wip_item`, `error`, `loop_count`
+  - `state.md` field `completed_step` — signalizuje, který step právě skončil
+
+- **fabric-prio** reads:
+  - `state.sprint` → aktuální číslo sprintu pro scheduling
+  - `state.wip_item` → ověřuje, zda není konflikt s WIP limitem
+
+- **fabric-sprint** reads:
+  - `state.sprint` → inkrementuje číslo sprintu
+  - `state.phase` → ověřuje, že jsme v planning fázi
+
+- **fabric-implement** reads:
+  - `state.wip_item` → aktuální task k implementaci
+  - `state.wip_branch` → branch pro commit
+
+- **fabric-archive** reads:
+  - `state.sprint` → číslo sprintu pro archivaci
+  - `state.phase` → ověřuje closing fázi
+  - `state.completed_step` → kontroluje, že všechny předchozí kroky proběhly
+
+**Invariant:** Loop NIKDY nemodifikuje state.md přímo. Pouze volá `state-patch` s explicitním diff. Každý patch je atomický a logovaný v protocol_log.
+
 ## Protokol (povinné)
 Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
 

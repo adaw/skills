@@ -686,6 +686,13 @@ echo "Estimating effort..."
 declare -A EFFORT_MAP
 while read prio id; do
   [ -z "$id" ] && continue
+
+  # Validate item ID format (alphanumeric + hyphen only)
+  if ! echo "$id" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+    echo "WARN: invalid item ID format: '$id' — skipping"
+    continue
+  fi
+
   FILES=$(grep -l "$id" {CODE_ROOT}/src/**/*.py 2>/dev/null | wc -l)
   TESTS=$(grep -c "def test_" {TEST_ROOT}/test_*.py | grep "$id" | wc -l)
   COMPLEXITY=$(grep -r "cyclomatic" {CODE_ROOT}/src | grep "$id" | awk '{print $NF}' | sort -rn | head -1 || echo 5)

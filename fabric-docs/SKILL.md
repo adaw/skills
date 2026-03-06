@@ -52,16 +52,28 @@ fi
 
 ## Downstream Contract (WQ7 fix)
 
-**Which downstream skills read the docs report and what fields they consume:**
+**Kdo konzumuje výstupy fabric-docs a jaká pole čte:**
 
 - **fabric-gap** reads:
-  - `Documentation Coverage (by module)` table → columns: Module, Public Items, Documented, Coverage %
-  - `Docstring Quality Distribution` → to warn if BAD items > 10% of public API
-  - `CHANGELOG.md` status → whether user-facing changes are tracked
+  - `reports/docs-*.md` field `coverage_pct` → porovnává s vision coverage target
+  - `reports/docs-*.md` field `missing_docs[]` → generuje intake items pro chybějící dokumentaci
 
 - **fabric-review** reads:
-  - `API Surface Delta` section → New/Changed/Removed endpoints to validate against backlog
-  - `Validation Results` section → Broken link count (must be 0)
+  - `reports/docs-*.md` field `api_docs_status` → ověřuje, zda API dokumentace odpovídá kódu
+  - `reports/docs-*.md` field `changelog_updated` → kontroluje, zda changelog reflektuje změny
+
+- **fabric-check** reads:
+  - `reports/docs-*.md` field `coverage_pct` → health check threshold (min 60 %)
+  - `reports/docs-*.md` field `stale_docs[]` → dokumenty neaktualizované > 30 dní
+
+**Report schema fields:**
+```yaml
+coverage_pct: float          # 0-100
+missing_docs: [string]       # list of undocumented modules
+stale_docs: [string]         # docs not updated in >30 days
+api_docs_status: PASS|WARN   # API doc vs code sync
+changelog_updated: bool      # changelog reflects recent changes
+```
 
 ---
 

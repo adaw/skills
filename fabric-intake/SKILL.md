@@ -80,7 +80,15 @@ Výsledek musí být:
 
 ```bash
 MAX_INTAKE=${MAX_INTAKE:-100}
-INTAKE_COUNTER=0
+COUNTER_FILE="{WORK_ROOT}/.intake-counter"
+# Persist counter to disk for idempotence across re-runs
+if [ -f "$COUNTER_FILE" ]; then
+  INTAKE_COUNTER=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0)
+  # Validate numeric
+  echo "$INTAKE_COUNTER" | grep -qE '^[0-9]+$' || INTAKE_COUNTER=0
+else
+  INTAKE_COUNTER=0
+fi
 ```
 
 ## Preconditions
@@ -107,7 +115,13 @@ fi
 # When processing intake items, enforce counter:
 for intake_file in {WORK_ROOT}/intake/*.md; do
   [ -f "$intake_file" ] || continue
+  # Idempotence: skip already-processed files (check done/ directory)
+  BASENAME=$(basename "$intake_file")
+  if [ -f "{WORK_ROOT}/intake/done/$BASENAME" ] || [ -f "{WORK_ROOT}/intake/rejected/$BASENAME" ]; then
+    continue
+  fi
   INTAKE_COUNTER=$((INTAKE_COUNTER + 1))
+  echo "$INTAKE_COUNTER" > "$COUNTER_FILE"
   if [ "$INTAKE_COUNTER" -ge "$MAX_INTAKE" ]; then
     echo "WARN: max intake items reached ($INTAKE_COUNTER/$MAX_INTAKE)"
     break
