@@ -34,6 +34,62 @@ fabric-builder migrate <name>         # Konvertovat legacy skill na builder-temp
 
 ---
 
+## Progressive Disclosure — pravidlo 500 řádků (POVINNÉ)
+
+Agent Skills specifikace doporučuje **max ~500 řádků** v SKILL.md. Delší skills riskují LLM truncation — agent přečte SKILL.md celý při aktivaci, ale s příliš dlouhým souborem ztratí kontext na konci.
+
+**Řešení: SKILL.md + referenční soubory.** SKILL.md obsahuje §1–§12 strukturu (orchestrační vrstva), detailní obsah žije v `references/` souborech, které agent čte on-demand přes Read tool.
+
+### Pravidla
+
+1. **SKILL.md ≤ 500 řádků** — orchestrace, kontrakty, preconditions, self-check
+2. **Detailní obsah → `references/`** — postupy, příklady, triage pravidla, šablony
+3. **§7 Postup** v SKILL.md obsahuje přehled kroků (CO dělat) + `> Detaily viz references/<file>.md`
+4. **Referenční soubory** jsou self-contained — mají vlastní nadpisy, příklady, anti-patterns
+5. **K10 Fix příklady** a **rozsáhlé bash bloky** patří do `references/`
+
+### Struktura složky
+
+```
+skills/fabric-{NAME}/
+├── SKILL.md                    # ≤ 500 řádků: §1–§12 orchestrace
+└── references/
+    ├── workflow.md             # §7 detaily: kroky, logika, anti-patterns
+    ├── examples.md             # K10: konkrétní příklady s reálnými daty
+    └── {domain-specific}.md    # triage rules, dimensions, templates...
+```
+
+### Jak odkazovat z SKILL.md
+
+V §7 Postup (nebo jiné sekci kde je potřeba):
+```markdown
+### 3) Triage pravidla
+
+> **Detailní triage pravidla:** Přečti `references/triage-rules.md` pomocí Read toolu.
+> Obsahuje: dedup logiku, vision alignment, type/tier/status heuristiky, anti-patterns.
+
+Stručný přehled kroků:
+1. Parse intake YAML
+2. Deduplikace (deterministická, slug-based)
+3. Vision alignment (povinné pro T0/T1)
+4. Urči Type → Tier → Status
+5. Vygeneruj backlog ID
+6. Vytvoř backlog item ze šablony
+7. Přesuň intake do done/rejected
+```
+
+### Kdy splitovat
+
+- **Nový skill (build):** Pokud §7 přesáhne ~200 řádků → split od začátku
+- **Migrace (migrate):** Pokud výsledný SKILL.md > 500 řádků → povinně split
+- **Fix:** Pokud fix způsobí překročení 500 → split
+
+### Validator
+
+`validate_fabric.py` varuje při >500 řádků. Builder MUSÍ toto respektovat.
+
+---
+
 # MÓD 1: BUILD — Vytvoření nového skillu
 
 ## Kdy použít
@@ -128,13 +184,31 @@ Na řádek 4 (za frontmatter) přidej:
 <!-- built from: builder-template -->
 ```
 
-### B5) Self-check buildu
+### B5) Size check + progressive disclosure split
+
+```bash
+LINES=$(wc -l < "skills/fabric-${NAME}/SKILL.md")
+if [ "$LINES" -gt 500 ]; then
+  echo "WARN: SKILL.md has $LINES lines (limit 500) — splitting required"
+fi
+```
+
+Pokud SKILL.md > 500 řádků:
+1. Vytvoř `skills/fabric-${NAME}/references/` adresář
+2. Přesuň §7 detaily → `references/workflow.md`
+3. Přesuň K10 příklady → `references/examples.md`
+4. Přesuň rozsáhlé bash bloky / tabulky → příslušný `references/*.md`
+5. V SKILL.md nahraď přesunutý obsah odkazem: `> Detaily viz references/<file>.md`
+6. Ověř že SKILL.md ≤ 500 řádků
+
+### B6) Self-check buildu
 
 - [ ] Nový skill existuje: `skills/fabric-{NAME}/SKILL.md`
 - [ ] Má `<!-- built from: builder-template -->` tag
 - [ ] Má všech 12 sekcí (§1–§12) nebo explicitní komentář proč chybí
+- [ ] **SKILL.md ≤ 500 řádků** (pokud více → references/ split proběhl)
 - [ ] §7 je KONKRÉTNÍ — žádné vágní „analyzuj" nebo „napiš testy"
-- [ ] §7 má příklady/šablony pro KAŽDÝ krok
+- [ ] §7 má příklady/šablony pro KAŽDÝ krok (přímo nebo v references/)
 - [ ] §3 má bash kód pro preconditions
 - [ ] §10 má ≥3 testovatelné položky
 - [ ] Pokud ref= byl použit: klíčové pracovní instrukce z workflow jsou přeneseny
@@ -311,14 +385,46 @@ Pokud existující instrukce jsou dobré — nechej je.
 <!-- built from: builder-template -->
 ```
 
-### M5) Validace migrace
+### M5) Size check + progressive disclosure split (POVINNÉ pro migraci)
+
+Legacy skills jsou typicky 500–1600+ řádků. Po migraci na §1–§12 bude SKILL.md ještě větší (přidané sekce). Proto je split **téměř vždy nutný** při migraci.
+
+```bash
+LINES=$(wc -l < "skills/fabric-${NAME}/SKILL.md")
+if [ "$LINES" -gt 500 ]; then
+  echo "SPLIT REQUIRED: $LINES lines"
+fi
+```
+
+**Split strategie pro migraci:**
+
+1. Vytvoř `skills/fabric-${NAME}/references/`
+2. §7 Postup — přesuň detailní kroky do `references/workflow.md`, v SKILL.md nech jen přehled kroků s odkazem
+3. K10 příklady — přesuň do `references/examples.md`
+4. Kanonická pravidla / triage rules / dimensions — přesuň do `references/{domain}.md`
+5. Rozsáhlé bash bloky (mimo §3 Preconditions) — přesuň do `references/scripts.md`
+6. Ověř SKILL.md ≤ 500 řádků
+
+**Co ZŮSTÁVÁ v SKILL.md (nesmí se přesunout):**
+- Frontmatter + builder tag
+- §1 Účel, §2 Protokol, §3 Preconditions (kompletní bash kód)
+- §4 Vstupy, §5 Výstupy (krátké seznamy)
+- §6 FAST PATH (bash volání)
+- §7 Postup — **pouze přehled kroků** + odkazy na references/
+- §8 Quality Gates, §9 Report template
+- §10 Self-check (kompletní checkboxy)
+- §11 Failure Handling, §12 Metadata
+
+### M6) Validace migrace
 
 Ověř že migrace nezhoršila skill:
 
-- [ ] VEŠKERÁ stávající logika je zachována (nic nebylo smazáno)
+- [ ] VEŠKERÁ stávající logika je zachována (nic nebylo smazáno — přesunuto do references/)
 - [ ] Nová struktura odpovídá §1–§12
 - [ ] Tag `<!-- built from: builder-template -->` přítomen
-- [ ] §7 Postup má MINIMÁLNĚ stejnou úroveň detailu jako před migrací
+- [ ] **SKILL.md ≤ 500 řádků**
+- [ ] Referenční soubory v `references/` obsahují VEŠKERÝ přesunutý obsah
+- [ ] §7 Postup má MINIMÁLNĚ stejnou úroveň detailu jako před migrací (přímo + references)
 
 ### M6) Doporučení po migraci
 

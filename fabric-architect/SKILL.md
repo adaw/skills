@@ -1,4 +1,5 @@
 ---
+name: "fabric-architect"
 title: "fabric-architect"
 type: "skill"
 ---

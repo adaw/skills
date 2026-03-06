@@ -1,4 +1,5 @@
 ---
+name: "fabric-e2e"
 title: Fabric E2E: End-to-End Testing
 description: Run end-to-end tests against a live running LLMem system
 tags: [fabric, e2e, testing, integration]
