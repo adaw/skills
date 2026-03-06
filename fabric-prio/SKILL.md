@@ -3,9 +3,13 @@ name: fabric-prio
 description: "Recalculate and normalize priority (PRIO) across all active backlog items. Uses a transparent scoring model, updates each item's frontmatter (prio + optionally effort if TBD), regenerates backlog.md sorted by PRIO, and writes a prio report with rationale and confidence."
 ---
 
+<!-- built from: builder-template -->
+
 # PRIO — Prioritizace backlogu
 
-## Účel
+---
+
+## §1 — Účel
 
 Z backlogu udělat **seřazenou exekuční frontu**.
 Výsledek musí být strojově čitelný:
@@ -13,48 +17,45 @@ Výsledek musí být strojově čitelný:
 - `{WORK_ROOT}/backlog.md` je seřazený podle PRIO,
 - existuje report s vysvětlením.
 
-## OWNERSHIP — Backlog index
-
-**Odpovědnost:** `fabric-intake`, `fabric-prio` a `fabric-close` MUSÍ spolupracovat na údržbě centrálního backlog indexu (`{WORK_ROOT}/backlog.md`):
-- `fabric-intake` → regeneruje index po triážích
-- `fabric-prio` → regeneruje po prioritizaci (seřazuje podle PRIO, aktualizuje prio pole ve všech items)
-- `fabric-close` → regeneruje po uzavření sprintu (DONE items, carry-over logika)
-
-**Invariant:** Index je vždy aktuální s jednotlivými backlog soubory v `{WORK_ROOT}/backlog/{id}.md` (asynchronní update je povolený, ale konsistence se musí ověřit v auditu).
+Bez PRIO skill backlog zůstane chaoticky seřazený a sprint planning bude hádání. S PRIO má tým objektivní podklady pro rozhodování.
 
 ---
 
-## Protokol (povinné)
+## §2 — Protokol (povinné — NEKRÁTIT)
 
-Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
+**START:**
+```bash
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" \
+  --skill "prio" \
+  --event start
+```
 
-- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-prio" --event start`
-- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-prio" --event end --status OK --report "{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md"`
+**END (OK/WARN/ERROR):**
+```bash
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" \
+  --skill "prio" \
+  --event end \
+  --status {OK|WARN|ERROR} \
+  --report "{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md"
+```
 
-Pokud skončíš **STOP** nebo narazíš na CRITICAL:
-- loguj `--event error --status ERROR` a dej krátké `--message` (1 věta).
-
+**ERROR (pokud STOP/CRITICAL):**
+```bash
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" \
+  --skill "prio" \
+  --event error \
+  --status ERROR \
+  --message "{krátký důvod — max 1 věta}"
+```
 
 ---
 
-## Vstupy
+## §3 — Preconditions (temporální kauzalita)
 
-- `{WORK_ROOT}/config.md` (statusy, tier, WIP)
-- `{WORK_ROOT}/backlog/*.md` (flat, mimo `done/`)
-- `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` (pro mapování hodnoty na vizi a sub-vize)
-- `{WORK_ROOT}/backlog.md` (může být regenerováno)
-
----
-
-## Výstupy
-
-- aktualizované backlog items (frontmatter `prio:` a případně `effort:` pokud bylo `TBD`)
-- regenerovaný `{WORK_ROOT}/backlog.md`
-- report `{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md`
-
----
-
-## Preconditions
+Před spuštěním ověř:
 
 ```bash
 # --- Precondition 1: Config existuje ---
@@ -79,156 +80,50 @@ if [ ! -d "{WORK_ROOT}/backlog" ]; then
   echo "STOP: {WORK_ROOT}/backlog directory not found"
   exit 1
 fi
-```
 
-**Dependency chain:** `fabric-intake` → [fabric-prio] → `fabric-sprint`
-
-## Git Safety (K4)
-
-This skill does NOT perform git operations. K4 is N/A.
-
-## Scoring model (transparentní)
-
-Použij tento model:
-
-```
-PRIO = (Impact × 3) + (Urgency × 2) + (Readiness × 2) - (EffortScore × 1) - (Staleness × 1)
-```
-
-Staleness (volitelné, 0–5):
-- Item v backlogu < 7 dní: 0
-- 7–30 dní bez pohybu (unchanged `updated:`): 1
-- 30–90 dní: 2
-- 90–180 dní: 3
-- \> 180 dní: 5 (a vytvoř intake item `intake/prio-stale-{id}.md` — zvážit archivaci nebo zrušení)
-
-**Monotonicity guard:** `updated:` field NESMÍ být nastaveno na starší datum než aktuální hodnota. Při re-triáži:
-```bash
-# Monotonicity: updated field can only move forward
-CURRENT_UPDATED=$(grep '^updated:' "{WORK_ROOT}/backlog/${id}.md" | awk '{print $2}' | tr -d '"')
-NEW_UPDATED="{YYYY-MM-DD}"
-if [ -n "$CURRENT_UPDATED" ] && [ "$NEW_UPDATED" \< "$CURRENT_UPDATED" ]; then
-  echo "WARN: monotonicity violation — keeping updated=$CURRENT_UPDATED (newer than $NEW_UPDATED)"
-  NEW_UPDATED="$CURRENT_UPDATED"
-fi
-```
-
-Škály:
-- Impact: 0–10
-- Urgency: 0–10
-- Readiness: 0–10
-- EffortScore: 0–10 (odvozeno z effort)
-
-Mapování effort → EffortScore:
-- XS=1, S=3, M=5, L=7, XL=9
-- TBD: nejdřív odhadni effort (preferovaně), jinak použij M jako fallback a zapiš WARNING
-
-> Výsledné PRIO normalizuj na integer (0–100). Důležitá je **relativní** škála.
-
-### K10 Fix: Concrete Priority Calculation Examples
-
-**Example 1: High-Priority Security Task**
-
-Item: `task-b042-add-input-validation.md`
-- Title: "Add Pydantic validation to /capture/event endpoint"
-- Type: Bug
-- Tier: T0
-- Status: READY
-- Effort: M (EffortScore=5)
-- Blocked by: none
-- Linked vision goal: "Reliability - Input validation"
-
-Scoring:
-- Impact = 8 (T0 = 8, + 1 security hotfix) = 9
-- Urgency = 9 (T0 = 7, +2 DOS vulnerability blocker) = 9
-- Readiness = 10 (READY status, AC complete)
-- EffortScore = 5 (M = 5)
-- Staleness = 0 (created this sprint)
-
-PRIO = (9×3) + (9×2) + (10×2) - (5×1) - (0×1) = 27 + 18 + 20 - 5 = **60 (URGENT)**
-
-**Example 2: Medium-Priority Refactoring**
-
-Item: `task-b031-refactor-triage-service.md`
-- Title: "Refactor triage service for better testability"
-- Type: Task
-- Tier: T2
-- Status: DESIGN
-- Effort: L (EffortScore=7)
-- Linked vision goal: "Code Quality"
-
-Scoring:
-- Impact = 4 (T2 = 4) = 4
-- Urgency = 3 (T2 = 3, not time-sensitive)
-- Readiness = 5 (DESIGN status, incomplete AC)
-- EffortScore = 7 (L = 7)
-- Staleness = 1 (40 days since update, 7-30d range)
-
-PRIO = (4×3) + (3×2) + (5×2) - (7×1) - (1×1) = 12 + 6 + 10 - 7 - 1 = **20 (MEDIUM)**
-
-**Sorting algorithm (after all PRIOs calculated):**
-
-1. Sort by PRIO descending
-2. Secondary sort by Tier (T0 → T3)
-3. Tertiary sort by Type (Bug/Security before Epic/Story for execution readiness)
-
-Result: Top 20 items in backlog.md are highest-value executable work.
-
----
-
-
-## FAST PATH (doporučeno) — scan → plan → apply (LLM rozhoduje, stroj patchuje)
-
-1) Vyrob strojový snapshot backlogu:
-
-```bash
-python skills/fabric-init/tools/fabric.py backlog-scan --json-out "{WORK_ROOT}/reports/backlog-scan-{YYYY-MM-DD}.json"
-```
-
-2) Spočítej PRIO (Impact/Urgency/Readiness/Effort/Staleness) **jen z dat** a vygeneruj plan soubor:
-
-- napiš `{WORK_ROOT}/reports/prio-plan-{YYYY-MM-DD}.yaml` se schematem:
-
-```yaml
-schema: fabric.plan.v1
-ops:
-  - op: backlog.set
-    id: "<backlog-id>"
-    fields:
-      prio: 0
-      effort: "M"   # jen pokud bylo TBD a jsi si jistý
-      updated: "{YYYY-MM-DD}"
-  - op: backlog.index
-```
-
-3) Aplikuj plan deterministicky (žádné ruční editace frontmatter):
-
-```bash
-python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/reports/prio-plan-{YYYY-MM-DD}.yaml"
-```
-
-To aktualizuje položky + regeneruje backlog index.
-
----
-
-## Postup
-
-### State Validation (K1: State Machine)
-
-```bash
-# State validation — check current phase is compatible with this skill
+# --- Precondition 5: State validation ---
 CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
-EXPECTED_PHASES="orientation"
-if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
-  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-prio. Expected: $EXPECTED_PHASES"
+if [ "$CURRENT_PHASE" != "orientation" ]; then
+  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-prio"
   exit 1
 fi
 ```
 
-### Path Traversal Guard (K7: Input Validation)
+**Dependency chain:** `fabric-intake` → [fabric-prio] → `fabric-sprint`
+
+---
+
+## §4 — Vstupy
+
+### Povinné
+- `{WORK_ROOT}/config.md` (statusy, tier, WIP)
+- `{WORK_ROOT}/backlog.md` (index, může být regenerován)
+- `{WORK_ROOT}/backlog/*.md` (flat, mimo `done/`)
+- `{WORK_ROOT}/state.md` (phase validation)
+
+### Volitelné (obohacují výstup)
+- `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` (mapování hodnoty na vizi)
+
+---
+
+## §5 — Výstupy
+
+### Primární (vždy)
+- Aktualizované backlog items (frontmatter `prio:` a případně `effort:` pokud bylo `TBD`)
+- Regenerovaný `{WORK_ROOT}/backlog.md` (tabulka seřazená podle PRIO)
+- Report: `{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md` (schema: `fabric.report.v1`)
+
+### Vedlejší (podmínečně)
+- Intake items: `{WORK_ROOT}/intake/prio-*.md` (schénata chyby, stálost, chybějící vision link)
+
+---
+
+## §6 — Deterministic FAST PATH
+
+Než začneš analyzovat / hodnotit, proveď deterministické kroky:
 
 ```bash
-# Path traversal guard — reject any input containing ".."
+# 1. Path validation — reject any input containing ".."
 validate_path() {
   local INPUT_PATH="$1"
   if echo "$INPUT_PATH" | grep -qE '\.\.'; then
@@ -237,130 +132,270 @@ validate_path() {
   fi
 }
 
-# Apply to all dynamic path inputs:
-# validate_path "$BACKLOG_FILE"
-# validate_path "$PRIO_REPORT"
+# 2. Backlog index sync
+python skills/fabric-init/tools/fabric.py backlog-index
+
+# 3. Backlog scan (json snapshot)
+python skills/fabric-init/tools/fabric.py backlog-scan --json-out "{WORK_ROOT}/reports/backlog-scan-{YYYY-MM-DD}.json"
 ```
 
-### 1) Načti vizi (pro Impact)
+---
 
-Z `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` vytáhni:
-- pillars, goals, success metrics (z core vize i sub-vizí)
-- pokud backlog item explicitně odkazuje na goal/pillar (preferovaně přes `linked_vision_goal` ve frontmatter), zvyšuje to Impact
+## §7 — Postup (JÁDRO SKILLU)
 
-### 2) Načti backlog items
+### 7.1) Načti vizi (pro Impact scoring)
 
-**K2 Fix: Backlog Item Iteration with Counter**
+**Co:** Z `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` vytáhni pillars, goals, success metrics. Backlog item, který explicitně odkazuje na goal/pillar (přes `linked_vision_goal`), dostane bonus v Impact.
 
+**Jak (detailní instrukce):**
+1. Parsuj `vision.md` do hierarchie: pillar → goal → metric
+2. Pro každý backlog item kontroluj `linked_vision_goal` frontmatter
+3. Je-li vyplněno a existuje v vizi → Impact +1 bonus
+4. Je-li prázdné u T0/T1 → penalizuj Impact o -3 (min 0) a vytvoř intake item
+
+**Minimum:** Vision goals načteny, bonus/penalty správně aplikován.
+
+**Anti-patterns:**
+- Neignoruй chybějící vision.md (pokračuj s WARN, ne FAIL)
+- Neaplikuj vision bonus za běžné backlog itemy (jen explicitní linked_vision_goal)
+
+### 7.2) Načti a parsuj backlog items
+
+**Co:** Projdi všechny soubory v `{WORK_ROOT}/backlog/` (mimo `done/`, mimo README), extrahuj frontmatter YAML.
+
+**Jak (detailní instrukce):**
 ```bash
 MAX_ITEMS=${MAX_ITEMS:-200}
 ITEM_COUNTER=0
-```
-
-Projdi všechny soubory:
-```bash
 find {WORK_ROOT}/backlog -maxdepth 1 -type f -name "*.md" | while read backlog_file; do
   ITEM_COUNTER=$((ITEM_COUNTER + 1))
   if [ "$ITEM_COUNTER" -ge "$MAX_ITEMS" ]; then
     echo "WARN: max backlog items reached ($ITEM_COUNTER/$MAX_ITEMS)"
     break
   fi
-  # ... process item
+  # Parsuj: id, title, type, tier, status, effort, prio, depends_on, blocked_by, linked_vision_goal
 done
 ```
 
-Pokud počet backlog itemů je velký (např. > 200), použij **dvoufázové skórování**, aby to škálovalo:
+Je-li počet backlog itemů > 200, použij **dvoufázové skórování**:
+- **FAST pass (O(N)):** parsuj jen YAML frontmatter, spočítej „quick PRIO"
+- **DEEP pass (O(K)):** otevři celé tělo jen pro top 50 a items s chybějícím `prio` nebo `effort=TBD`
 
-- **FAST pass (O(N))**: pro všechny itemy parsuj jen YAML frontmatter (nečti celé tělo) a spočítej „quick PRIO“ z `tier/status/type/effort/blocked_by/depends_on`.
-- **DEEP pass (O(K))**: otevři celé tělo jen pro:
-  - top `K=50` podle quick PRIO, a
-  - itemy s chybějícím `prio` nebo `effort=TBD`.
-  V DEEP pass můžeš upravit `Impact/Urgency/Readiness` podle AC, rizik, vazby na vizi.
+**Minimum:** Všechny itemy parsovány, chybějící `title` nebo `type` → intake item `prio-schema-missing-{id}.md`, item dostane PRIO=0.
 
-Pravidlo: i ve FAST mode musí být výstup deterministický a všechny itemy dostanou `prio:` (nižší confidence pro FAST-only).
+**Anti-patterns:**
+- Neignoruй itemy bez schématu (vytvoř intake item)
+- Neprocházej `done/` nebo `README*`
 
-Ignoruj:
-- `done/`
-- `README*`
+### 7.3) Urči skóre faktorů (Impact, Urgency, Readiness, EffortScore)
 
-Pro každý item načti YAML:
-- `id`, `title`, `type`, `tier`, `status`, `effort`, `prio` (stávající), `depends_on`, `blocked_by`, `linked_vision_goal`
+**Co:** Spočítej čtyři faktory pro každý item podle přehledných tabulek.
 
-Pokud chybí `title` nebo `type` → vytvoř intake item `intake/prio-schema-missing-{id}.md` a dej itemu PRIO=0 (dokud se neopraví).
+**Jak (detailní instrukce):**
 
-### 3) Urči skóre faktorů
+**Impact (0–10):**
+- Tier baseline: T0=8, T1=6, T2=4, T3=2
+- Bug/Security hotfix: +1 až +2
+- Item mapuje přímo na vision goal: +1
 
-**Impact (0–10)**
-- Tier baseline:
-  - T0: 8
-  - T1: 6
-  - T2: 4
-  - T3: 2
-- Bug/Security hotfix může dostat +1 až +2
-- Pokud item mapuje přímo na vision goal (např. `linked_vision_goal` není prázdné): +1
-
-**Vision-fit gate (aby backlog neujížděl mimo směr):**
-- Pokud `tier` je `T0` nebo `T1` a `linked_vision_goal` je prázdné → penalizuj Impact o `-3` (min 0) a vytvoř intake item:
-  - `{WORK_ROOT}/intake/prio-missing-vision-link-{id}.md`
-  - do něj napiš: „Doplňte/ověřte napojení backlog itemu na vizi (goal/pillar) nebo snižte tier/archivujte.“
-
-**Urgency (0–10)**
+**Urgency (0–10):**
 - BLOCKED blocker pro T0 chain: 9–10
-- časově citlivé (release/regrese): 8–10
-- jinak:
-  - T0: 7
-  - T1: 5
-  - T2: 3
-  - T3: 1–2
+- Časově citlivé (release/regrese): 8–10
+- Jinak: T0=7, T1=5, T2=3, T3=1–2
 
-**Readiness (0–10)**
+**Readiness (0–10):**
 - READY: 8–10
 - DESIGN: 4–7
 - IDEA: 1–3
-- IN_PROGRESS/IN_REVIEW: drž vysoko (8), ale tyto itemy se typicky neplánují jako nové (WIP=1)
+- IN_PROGRESS/IN_REVIEW: 8 (ale WIP=1, neplánují se jako nové)
 
-**Effort**
-- Pokud `effort=TBD`: odhadni (XS–XL) na základě:
-  - počet dotčených souborů (pokud uvedeno)
-  - nová integrace vs drobná změna
-  - riziko a nejasnost
-- Pokud nedokážeš odhadnout: použij M a zapiš WARNING do reportu.
+**Effort → EffortScore:**
+- XS=1, S=3, M=5, L=7, XL=9
+- TBD: odhadni (preferovaně), jinak M + WARNING do reportu
 
-### 4) Spočítej PRIO a zapiš do itemu
+**Vision-fit gate:** T0/T1 bez `linked_vision_goal` → penalizuj Impact -3 (min 0) a vytvoř intake item `prio-missing-vision-link-{id}.md`.
 
-Pro každý item:
-- spočítej PRIO podle modelu
-- zapiš `prio: <int>` do YAML frontmatter
-- pokud jsi odhadoval effort z TBD → aktualizuj `effort:` a zapiš do reportu
+**Minimum:** Čtyři faktory spočítány, viditelné v tabulce Top 20 v reportu.
 
-> Neměň `status` (to řeší analyze/implement/review/close).
+### 7.4) Spočítej PRIO a zapiš do item frontmatter
 
-### 5) Regeneruj backlog.md
+**Co:** Aplikuj transparentní model: `PRIO = (Impact × 3) + (Urgency × 2) + (Readiness × 2) - (EffortScore × 1) - (Staleness × 1)`.
 
-Vygeneruj `{WORK_ROOT}/backlog.md` jako tabulku:
+**Jak:**
+```bash
+# Pro každý item:
+PRIO=$((($IMPACT * 3) + ($URGENCY * 2) + ($READINESS * 2) - ($EFFORT_SCORE * 1) - ($STALENESS * 1)))
 
+# Normalizuj na 0–100 (relativní škála je důležitá)
+PRIO_NORM=$(($PRIO * 100 / 100))  # nebo use fabric.py apply
+
+# Zapiš do frontmatter: prio: <int>
+```
+
+**Staleness (0–5):**
+- < 7 dní: 0
+- 7–30 dní bez pohybu: 1
+- 30–90 dní: 2
+- 90–180 dní: 3
+- \> 180 dní: 5 + intake item `prio-stale-{id}.md`
+
+**Monotonicity guard:** `updated:` field NESMÍ jít zpět. Pokud nový `updated` < stávající, drž starou hodnotu.
+
+**Minimum:** Všechny itemy mají `prio:` integer (1–100).
+
+**Anti-patterns:**
+- Neměň `status` (to řeší analyze/implement/review/close)
+- Nepoužívej magic čísla (vždy viditel model)
+
+### 7.5) Spočítej konkrétní příklady (K10 Fix)
+
+**Příklad 1: High-Priority Security Task**
+```
+Item: task-b042-add-input-validation.md
+Impact = 9 (T0=8 + 1 security) | Urgency = 9 (T0=7 + 2 DOS) | Readiness = 10 | EffortScore = 5 (M) | Staleness = 0
+PRIO = (9×3) + (9×2) + (10×2) - (5×1) - (0×1) = 27 + 18 + 20 - 5 = 60 (URGENT)
+```
+
+**Příklad 2: Medium-Priority Refactoring**
+```
+Item: task-b031-refactor-triage-service.md
+Impact = 4 (T2) | Urgency = 3 (T2, not urgent) | Readiness = 5 (DESIGN) | EffortScore = 7 (L) | Staleness = 1 (40 days)
+PRIO = (4×3) + (3×2) + (5×2) - (7×1) - (1×1) = 12 + 6 + 10 - 7 - 1 = 20 (MEDIUM)
+```
+
+### 7.6) Regeneruj backlog.md
+
+**Co:** Vytvoř tabulku v `{WORK_ROOT}/backlog.md` s všemi itemy, seřazenou podle PRIO.
+
+**Jak:**
+```
 | ID | Title | Type | Status | Tier | Effort | PRIO |
+|----|-------|------|--------|------|--------|------|
+```
 
-Seřaď:
+Pořadí:
 1. PRIO desc
 2. Tier (T0 → T3)
-3. Type priority (Bug/Task před Epic/Story, aby byly exekuční věci nahoře)
+3. Type priority (Bug/Task před Epic/Story)
 
-### 6) Vytvoř prio report
+**Minimum:** Tabulka existuje, seřazena podle PRIO, reflektuje aktuální frontmatter.
 
-`{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md` musí obsahovat:
+### 7.7) Vytvoř prio report
 
-- Top 20 itemů (tabulka) + jejich factor breakdown (Impact/Urgency/Readiness/EffortScore)
-- Warnings:
-  - effort odhad z TBD
-  - items se schématem mimo kontrakt
-  - items bez AC (readiness penalty)
-  - T0/T1 items bez `linked_vision_goal` (vision-fit gate)
-- Doporučení pro sprint planning (např. „vyber prvních 5 READY tasks“)
+**Co:** Report `{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md` s analýzou.
+
+**Jak:**
+- Top 20 itemů (tabulka) + factor breakdown (Impact/Urgency/Readiness/EffortScore/Staleness)
+- Warnings: effort odhad z TBD, schématické chyby, items bez AC, T0/T1 bez vision link
+- Doporučení pro sprint planning
+
+**Šablona:**
+```md
+---
+schema: fabric.report.v1
+kind: prio
+run_id: "{run_id}"
+created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
+status: {PASS|WARN|FAIL}
+---
+
+# prio — Report {YYYY-MM-DD}
+
+## Souhrn
+Reprioritizovány N itemů, top 20 hotovy pro sprint planning. Warnings: M, Stale items: K.
+
+## Top 20 podle PRIO
+| ID | Title | PRIO | Impact | Urgency | Readiness | EffortScore |
+|...
+
+## Warnings
+- Effort TBD estimates: ...
+- Missing schema: ...
+- T0/T1 without vision link: ...
+- Stale items (>180d): ...
+
+## Recommendations
+- Vyber prvních 5 READY tasks pro sprint
+- Zvážit archivaci stálých itemů
+```
+
+**Minimum:** Report existuje, má povinné sekce (Souhrn, Top 20, Warnings), YAML frontmatter s schematem.
 
 ---
 
-## Self-check
+## §8 — Quality Gates
+
+### Gate 1: Backlog file existence
+```bash
+if [ ! -f "{WORK_ROOT}/backlog.md" ]; then
+  echo "FAIL: backlog.md was not regenerated"
+  # → intake item
+  exit 1
+fi
+```
+
+### Gate 2: Report existence & schema
+```bash
+REPORT="{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md"
+if [ ! -f "$REPORT" ]; then
+  echo "FAIL: report not created"
+  exit 1
+fi
+
+if ! grep -q "^schema: fabric.report.v1" "$REPORT"; then
+  echo "FAIL: report missing schema frontmatter"
+  exit 1
+fi
+```
+
+### Gate 3: All active items have prio
+```bash
+MISSING_PRIO=$(find "{WORK_ROOT}/backlog" -maxdepth 1 -name "*.md" -exec grep -L '^prio:' {} \;)
+if [ -n "$MISSING_PRIO" ]; then
+  echo "FAIL: items missing prio:"
+  echo "$MISSING_PRIO"
+  exit 1
+fi
+```
+
+---
+
+## §9 — Report
+
+Vytvoř `{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md` s schematem:
+
+```md
+---
+schema: fabric.report.v1
+kind: prio
+run_id: "{run_id}"
+created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
+status: {PASS|WARN|FAIL}
+---
+
+# prio — Report {YYYY-MM-DD}
+
+## Souhrn
+{1–3 věty co skill udělal: N itemů reprioritizováno, backlog.md regenerován, top 20 hotovy}
+
+## Top 20 podle PRIO (s factor breakdown)
+| ID | Title | PRIO | Impact | Urgency | Readiness | EffortScore | Staleness |
+|...
+
+## Warnings & Intake Items
+- Effort estimates from TBD: {list}
+- Missing schema (items set to PRIO=0): {list}
+- T0/T1 without vision link: {list}
+- Stale items (>180d): {list}
+
+## Recommendations
+- Doporučení pro sprint planning
+- Archivace / rework guidance
+```
+
+---
+
+## §10 — Self-check (povinný)
 
 ### Existence checks
 - [ ] Report existuje: `{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md`
@@ -369,16 +404,65 @@ Seřaď:
 - [ ] Protocol log má START a END záznam s `skill: prio`
 
 ### Quality checks
-- [ ] **Každý aktivní backlog item má `prio` integer** (1–100, bez duplicit na stejné úrovni)
-- [ ] **Backlog.md je seřazený podle PRIO** (vzestupně nebo sestupně, konsistentně)
-- [ ] **Report obsahuje**: Summary (N itemů reprioritizováno), Before/After tabulka, Justification per item, Warnings
-- [ ] **Prio justifikace**: Každá velká změna (jump >20) má vysvětlení (risk/value/dependency)
+- [ ] **Každý aktivní backlog item má `prio` integer** (1–100)
+- [ ] **Backlog.md je seřazený podle PRIO** (sestupně, konsistentně)
+- [ ] **Report obsahuje**: Souhrn, Top 20 tabulka, Warnings, Doporučení
+- [ ] **Prio justifikace**: Velké změny (jump >20) mají vysvětlení
 - [ ] **Backlog item metadatas aktualizovány** v `backlog/*.md` frontmatter: `prio: N`
 
-### Invariants
+### Invarianty
 - [ ] Žádný backlog item smazán nebo duplikován (jen prio změněn)
 - [ ] State.md NENÍ modifikován (prio nesmí měnit phase/step)
 - [ ] Config.md NENÍ modifikován
 - [ ] Protocol log má START i END záznam
 
-Pokud ANY check FAIL → **FAIL + vytvoř intake item `intake/prio-failed-{date}.md`** (CRITICAL v reportu).
+Pokud ANY check FAIL → **report FAIL + vytvoř intake item `prio-failed-{date}.md`**.
+
+---
+
+## §11 — Failure Handling
+
+| Fáze | Chyba | Akce |
+|------|-------|------|
+| Preconditions | Chybí backlog.md | STOP + protokol error log + jasná zpráva |
+| FAST PATH | fabric.py selže | WARN + pokračuj manuálně |
+| Postup (§7) | Nelze spočítat PRIO | STOP + protocol error log + intake item |
+| Quality Gate | Gate FAIL | Report FAIL + intake item |
+| Self-check | Check FAIL | Report WARN + intake item |
+
+**Obecné pravidlo:** Skill je fail-open vůči VOLITELNÝM vstupům (vision.md chybí → pokračuj s WARNING) a fail-fast vůči POVINNÝM vstupům (backlog.md chybí → STOP).
+
+---
+
+## §12 — Metadata (pro fabric-loop orchestraci)
+
+```yaml
+# Zařazení v lifecycle
+phase: orientation
+step: prio
+
+# Oprávnění
+may_modify_state: false
+may_modify_backlog: true     # fabric-prio aktualizuje prio ve všech items
+may_modify_code: false
+may_create_intake: true      # pro schema errors, vision links, stale items
+
+# Pořadí v pipeline
+depends_on: [fabric-intake]
+feeds_into: [fabric-sprint]
+```
+
+---
+
+## OWNERSHIP — Backlog index
+
+**Odpovědnost:** `fabric-intake`, `fabric-prio` a `fabric-close` MUSÍ spolupracovat na údržbě centrálního backlog indexu (`{WORK_ROOT}/backlog.md`):
+- `fabric-intake` → regeneruje index po triážích
+- `fabric-prio` → regeneruje po prioritizaci (seřazuje podle PRIO, aktualizuje prio pole ve všech items)
+- `fabric-close` → regeneruje po uzavření sprintu (DONE items, carry-over logika)
+
+**Invariant:** Index je vždy aktuální s jednotlivými backlog soubory v `{WORK_ROOT}/backlog/{id}.md` (asynchronní update je povolený, ale konsistence se musí ověřit v auditu).
+
+## Git Safety (K4)
+
+This skill does NOT perform git operations. K4 is N/A.

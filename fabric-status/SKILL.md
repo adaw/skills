@@ -3,47 +3,53 @@ name: fabric-status
 description: "Produce a holistic project health snapshot (codebase, tests, backlog, docs, CI/tooling). Language-agnostic by default: detects dominant file types, uses configured COMMANDS for tests, lint, format_check, and summarizes risks/trends. Outputs a dashboard-style status report."
 ---
 
-# STATUS — Health snapshot (holisticky)
-
-## Účel
-
-Vytvořit rychlý, ale použitelný „dashboard“:
-- codebase signály (velikost, churn proxy),
-- test zdraví (PASS/FAIL + evidence),
-- backlog stav (flow, WIP),
-- docs drift,
-- rizika pro další sprint.
-
-## Protokol (povinné)
-
-Zapiš do protokolu START/END (a případně ERROR). Použij společný logger:
-
-- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-status" --event start`
-- `python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" --skill "fabric-status" --event end --status OK --report "{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md"`
-
-Pokud skončíš **STOP** nebo narazíš na CRITICAL:
-- loguj `--event error --status ERROR` a dej krátké `--message` (1 věta).
-
+<!-- built from: builder-template -->
 
 ---
 
-## Vstupy
+## §1 — Účel
 
-- `{WORK_ROOT}/config.md` (COMMANDS, cesty)
-- `{WORK_ROOT}/state.md`
-- `{WORK_ROOT}/backlog.md` + backlog items
-- `{CODE_ROOT}/`, `{TEST_ROOT}/`, `{DOCS_ROOT}/`
-- `{WORK_ROOT}/reports/status-*.md` (pro trend)
+Vytvořit rychlý, ale použitelný „dashboard" projektu: codebase signály (velikost, churn proxy), test zdraví (PASS/FAIL + evidence), backlog stav (flow, WIP), docs drift, a rizika pro další sprint. Bez STATUSu tým pracuje bez orientace v tom, kde se projekt nachází. STATUS je foundation pro všechna další rozhodnutí (je-li zdravý → pokračujeme; je-li v riziku → triage).
 
 ---
 
-## Výstupy
+## §2 — Protokol (povinné — NEKRÁTIT)
 
-- `{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md`
+Na začátku a na konci tohoto skillu zapiš události do protokolu.
+
+**START:**
+```bash
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" \
+  --skill "status" \
+  --event start
+```
+
+**END (OK/WARN/ERROR):**
+```bash
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" \
+  --skill "status" \
+  --event end \
+  --status {OK|WARN|ERROR} \
+  --report "{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md"
+```
+
+**ERROR (pokud STOP/CRITICAL):**
+```bash
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" \
+  --skill "status" \
+  --event error \
+  --status ERROR \
+  --message "{krátký důvod — max 1 věta}"
+```
 
 ---
 
-## Preconditions
+## §3 — Preconditions (temporální kauzalita)
+
+Před spuštěním ověř:
 
 ```bash
 # --- Precondition 1: Config existuje ---
@@ -67,30 +73,58 @@ fi
 mkdir -p "{WORK_ROOT}/reports"
 ```
 
-**Dependency chain:** `(anytime)` → [fabric-status] → `(monitoring/dashboard)`
+**Dependency chain tohoto skillu:**
+```
+(anytime) → [fabric-status] → (monitoring/dashboard)
+```
 
-## Git Safety (K4)
+---
 
-This skill does NOT perform git operations. K4 is N/A.
+## §4 — Vstupy
 
-## FAST PATH (doporučeno) — deterministický snapshot
+### Povinné
+- `{WORK_ROOT}/config.md` — COMMANDS, cesty
+- `{WORK_ROOT}/state.md` — aktuální fáze
+
+### Volitelné (obohacují výstup)
+- `{WORK_ROOT}/backlog.md` + backlog items — pro backlog metrics
+- `{CODE_ROOT}/`, `{TEST_ROOT}/`, `{DOCS_ROOT}/` — pro codebase snapshot
+- `{WORK_ROOT}/reports/status-*.md` — poslední 3 reporty pro trend analýzu
+
+---
+
+## §5 — Výstupy
+
+### Primární (vždy)
+- Report: `{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md` (schema: `fabric.report.v1`, kind: `status`)
+
+### Vedlejší (podmínečně)
+- Intake items: `{WORK_ROOT}/intake/status-{slug}.md` — pokud chybí COMMANDS.test/lint/format_check nebo jsou kritická rizika
+
+---
+
+## §6 — Deterministic FAST PATH
 
 Než začneš psát report, vyrob strojový snapshot (git + code stats + backlog stats + COMMANDS test/lint/format_check s log capture):
 
 ```bash
-python skills/fabric-init/tools/fabric.py snapshot-status --out "{WORK_ROOT}/reports/status-snapshot-{YYYY-MM-DD}.json" --tail 120
+python skills/fabric-init/tools/fabric.py snapshot-status \
+  --out "{WORK_ROOT}/reports/status-snapshot-{YYYY-MM-DD}.json" \
+  --tail 120
 ```
 
-Pak report stav podle dat ze snapshotu (ne odhadem).
+Pak report stav podle dat ze snapshotu (ne odhadem). Snapshots mohou být dočasné, report je trvalý artefakt.
 
 ---
 
-## Postup
+## §7 — Postup (JÁDRO SKILLU)
 
-### State Validation (K1: State Machine)
+### 7.1) State Validation (K1: State Machine)
 
+**Co:** Ověřit, že aktuální fáze projektu je kompatibilní se spuštěním fabric-status.
+
+**Jak:**
 ```bash
-# State validation — check current phase is compatible with this skill
 CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
 EXPECTED_PHASES="orientation"
 if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
@@ -99,10 +133,19 @@ if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
 fi
 ```
 
-### Path Traversal Guard (K7: Input Validation)
+**Minimum:** Potvrzení, že fáze je validní.
 
+**Anti-patterns:**
+- Nepoužívej `continue` pokud fáze je invalid — STOP je korektní.
+
+---
+
+### 7.2) Path Traversal Guard (K7: Input Validation)
+
+**Co:** Zabránit path traversal útoků na souborový systém.
+
+**Jak:**
 ```bash
-# Path traversal guard — reject any input containing ".."
 validate_path() {
   local INPUT_PATH="$1"
   if echo "$INPUT_PATH" | grep -qE '\.\.'; then
@@ -111,173 +154,218 @@ validate_path() {
   fi
 }
 
-# Apply to all dynamic path inputs:
-# validate_path "$CODE_PATH"
-# validate_path "$STATUS_REPORT"
+# Aplikuj na všechny dynamické cesty
+validate_path "$CODE_PATH"
+validate_path "$STATUS_REPORT"
 ```
 
-### 1) Zjisti dominantní typy souborů (language-agnostic)
+**Minimum:** Validace funkce je definovaná a volána.
 
-Použij `git ls-files` (pokud repo je git) nebo `find` fallback:
+---
 
-- vytvoř histogram přípon v `{CODE_ROOT}/` (ignoruj `{TEST_ROOT}/`, `{DOCS_ROOT}/`, vendory)
-- top 3 extensions použij jako proxy pro jazyk (např. `.py`, `.ts`, `.go`)
+### 7.3) Zjistí dominantní typy souborů (language-agnostic)
 
-Reportuj:
-- top extensions
-- počet souborů (code)
-- hrubé LOC (sum `wc -l` pro top extension soubory)
+**Co:** Určit programovací jazyk projektu na základě rozšíření souborů.
 
-> Nejde o perfektní LOC, jde o trend.
+**Jak:**
+Použij `git ls-files` (pokud je repo git) nebo `find` fallback. Vytvoř histogram přípon v `{CODE_ROOT}/` (ignoruj `{TEST_ROOT}/`, `{DOCS_ROOT}/`, vendory). Top 3 extensions použij jako proxy pro jazyk (např. `.py`, `.ts`, `.go`).
 
-**MINIMUM:** tabulka s: Extension, Count (files), Approx LOC
+**Minimum:**
+```markdown
+| Extension | Count (files) | Approx LOC |
+|-----------|---------------|-----------|
+| .py       | 47            | ~4200     |
+| .md       | 12            | ~2100     |
+```
 
-### 2) Test health (objektivní)
+**Anti-patterns:**
+- Netvrdíš, že je LOC "přesné" — jde o trend, ne matematiku.
+- Nevynechávej top 3 extensions jen proto, že máš málo souborů.
 
-Z configu načti:
-- `COMMANDS.test`
-- volitelně `COMMANDS.test_e2e`
+---
 
-Pokud `COMMANDS.test` je `TBD` nebo prázdné (`""`):
-- označ test status jako `UNKNOWN` a vytvoř WARNING v reportu
+### 7.4) Test health (objektivní)
+
+**Co:** Spustit test suite a reportovat PASS/FAIL.
+
+**Jak:**
+Z configu načti `COMMANDS.test` a volitelně `COMMANDS.test_e2e`. Pokud `COMMANDS.test` je `TBD` nebo prázdné (`""`), označ status jako `UNKNOWN` a vytvoř WARNING + intake item.
 
 Jinak spusť:
 ```bash
 {COMMANDS.test}
 ```
 
-Reportuj:
-- PASS/FAIL
-- (pokud fail) 1–3 nejpravděpodobnější root causes + next action
-
-**MINIMUM:** Status: {PASS|FAIL|UNKNOWN|SKIPPED}, Evidence (pass/fail count), Exit code
-
-### 3) Lint/format health
-
-Z configu načti:
-- `COMMANDS.lint`
-- `COMMANDS.format_check`
-
-Pokud `COMMANDS.lint` nebo `COMMANDS.format_check` je `TBD` → report `UNKNOWN` + vytvoř intake item `intake/status-missing-lint-or-format-command.md`.
-
-Pokud je některý z nich prázdný (`""`) → report `SKIPPED` (doporuč v reportu doplnit linter/formatter).
-
-Jinak spusť:
-```bash
-if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then {COMMANDS.lint}; else echo "lint: SKIPPED"; fi
-if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then {COMMANDS.format_check}; else echo "format_check: SKIPPED"; fi
+**Minimum:**
+```
+Status: PASS | FAIL | UNKNOWN | SKIPPED
+Evidence: {count passed}/{count failed} (exit code: {N})
 ```
 
-### 4) Git health
+**Anti-patterns:**
+- Netvrdíš „build health" bez ověření COMMANDS.test.
+- Netvrdíš „dobrý stav" pokud tests FAIL.
+
+---
+
+### 7.5) Lint/format health
+
+**Co:** Spustit linter a format-checker, reportovat stav.
+
+**Jak:**
+Z configu načti `COMMANDS.lint` a `COMMANDS.format_check`. Pokud je `TBD` → report `UNKNOWN` + vytvoř intake item. Pokud je prázdné (`""`) → report `SKIPPED` (doporuč doplnit linter/formatter).
 
 ```bash
-# Working tree clean?
+if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then
+  {COMMANDS.lint}
+else
+  echo "lint: SKIPPED or UNKNOWN"
+fi
+
+if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then
+  {COMMANDS.format_check}
+else
+  echo "format_check: SKIPPED or UNKNOWN"
+fi
+```
+
+**Minimum:**
+```
+Lint: PASS | FAIL | UNKNOWN | SKIPPED
+Format: PASS | FAIL | UNKNOWN | SKIPPED
+```
+
+---
+
+### 7.6) Git health
+
+**Co:** Ověřit čistotu working tree, věk feature branches, ahead/behind main.
+
+**Jak:**
+```bash
 git status --porcelain
-
-# Stale feature branches (older than GIT.max_branch_age_days)
 git for-each-ref --sort=committerdate --format='%(refname:short) %(committerdate:relative)' refs/heads/
-
-# Ahead/behind main
 git rev-list --left-right --count {main_branch}...HEAD
 ```
 
-Reportuj:
-- dirty working tree (YES/NO)
-- počet stale branches (> `GIT.max_branch_age_days`)
-- unmerged branches count
-
-### 5) Backlog health
-
-Z `{WORK_ROOT}/backlog/*.md` spočítej:
-- counts per status (IDEA/DESIGN/READY/IN_PROGRESS/IN_REVIEW/BLOCKED/DONE)
-- READY ratio (kolik práce je připravené)
-- WIP compliance: pokud existuje víc než 1 IN_PROGRESS/IN_REVIEW → riziko (WIP breach)
-
-### 6) Sprint health (pokud existuje)
-
-Najdi aktuální sprint file z `state.sprint`.
-- kolik tasks je v Task Queue
-- kolik DONE (pokud trackuje) vs carry-over signál (z backlog item statusů)
-
-### 7) Docs health
-
-- existuje `{DOCS_ROOT}/`?
-- počet markdown souborů
-- nejnovější modifikovaný doc file (pokud git)
-
-### 8) Trend (last 3 status reports)
-
-Pokud existují poslední 3 status reporty:
-- trend: zlepšuje se test/lint? roste backlog READY? klesá BLOCKED?
-
-## K10 Fix: Example Status Report with Real LLMem Data
-
-Here is a concrete filled-in status report showing actual LLMem project health metrics:
-
-```markdown
----
-schema: fabric.report.v1
-kind: status
-run_id: "status-2026-03-06-live"
-created_at: "2026-03-06T10:15:00Z"
-status: OK
-health_score: 72
----
-
-# status — Report 2026-03-06
-
-## Health snapshot
-Health score: **72/100** (at-risk)
-
-## Key signals
-| Signal | Status | Value | Assessment |
-|--------|--------|-------|------------|
-| Tests | PASS | 87 passed, 2 failed | Good — 1 flaky test, 1 regression |
-| Lint | PASS | 0 issues | ✓ Code quality maintained |
-| Format | PASS | 0 style issues | ✓ Formatting consistent |
-| Backlog flow | RISK | READY=15, BLOCKED=3, WIP=2 | ⚠ WIP limit OK, but 3 blockers |
-| Docs | OK | modified 2 days ago | Reasonably current |
-| Git | CLEAN | dirty=0, stale-branches=2 | 2 old feature branches (13+ days) |
-
-## Codebase snapshot
-| Metric | Value |
-|--------|-------|
-| Top language | .py: 47 files, ~4200 LOC |
-| Total code files | 52 |
-| Total LOC | ~4850 |
-
-## Risks (top 3)
-1. **2 test failures (1 flaky, 1 regression):** Flaky E2E test in test_recall_memory. Regression in test_capture_validation. → Run tests 3x to confirm flakiness; investigate regression root cause
-2. **3 BLOCKED backlog items:** task-b008 awaiting API spec clarification; task-b012 blocked on Qdrant setup. → Unblock by EOP Friday
-3. **2 stale feature branches:** feature/semantic-v2 (15 days), hotfix/rate-limit (12 days). → Merge or delete by sprint end
-
-## Suggested next actions (priority)
-1. Fix failing test test_capture_validation (regression in ObservationEvent validation) — estimated 2h
-2. Unblock task-b008 by meeting with architect on API spec — estimated 1h
-3. Delete stale feature branches to clean up repo — estimated 15m
+**Minimum:**
+```
+Working tree: CLEAN | DIRTY
+Stale branches (> GIT.max_branch_age_days): {count}
+Unmerged branches: {count}
 ```
 
-### 9) Status report (dashboard)
+---
 
-`{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md` (vytvoř jako kopii `{WORK_ROOT}/templates/status-report.md`):
+### 7.7) Backlog health
 
-**MINIMUM obsah:**
-- **Health score:** 0–100 (heuristicky)
-- **Key signals:** tabulka se sloupci Status, Value, Assessment
-  - Tests: PASS/FAIL/UNKNOWN
-  - Lint/Format: PASS/FAIL/UNKNOWN
-  - Backlog: READY count, BLOCKED count, WIP breach?
-  - Docs: OK/STALE/UNKNOWN
-  - Git: working-tree-clean (YES/NO), stale-branches (count)
-- **Risks radar:** top 3–5 rizik (specifika, ne generické)
-- **Suggested next actions:** max 5 (konkrétně, s prioritou)
+**Co:** Spočítat backlog items po statusu, READY ratio, WIP compliance.
 
-**Šablona:**
+**Jak:**
+Z `{WORK_ROOT}/backlog/*.md` spočítej status counts (IDEA/DESIGN/READY/IN_PROGRESS/IN_REVIEW/BLOCKED/DONE). WIP compliance: pokud existuje víc než 1 IN_PROGRESS/IN_REVIEW → riziko (WIP breach).
+
+**Minimum:**
+```markdown
+| Status | Count |
+|--------|-------|
+| IDEA   | 5     |
+| READY  | 15    |
+| BLOCKED| 3     |
+| IN_PROGRESS | 2 |
+| DONE   | 28    |
+
+WIP compliance: READY=15, BLOCKED=3, WIP=2 — OK
+```
+
+---
+
+### 7.8) Docs health
+
+**Co:** Zjistit, zda existuje dokumentace a jak je aktuální.
+
+**Jak:**
+- Existuje `{DOCS_ROOT}/`?
+- Počet markdown souborů
+- Nejnovější modifikovaný doc file (pokud git)
+
+**Minimum:**
+```
+Docs: OK | STALE | MISSING
+Modified: {N} days ago (or "never")
+File count: {N}
+```
+
+---
+
+### 7.9) Trend (poslední 3 status reporty)
+
+**Co:** Analýza zdraví projektu v čase — zlepšuje se? zhoršuje se?
+
+**Jak:**
+Pokud existují poslední 3 status reporty, extrahuj health score a key signals. Trend: zlepšuje se test/lint? Roste backlog READY? Klesá BLOCKED?
+
+**Minimum:**
+```markdown
+| Date | Health Score | Key Delta |
+|------|--------------|-----------|
+| 2026-03-06 | 72 | +5 (tests fixed) |
+| 2026-03-05 | 67 | -10 (BLOCKED grew) |
+| 2026-03-04 | 77 | stable |
+```
+
+---
+
+### 7.10) Health score (heuristický)
+
+**Co:** Vypočítat health score 0–100 na základě signálů.
+
+**Jak:**
+Start 100:
+- -40 pokud tests FAIL
+- -20 pokud lint FAIL
+- -10 pokud format_check FAIL
+- -10 pokud WIP breach
+- -10 pokud BLOCKED > READY
+
+**Minimum:**
+Health score musí být číselný (0–100) a musí být logika explicitní v reportu.
+
+---
+
+### 7.11) Risks identifikace (top 3–5)
+
+**Co:** Naidentifikovat konkrétní rizika, ne generické.
+
+**Jak:**
+Pro každé riziko: jméno + specifika + impact + next action. Příklady:
+- **2 test failures (1 flaky, 1 regression)**: test_recall_memory je flaky. test_capture_validation je nová regression. → Run tests 3x, investigate regression.
+- **3 BLOCKED backlog items**: task-b008 čeká na API spec. task-b012 čeká na Qdrant. → Unblock by EOD Friday.
+- **2 stale feature branches**: feature/semantic-v2 (15 days), hotfix/rate-limit (12 days). → Merge or delete by sprint end.
+
+**Minimum:**
+Top 3 rizika, každé s konkrétním názvem + impact + action.
+
+**Anti-patterns:**
+- Netvrdíš „dobrý stav" pokud BLOCKED > READY.
+- Nepiš generické riziko „kód je komplexní" bez specifik.
+
+---
+
+## §8 — Quality Gates (pokud skill má gates)
+
+Skill fabric-status NEMÁ quality gates — reportuje stav, neopravuje. Pokud snapshot nebo COMMANDS selže, report WARN/ERROR a pokračuj manuálně.
+
+---
+
+## §9 — Report
+
+Vytvoř `{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md`:
+
 ```markdown
 ---
 schema: fabric.report.v1
 kind: status
-run_id: "{run_id}"
+run_id: "status-{YYYY-MM-DD}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: OK
 health_score: {0-100}
@@ -316,43 +404,70 @@ Health score: **{N}/100** ({healthy|at-risk|critical})
 3. {Konkrétní akce + reason}
 
 ## Trend (last 3 reports)
-[Tabulka: Date, Health score, Key delta]
+| Date | Health score | Key delta |
+|------|--------------|-----------|
+| {date} | {N} | {delta} |
 ```
 
-**Anti-patterns (zakázáno):**
-- Nepiš „build health" bez ověření COMMANDS.test
-- Netvrdíš „dobrý stav" pokud tests FAIL
-- Netvrdíš „žádná rizika" pokud BLOCKED > READY
-- Nevynechávej konkrétní čísla (vždy: {N} files, {N} tests passed, atd.)
-
 ---
 
-## Scoring (doporučené)
-
-Start 100:
-- -40 pokud tests FAIL
-- -20 pokud lint FAIL
-- -10 pokud format_check FAIL
-- -10 pokud WIP breach
-- -10 pokud BLOCKED > READY
-
----
-
-## Self-check
+## §10 — Self-check (povinný — NEKRÁTIT)
 
 ### Existence checks
 - [ ] Report existuje: `{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md`
 - [ ] Protocol log obsahuje START i END záznam
 
 ### Quality checks
-- [ ] Report obsahuje povinné sekce: Health snapshot, Key signals, Codebase snapshot, Risks, Suggested next actions
+- [ ] Report obsahuje všechny povinné sekce: Health snapshot, Key signals, Codebase snapshot, Risks, Suggested next actions
 - [ ] Health score je číselný (0–100)
-- [ ] Všechny key signals mají explicitní hodnotu: PASS / FAIL / UNKNOWN / SKIPPED
+- [ ] Všechny key signals mají explicitní hodnotu: PASS / FAIL / UNKNOWN / SKIPPED (nikdy „—" když je data dostupná)
 - [ ] Risks jsou specifické (ne generické): jméno rizika + impact + next action
 - [ ] Suggested actions jsou konkrétní (ne vágní): není „improve tests", je „run test coverage; target ≥80%"
 - [ ] Tabulky mají hodnoty (ne „—" když je data dostupná)
 
 ### Invarianty
-- [ ] Pokud `COMMANDS.test` je `TBD` → intake item „fabric-status-missing-test-command" existuje
-- [ ] Pokud `COMMANDS.lint` je `TBD` → intake item „fabric-status-missing-lint-command" existuje
-- [ ] Health score logika odpovídá Scoring sekcí (start 100, -40 pokud tests FAIL, atd.)
+- [ ] Pokud `COMMANDS.test` je `TBD` → intake item „status-missing-test-command" existuje
+- [ ] Pokud `COMMANDS.lint` je `TBD` → intake item „status-missing-lint-command" existuje
+- [ ] Health score logika odpovídá §7.10 scoring (start 100, -40 pokud tests FAIL, atd.)
+- [ ] Žádný soubor mimo `{WORK_ROOT}/` nebyl modifikován
+
+---
+
+## §11 — Failure Handling
+
+| Fáze | Chyba | Akce |
+|------|-------|------|
+| Preconditions | Chybí config.md nebo state.md | STOP + jasná zpráva co chybí |
+| FAST PATH | snapshot-status selže | WARN + pokračuj manuálně (LLM udělá strojovou práci) |
+| Postup §7 | COMMANDS.test/lint/format nelze spustit | Report UNKNOWN/SKIPPED + intake item s popisem |
+| Postup §7 | Nelze spočítat backlog (soubor chybí) | WARN + report s dostupnými daty |
+| Postup §7 | Git operace selže | WARN + skip git health (ne STOP) |
+| Self-check | Check FAIL | Report WARN + intake item |
+
+**Obecné pravidlo:** Skill je fail-open vůči VOLITELNÝM vstupům (chybí → pokračuj s WARNING) a fail-fast vůči POVINNÝM vstupům (chybí → STOP).
+
+---
+
+## §12 — Metadata (pro fabric-loop orchestraci)
+
+```yaml
+# Zařazení v lifecycle
+phase: orientation
+step: health_snapshot
+
+# Oprávnění
+may_modify_state: false
+may_modify_backlog: false
+may_modify_code: false
+may_create_intake: true
+
+# Pořadí v pipeline
+depends_on: [fabric-init]
+feeds_into: [fabric-loop]
+```
+
+---
+
+## Git Safety (K4)
+
+Skill fabric-status NEPROVÁDÍ git operace (pouze čte stav). K4 je N/A.
