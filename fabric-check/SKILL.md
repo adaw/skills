@@ -204,7 +204,20 @@ Ověř existence a freshness `{WORK_ROOT}/fabric/processes/process-map.md` (>7 d
 
 **Řešení:** Viz `references/workflow.md` — sektion "7.6) Process Map Freshness validation"
 
-### 7.14) Vygeneruj audit report
+### 7.14) Skill frontmatter audit
+
+Pro každý skill v `skills/fabric-*/SKILL.md` ověř frontmatter dle Claude Code Agent Skills spec:
+
+- `name`: povinný, ≤64 znaků, lowercase+hyphens, musí odpovídat názvu adresáře
+- `description`: povinný, ≤1024 znaků, non-empty, 3. osoba ("Performs…", "Validates…")
+- `tags`: povinný, pole stringů (alespoň `[fabric]`)
+- `depends_on` / `feeds_into`: povinné, pole stringů
+- Zakázaná pole: `title`, `type`, `schema`, `version` (nejsou součástí spec)
+- `<!-- built from: builder-template -->` tag: musí být ZA `---`, ne uvnitř YAML (pro T2 skills)
+
+**Severity:** WARNING (fixable auto-fix kandidát) pokud chybí optional pole; CRITICAL pokud chybí `name`/`description` nebo je `description` prázdný.
+
+### 7.15) Vygeneruj audit report
 
 Vytvoř `{WORK_ROOT}/reports/check-{YYYY-MM-DD}.md` s vyhodnocením všech check rezultátů, scoring, intake items.
 

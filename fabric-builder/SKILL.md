@@ -129,7 +129,35 @@ fabric-builder build <name> ref=<workflow>    # s referenčním starým workflow
 mkdir -p "skills/fabric-${NAME}"
 ```
 
-### B3) Vyplň šablonu sekci po sekci
+### B3) Frontmatter (POVINNÉ — Claude Code Agent Skills spec)
+
+```yaml
+---
+name: fabric-{name}
+description: "{1-2 věty: CO skill dělá + KDY ho použít}"
+tags: [fabric, {relevant-tags}]
+depends_on: [{upstream skills}]
+feeds_into: [{downstream skills}]
+---
+<!-- built from: builder-template -->
+```
+
+**Pravidla frontmatteru (z oficiální Claude Code specifikace):**
+
+- **`name`**: max **64 znaků**, jen lowercase, čísla, pomlčky. Nesmí obsahovat "anthropic"/"claude" ani XML tagy.
+- **`description`**: max **1024 znaků**, non-empty, bez XML tagů. Třetí osoba ("Performs...", ne "I can..."). MUSÍ říct CO dělá + KDY to použít. Claude používá description k rozhodování, zda skill aktivovat — čím přesnější, tím lepší matching.
+- **`tags`**: inline array klíčových slov pro vyhledávání
+- **`depends_on`**: skills, které MUSÍ běžet PŘED tímto (upstream)
+- **`feeds_into`**: skills, které konzumují výstupy TOHOTO skillu (downstream)
+- **`<!-- built from: builder-template -->`**: VŽDY na řádku ZA uzavíracím `---`, NIKDY uvnitř frontmatteru
+
+**Anti-patterns:**
+- ❌ `title`, `type`, `schema`, `version` — nepatří do frontmatteru
+- ❌ Description v první osobě ("I process...") nebo druhé ("You can use...")
+- ❌ Vágní description ("Helps with stuff", "Processes data")
+- ❌ Builder tag uvnitř YAML bloku `---`
+
+### B4) Vyplň šablonu sekci po sekci
 
 Zkopíruj strukturu z `assets/builder-template.md` a vyplň:
 
@@ -180,13 +208,6 @@ Zkopíruj strukturu z `assets/builder-template.md` a vyplň:
 
 **§12 Metadata:** phase, step, depends_on, feeds_into, may_modify_*.
 
-### B4) Přidej builder-born tag
-
-Na řádek 4 (za frontmatter) přidej:
-```md
-<!-- built from: builder-template -->
-```
-
 ### B5) Size check + progressive disclosure split
 
 ```bash
@@ -204,10 +225,12 @@ Pokud SKILL.md > 500 řádků:
 5. V SKILL.md nahraď přesunutý obsah odkazem: `> Detaily viz references/<file>.md`
 6. Ověř že SKILL.md ≤ 500 řádků
 
-### B6) Self-check buildu
+### B6) Self-check buildu (POVINNÉ)
 
 - [ ] Nový skill existuje: `skills/fabric-{NAME}/SKILL.md`
-- [ ] Má `<!-- built from: builder-template -->` tag
+- [ ] Frontmatter: `name` ≤ 64 znaků, lowercase+hyphens; `description` ≤ 1024 znaků, non-empty, 3. osoba
+- [ ] Frontmatter: má `tags`, `depends_on`, `feeds_into`; žádné `title`/`type`/`schema`/`version`
+- [ ] `<!-- built from: builder-template -->` tag je ZA `---`, ne uvnitř
 - [ ] Má všech 12 sekcí (§1–§12) nebo explicitní komentář proč chybí
 - [ ] **SKILL.md ≤ 500 řádků** (pokud více → references/ split proběhl)
 - [ ] §7 je KONKRÉTNÍ — žádné vágní „analyzuj" nebo „napiš testy"
@@ -216,7 +239,7 @@ Pokud SKILL.md > 500 řádků:
 - [ ] §10 má ≥3 testovatelné položky
 - [ ] Pokud ref= byl použit: klíčové pracovní instrukce z workflow jsou přeneseny
 
-### B6) Doporučení po buildu
+### B7) Doporučení po buildu
 
 ```
 Nový skill vytvořen: skills/fabric-{NAME}/SKILL.md

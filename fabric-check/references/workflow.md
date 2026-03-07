@@ -347,6 +347,82 @@ fi
 - Pokud `process-map.md` má >0 UNIMPLEMENTED/ORPHAN → zaznamenej do reportu jako INFO
 - Přílož `$PROCESS_MAP_FINDINGS` do audit reportu
 
+## 7.7) Skill frontmatter audit
+
+Ověř frontmatter každého fabric skillu dle Claude Code Agent Skills spec:
+
+```bash
+SKILLS_ROOT="${SKILLS_ROOT:-skills}"
+FRONTMATTER_FINDINGS=""
+FM_WARN=0
+FM_CRIT=0
+
+for SKILL_DIR in "$SKILLS_ROOT"/fabric-*/; do
+  SKILL_FILE="$SKILL_DIR/SKILL.md"
+  [ -f "$SKILL_FILE" ] || continue
+  SKILL_NAME=$(basename "$SKILL_DIR")
+
+  # Extract frontmatter (between first --- and second ---)
+  FM=$(sed -n '1,/^---$/!{/^---$/,/^---$/p}' "$SKILL_FILE" | sed '1d;$d')
+  if [ -z "$FM" ]; then
+    echo "CRITICAL: $SKILL_NAME — missing YAML frontmatter"
+    FM_CRIT=$((FM_CRIT + 1))
+    continue
+  fi
+
+  # name: povinný, ≤64 znaků, lowercase+hyphens, = dirname
+  FM_NAME=$(echo "$FM" | grep '^name:' | sed 's/^name:\s*//')
+  if [ -z "$FM_NAME" ]; then
+    echo "CRITICAL: $SKILL_NAME — missing 'name' field"
+    FM_CRIT=$((FM_CRIT + 1))
+  elif [ "$FM_NAME" != "$SKILL_NAME" ]; then
+    echo "WARNING: $SKILL_NAME — name='$FM_NAME' != dir name"
+    FM_WARN=$((FM_WARN + 1))
+  elif [ ${#FM_NAME} -gt 64 ]; then
+    echo "WARNING: $SKILL_NAME — name exceeds 64 chars (${#FM_NAME})"
+    FM_WARN=$((FM_WARN + 1))
+  fi
+
+  # description: povinný, ≤1024 znaků, non-empty
+  FM_DESC=$(echo "$FM" | grep '^description:' | sed 's/^description:\s*//' | sed 's/^"//;s/"$//')
+  if [ -z "$FM_DESC" ]; then
+    echo "CRITICAL: $SKILL_NAME — missing or empty 'description'"
+    FM_CRIT=$((FM_CRIT + 1))
+  elif [ ${#FM_DESC} -gt 1024 ]; then
+    echo "WARNING: $SKILL_NAME — description exceeds 1024 chars (${#FM_DESC})"
+    FM_WARN=$((FM_WARN + 1))
+  fi
+
+  # Zakázaná pole: title, type, schema, version
+  for FIELD in title type schema version; do
+    if echo "$FM" | grep -q "^${FIELD}:"; then
+      echo "WARNING: $SKILL_NAME — forbidden field '$FIELD' in frontmatter"
+      FM_WARN=$((FM_WARN + 1))
+    fi
+  done
+
+  # Doporučená pole: tags, depends_on, feeds_into
+  for FIELD in tags depends_on feeds_into; do
+    if ! echo "$FM" | grep -q "^${FIELD}:"; then
+      echo "WARNING: $SKILL_NAME — missing recommended field '$FIELD'"
+      FM_WARN=$((FM_WARN + 1))
+    fi
+  done
+
+  # builder-template tag: musí být ZA ---, ne uvnitř YAML
+  if echo "$FM" | grep -q 'built from'; then
+    echo "WARNING: $SKILL_NAME — builder-template tag inside YAML (should be after ---)"
+    FM_WARN=$((FM_WARN + 1))
+  fi
+done
+
+echo "Skill frontmatter: $FM_CRIT CRITICAL, $FM_WARN WARNING"
+```
+
+**Severity mapping:**
+- CRITICAL: chybí frontmatter, chybí `name`, chybí `description` → intake item
+- WARNING: zakázaná pole, chybějící optional pole, délka přesažena → reportuj, auto-fix kandidát
+
 ## 8) Vygeneruj audit report
 
 Vytvoř `{WORK_ROOT}/reports/check-{YYYY-MM-DD}.md` dle šablony:

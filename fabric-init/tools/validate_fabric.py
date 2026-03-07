@@ -400,8 +400,42 @@ def validate_skills(repo_root: Path, skills_root_rel: str) -> Result:
         if not fm:
             errors.append(f"{skill_file}: missing/invalid YAML frontmatter.")
             continue
-        if fm.get("name") != name:
-            warnings.append(f"{skill_file}: frontmatter name='{fm.get('name')}' != dir '{name}'.")
+
+        # --- Frontmatter validation (Claude Code Agent Skills spec) ---
+        fm_name = fm.get("name", "")
+        if not fm_name:
+            errors.append(f"{skill_file}: frontmatter missing 'name' field.")
+        else:
+            if fm_name != name:
+                warnings.append(f"{skill_file}: frontmatter name='{fm_name}' != dir '{name}'.")
+            if len(fm_name) > 64:
+                errors.append(f"{skill_file}: frontmatter name exceeds 64 chars ({len(fm_name)}).")
+            if not re.match(r"^[a-z0-9-]+$", fm_name):
+                errors.append(f"{skill_file}: frontmatter name='{fm_name}' must be lowercase+hyphens only.")
+
+        fm_desc = fm.get("description", "")
+        if not fm_desc:
+            errors.append(f"{skill_file}: frontmatter missing or empty 'description'.")
+        else:
+            if len(str(fm_desc)) > 1024:
+                errors.append(f"{skill_file}: frontmatter description exceeds 1024 chars ({len(str(fm_desc))}).")
+            if "<" in str(fm_desc) and ">" in str(fm_desc):
+                warnings.append(f"{skill_file}: frontmatter description contains XML-like tags (not recommended).")
+
+        # Forbidden fields (not part of Claude Code spec)
+        for forbidden in ["title", "type", "schema", "version"]:
+            if forbidden in fm:
+                errors.append(f"{skill_file}: frontmatter contains forbidden field '{forbidden}'.")
+
+        # Recommended fields
+        for recommended in ["tags", "depends_on", "feeds_into"]:
+            if recommended not in fm:
+                warnings.append(f"{skill_file}: frontmatter missing recommended field '{recommended}'.")
+
+        # builder-template tag position check (must be AFTER ---, not inside YAML)
+        fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", md, flags=re.S)
+        if fm_match and "built from" in fm_match.group(1):
+            errors.append(f"{skill_file}: builder-template tag is inside YAML frontmatter (must be after ---).")
 
         line_count = md.count("\n") + 1
         if line_count > 500:
