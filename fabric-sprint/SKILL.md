@@ -151,6 +151,22 @@ Použij ho jako zdroj pravdy pro výběr top-PRIO položek.
 
 ## §7 — Postup (JÁDRO SKILLU)
 
+### K2: Counter initialization and validation
+```bash
+# K5: Read from config.md
+CONFIG_MAX_TASKS=$(grep 'SPRINT.max_tasks:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_SPRINT_TASKS=${CONFIG_MAX_TASKS:-${MAX_SPRINT_TASKS:-50}}
+
+# K2: Counter initialization
+SPRINT_TASK_COUNTER=0
+
+# K2: Numeric validation
+if ! echo "$MAX_SPRINT_TASKS" | grep -qE '^[0-9]+$'; then
+  MAX_SPRINT_TASKS=50
+  echo "WARN: MAX_SPRINT_TASKS not numeric, reset to default (50)"
+fi
+```
+
 Detailní postup je v `references/workflow.md`. Zde shrnutí klíčových kroků:
 
 **7.1) Načti konfiguraci** — přečti `SPRINT.max_days`, `SPRINT.max_tasks`, `SPRINT.wip_limit` z config.md.
@@ -274,6 +290,8 @@ Pokud **ANY CRITICAL check FAIL** → **FAIL + vytvoř intake item `intake/sprin
 | Self-check | Check FAIL | Report WARN + intake item |
 
 Obecné pravidlo: Skill je fail-open vůči VOLITELNÝM vstupům (chybí → pokračuj s WARNING) a fail-fast vůči POVINNÝM vstupům (chybí → STOP).
+
+**K3 escalation:** Effort estimation failure pro > 50% tasků → STOP + intake item. Izolovaný task failure → WARN + skip task.
 
 ---
 

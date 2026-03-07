@@ -185,6 +185,28 @@ python skills/fabric-init/tools/fabric.py plan-apply \
 
 > **Příklady s reálnými LLMem daty (K10):** Přečti `references/examples.md`.
 
+### K2: Counter Initialization
+
+```bash
+# K2: Counter initialization
+MAX_TASKS_PER_ANALYZE=${MAX_TASKS_PER_ANALYZE:-100}
+TASK_COUNTER=0
+
+# K2: Numeric validation
+if ! echo "$MAX_TASKS_PER_ANALYZE" | grep -qE '^[0-9]+$'; then
+  MAX_TASKS_PER_ANALYZE=100
+  echo "WARN: MAX_TASKS_PER_ANALYZE not numeric, reset to default (100)"
+fi
+```
+
+### K5: Analysis Thresholds
+
+```bash
+# K5: Analysis thresholds from config.md
+EFFORT_BASE=$(grep 'ANALYSIS.effort_base:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "1")
+MAX_DEPS_PER_TASK=$(grep 'ANALYSIS.max_deps_per_task:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "10")
+```
+
 Stručný přehled kroků:
 
 1. **Deterministická příprava** — obnov backlog + governance indexy

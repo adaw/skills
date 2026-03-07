@@ -19,6 +19,10 @@ if ! echo "$MAX_COMPONENTS" | grep -qE '^[0-9]+$'; then
   MAX_COMPONENTS=50
   echo "WARN: MAX_COMPONENTS not numeric, reset to default (50)"
 fi
+
+# K5: Design thresholds from config.md
+MIN_TEST_CASES=$(grep 'DESIGN.min_test_cases:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "3")
+MAX_DEPS_PER_COMPONENT=$(grep 'DESIGN.max_deps_per_component:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "5")
 ```
 
 When iterating through components, API methods, or test cases in design:
@@ -89,6 +93,18 @@ Design requires 6 preconditions. Detailed validation in **references/02-precondi
 **Dependency chain:**
 ```
 fabric-init → fabric-intake → fabric-prio → [fabric-design] → fabric-analyze → fabric-implement
+```
+
+**Precondition: Priority validation (K6 — fabric-prio dependency)**
+
+Verify backlog item has been prioritized:
+```bash
+# Precondition: Priority validation (K6 — fabric-prio dependency)
+# Verify backlog item has been prioritized
+ITEM_PRIO=$(grep 'prio:' "{TARGET_ITEM}" | awk '{print $2}' 2>/dev/null || echo "")
+if [ -z "$ITEM_PRIO" ]; then
+  echo "WARN: Target item missing prio field — run fabric-prio first"
+fi
 ```
 
 ---
@@ -333,6 +349,23 @@ Design cannot proceed to READY without passing all 5 gates. Detailed checklist i
 - [ ] No conflicts with accepted ADRs
 - [ ] No violations of active SPECs
 - [ ] If conflict exists: intake item + DESIGN status (not READY)
+
+### K3: Failure Recovery (executable)
+
+```bash
+# If design validation fails:
+if [ "$DESIGN_VALID" != "true" ]; then
+  echo "FAIL: Design validation failed — creating intake item"
+  cat > "{WORK_ROOT}/intake/design-fix-$(date +%Y%m%d).md" <<INTAKE
+---
+title: "Fix design validation failure"
+type: task
+raw_priority: 7
+---
+Design failed validation. Rerun fabric-design after fixing.
+INTAKE
+fi
+```
 
 ---
 

@@ -70,7 +70,14 @@ Hotfix NEMÁ sprint prereqs — celý smysl je obejít sprint planning. Ale pot�
 2. State existuje: `{WORK_ROOT}/state.md`
 3. COMMANDS.test nakonfigurován (ověř v config.md)
 4. Git working tree čistý (no uncommitted changes)
-5. Effort guard: akceptuj jen XS/S (M+ → doporuč sprint)
+5. Effort guard: akceptuj jen effort z config.md `HOTFIX.max_effort` (default: XS,S; M+ → doporuč sprint)
+
+# K6: Dependency enforcement — init must have run
+if [ ! -f "{WORK_ROOT}/config.md" ] || [ ! -f "{WORK_ROOT}/state.md" ]; then
+  echo "STOP: fabric-init must run first (config.md or state.md missing)"
+  exit 1
+fi
+# K6: Checks 1-2 above enforce fabric-init dependency ✓
 
 **Detail implementace viz:** `references/preconditions.md`
 
@@ -130,6 +137,20 @@ Check current phase is compatible with this skill. Valid phases: `implementation
 ### Path Traversal Guard (K7: Input Validation)
 Reject any input containing `..` (path traversal attack prevention).
 
+### Counter Initialization (K2)
+
+```bash
+MAX_RETRIES=${MAX_RETRIES:-3}
+LINT_RETRY_COUNT=0
+FORMAT_RETRY_COUNT=0
+
+# K2: Numeric validation
+if ! echo "$MAX_RETRIES" | grep -qE '^[0-9]+$'; then
+  MAX_RETRIES=3
+  echo "WARN: MAX_RETRIES not numeric, reset to default (3)"
+fi
+```
+
 ### H1: Analýza požadavku
 Pochop co hotfix má udělat, ověř effort, zkontroluj backlog.
 **Detail:** `references/h1-analysis.md`
@@ -157,6 +178,15 @@ Aktualizuj backlog item na DONE, regeneruj index, updatuj docs pokud se týká.
 ### H7: Report
 Hotfix report se souhrnem evidence (schema: fabric.report.v1).
 **Detail:** `references/h7-report.md`
+
+---
+
+### K10: Inline Anti-patterns
+
+- **A1: Hot-fixing M-effort tasks** → STOP, doporuč sprint místo hotfix
+- **A2: Hotfix bez testů** → NESMÍ mergovat bez min. 3 testů (happy/edge/error)
+- **A3: Force push na main** → ZAKÁZÁNO, vždy squash merge z hotfix branch
+- **A4: Skip lint/format** → NESMÍ přeskočit; auto-fix max MAX_RETRIES pokusů
 
 ---
 

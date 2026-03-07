@@ -181,6 +181,10 @@ done
 ```bash
 # --- K2: Scanning limits ---
 MAX_SCAN_FILES=${MAX_SCAN_FILES:-5000}
+
+# K5: Read from config.md
+CONFIG_SCAN=$(grep 'ARCHITECT.max_scan_files:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_SCAN_FILES=${CONFIG_SCAN:-${MAX_SCAN_FILES:-5000}}
 ```
 
 1. **Backlog Index:**

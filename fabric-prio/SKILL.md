@@ -143,6 +143,15 @@ python skills/fabric-init/tools/fabric.py backlog-scan --json-out "{WORK_ROOT}/r
 
 ## §7 — Postup (JÁDRO SKILLU)
 
+# K5: Prioritization thresholds from config.md
+PRIO_IMPACT_WEIGHT=$(grep 'PRIO.impact_weight:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+PRIO_IMPACT_WEIGHT=${PRIO_IMPACT_WEIGHT:-0.4}
+PRIO_URGENCY_WEIGHT=$(grep 'PRIO.urgency_weight:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+PRIO_URGENCY_WEIGHT=${PRIO_URGENCY_WEIGHT:-0.3}
+PRIO_EFFORT_WEIGHT=$(grep 'PRIO.effort_weight:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+PRIO_EFFORT_WEIGHT=${PRIO_EFFORT_WEIGHT:-0.3}
+```
+
 ### 7.1) Načti vizi (pro Impact scoring)
 
 **Co:** Z `{WORK_ROOT}/vision.md` + `{VISIONS_ROOT}/*.md` vytáhni pillars, goals, success metrics. Backlog item, který explicitně odkazuje na goal/pillar (přes `linked_vision_goal`), dostane bonus v Impact.

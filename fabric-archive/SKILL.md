@@ -61,6 +61,13 @@ python skills/fabric-init/tools/protocol_log.py \
 Před spuštěním ověř:
 
 ```bash
+# K1: Phase validation — archive runs in closing only
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$CURRENT_PHASE" != "closing" ]; then
+  echo "STOP: fabric-archive requires phase=closing, current=$CURRENT_PHASE"
+  exit 1
+fi
+
 # --- Precondition 1: Config existuje ---
 if [ ! -f "{WORK_ROOT}/config.md" ]; then
   echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
@@ -142,9 +149,27 @@ Ověř že `phase: closing` v state.md — pokud ne, STOP.
 ### 7.2) Path Validation (K7)
 Pro všechny dynamic paths: odmítni `..` (path traversal).
 
+### 7.2.5) Counter Initialization (K2)
+```bash
+MAX_ITEMS_PER_ARCHIVE=${MAX_ITEMS_PER_ARCHIVE:-1000}
+ARCHIVE_COUNTER=0
+
+# K2: Numeric validation
+if ! echo "$MAX_ITEMS_PER_ARCHIVE" | grep -qE '^[0-9]+$'; then
+  MAX_ITEMS_PER_ARCHIVE=1000
+  echo "WARN: MAX_ITEMS_PER_ARCHIVE not numeric, reset to default (1000)"
+fi
+
+# K5: Read from config.md
+CONFIG_MAX=$(grep 'ARCHIVE.max_items_per_run:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_ITEMS_PER_ARCHIVE=${CONFIG_MAX:-$MAX_ITEMS_PER_ARCHIVE}
+RETENTION_DAYS=$(grep 'ARCHIVE.retention_days:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+RETENTION_DAYS=${RETENTION_DAYS:-365}
+```
+
 ### 7.3) Najdi DONE backlog items
 Iteruj `{WORK_ROOT}/backlog/*.md`, vyber ty s `status: DONE` a `merge_commit` != null.
-Max 1000 items per run (config: `MAX_ITEMS_PER_ARCHIVE`).
+Max items per run z config.md: `ARCHIVE.max_items_per_run` (default: 1000). Retention days: `ARCHIVE.retention_days` (default: 365).
 
 ### 7.4) Přesuň DONE items do backlog/done/
 Safe move pattern: `cp → diff → rm`. Pokud conflict v backlog/done/, move to quarantine.
@@ -274,6 +299,7 @@ feeds_into:
 - **A2: Delete instead of move to archive/** — NESMÍ smazat; vždy kopíruj do `archive/` a pak teprve odstraň z aktivního backlog/
 - **A3: Archive without preserving YAML frontmatter** — Snapshoty MUSÍ mít identické YAML; diff -q verifikace
 - **A4: Skip quarantine for items with missing fields** — Konflikty MUSÍ jít do quarantine, ne přepisovat; intiake item pro každý konflikt
+- **A5: Archive bez retention policy** — NESMÍ archivovat bez ověření retention_days z config.md. Příklad: LLMem task-b001 ze sprintu 1 (6 měsíců starý) — archivuj. Ale task-b015 ze sprintu 3 (tento týden) — NEPATŘÍ do archive, jen do backlog/done/.
 
 ---
 

@@ -147,6 +147,13 @@ Použij backlog snapshot pro počet READY/DESIGN položek, deduplikaci, rozhodnu
 
 ## §7 — Postup (JÁDRO SKILLU)
 
+# K5: Generate thresholds from config.md
+MAX_GENERATE_ITEMS=$(grep 'GENERATE.max_items:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_GENERATE_ITEMS=${MAX_GENERATE_ITEMS:-100}
+BACKLOG_WARN_THRESHOLD=$(grep 'GENERATE.backlog_warn_threshold:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+BACKLOG_WARN_THRESHOLD=${BACKLOG_WARN_THRESHOLD:-200}
+```
+
 **Key Steps (inline summary):**
 
 1. **Load state** — Read backlog index (READY count), current phase, vision goals

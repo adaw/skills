@@ -68,6 +68,20 @@ Detail bash commands: Viz `references/preconditions.md` — "Protocol Logging" s
 
 Před spuštěním ověř tyto podmínky. Detailní checks a interpretace: Viz `references/preconditions.md`.
 
+```bash
+# K1: Phase validation — process mapping runs in orientation
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$CURRENT_PHASE" != "orientation" ]; then
+  echo "STOP: fabric-process requires phase=orientation, current=$CURRENT_PHASE"
+  exit 1
+fi
+
+# K6: Dependency enforcement — fabric-architect must have run
+if [ ! -f "{WORK_ROOT}/reports/architect-"*.md ] 2>/dev/null; then
+  echo "WARN: No architect report found — fabric-architect should run before fabric-process"
+fi
+```
+
 **Klíčové checks:**
 - `{WORK_ROOT}/config.md` existuje (cesty, schémata)
 - `{WORK_ROOT}/state.md` existuje (aktuální fáze)
@@ -137,6 +151,26 @@ Pokud `fabric.py` selže → WARN + pokračuj manuálně.
 ## §7 — Postup (JÁDRO SKILLU — zde žije kvalita práce)
 
 **Detailní bash scripts, state validation, path guards:** Viz `references/workflow.md`.
+
+### K3: Failure Recovery Pattern
+
+Každá fáze P1–P5 má 3-úrovňový fallback:
+
+```bash
+# Level 1: Auto-retry (1x)
+RESULT=$(run_phase "$PHASE") || RESULT=$(run_phase "$PHASE")
+
+# Level 2: Guided fallback — skip phase, log WARN
+if [ -z "$RESULT" ]; then
+  echo "WARN: Phase $PHASE failed after retry — skipping with degraded output"
+  echo "phase_${PHASE}: SKIP" >> "{WORK_ROOT}/reports/process-$(date +%Y-%m-%d).md"
+fi
+
+# Level 3: Manual escalation — intake item
+if [ "$CRITICAL_PHASE" = "true" ] && [ -z "$RESULT" ]; then
+  echo "STOP: Critical phase $PHASE failed — creating intake item"
+fi
+```
 
 Skill se skládá z 5 fází:
 

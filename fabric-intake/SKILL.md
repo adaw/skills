@@ -91,6 +91,14 @@ Výsledek musí být:
 ## §3 — Preconditions (temporální kauzalita)
 
 ```bash
+# K7: Path traversal guard
+for VAR in "{WORK_ROOT}" "{CODE_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in $VAR"
+    exit 1
+  fi
+done
+
 # --- Precondition 1: Config existuje ---
 if [ ! -f "{WORK_ROOT}/config.md" ]; then
   echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
@@ -225,6 +233,11 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/reports/intake-plan
 
 ## §7 — Postup (JÁDRO SKILLU — zde žije kvalita práce)
 
+# K5: Intake thresholds from config.md
+MAX_INTAKE_ITEMS=$(grep 'INTAKE.max_items:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_INTAKE_ITEMS=${MAX_INTAKE_ITEMS:-200}
+```
+
 > **Detailní triage pravidla a workflow:** Přečti `references/workflow.md` pomocí Read toolu.
 > Obsahuje: path traversal guard, symlink validaci, dedup logiku, vision alignment,
 > type/tier/status heuristiky, backlog ID generaci, collision guard, kanonická pravidla.
@@ -346,6 +359,8 @@ Pokud ANY check FAIL → **FAIL + vytvoř intake item `intake/intake-selfcheck-f
 | Backlog item se nepodaří vytvořit | Vytvoř intake `intake/intake-failed-{date}.md` s důvodem, neztrácej data |
 | Schema nekonzistence | CRITICAL — reportuj v intake reportu, ponech intake v `intake/` |
 | Move do done/ selže | WARN — intake zůstane v `intake/`, bude zpracován při dalším run |
+
+**K3 escalation:** Template parsing failure (missing YAML frontmatter, corrupt file) → STOP + exit 1, ne WARN. WARN je jen pro minor validation issues (missing optional fields).
 
 ### Idempotence a recovery
 

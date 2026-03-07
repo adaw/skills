@@ -138,6 +138,22 @@ validate_path "{WORK_ROOT}/vision.md"
 
 ## §7 — Postup (JÁDRO SKILLU — zde žije kvalita práce)
 
+### K2: Counter initialization and validation
+```bash
+# K5: Read from config.md
+CONFIG_MAX_CAP=$(grep 'VISION.max_capabilities:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_CAPABILITIES=${CONFIG_MAX_CAP:-${MAX_CAPABILITIES:-200}}
+
+# K2: Counter initialization
+CAP_COUNTER=0
+
+# K2: Numeric validation
+if ! echo "$MAX_CAPABILITIES" | grep -qE '^[0-9]+$'; then
+  MAX_CAPABILITIES=200
+  echo "WARN: MAX_CAPABILITIES not numeric, reset to default (200)"
+fi
+```
+
 Postup je organizován do 5 hlavních kroků. Detailní instrukce, bash skripty, příklady a anti-patterns najdeš v **references/workflow.md**. Zde je přehled:
 
 ### 7.1) Načti a strukturalizuj vizi
@@ -383,6 +399,8 @@ Based on vision, recommended priorities...
 | Self-check | Check FAIL | Report FAIL + intake item |
 
 **Obecné pravidlo:** Skill je fail-fast na POVINNÝCH vstupech (chybí → STOP). Volitelné vstupy (sub-vize) → pokračuj s WARNING.
+
+**K3 escalation:** Pokud vision.md NEMŮŽE být vytvořen (disk full, permissions) → STOP + exit 1. Intake-only WARN je pro quality failures.
 
 ---
 

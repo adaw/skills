@@ -422,6 +422,28 @@ Vytvoř report `{WORK_ROOT}/reports/init-{YYYY-MM-DD}.md`:
 
 ---
 
+## K10: Concrete Example — config.md Before/After
+
+**Before init (no config.md):**
+```
+$ ls {WORK_ROOT}/
+(empty)
+```
+
+**After init:**
+```
+$ ls {WORK_ROOT}/
+config.md  state.md  backlog.md  templates/  reports/
+$ head -5 {WORK_ROOT}/config.md
+schema: fabric.config.v1
+PROJECT_ROOT: /home/user/llmem
+CODE_ROOT: src/llmem
+COMMANDS:
+  test: pytest -q
+```
+
+---
+
 ## Anti-patterns (ZAKÁZÁNO)
 
 - **A1: Config Overwrite** — NESMÍ přepsat existující `config.md` vlastním obsahem. Detection: `test -f {WORK_ROOT}/config.md`. Fix: Pokud existuje, pouze validuj; nepřepisuj.

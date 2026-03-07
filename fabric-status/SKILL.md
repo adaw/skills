@@ -119,6 +119,22 @@ Pak report stav podle dat ze snapshotu (ne odhadem). Snapshots mohou být dočas
 
 ## §7 — Postup (JÁDRO SKILLU)
 
+### K2: Counter initialization and validation
+```bash
+# K5: Read from config.md
+CONFIG_MAX_FILES=$(grep 'STATUS.max_files_scan:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_FILES_SCAN=${CONFIG_MAX_FILES:-${MAX_FILES_SCAN:-10000}}
+
+# K2: Counter initialization
+FILE_COUNTER=0
+
+# K2: Numeric validation
+if ! echo "$MAX_FILES_SCAN" | grep -qE '^[0-9]+$'; then
+  MAX_FILES_SCAN=10000
+  echo "WARN: MAX_FILES_SCAN not numeric, reset to default (10000)"
+fi
+```
+
 ### 7.1) State Validation (K1: State Machine)
 
 **Co:** Ověřit, že aktuální fáze projektu je kompatibilní se spuštěním fabric-status.

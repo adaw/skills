@@ -56,10 +56,11 @@ if [ ! -f "{WORK_ROOT}/state.md" ]; then
   exit 1
 fi
 
-# Precondition 2: phase validation (implementation/closing)
-PHASE=$(grep -E '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
-if ! echo "$PHASE" | grep -qE '^(implementation|closing)$'; then
-  echo "WARN: fabric-docs should run in implementation or closing phase, but phase='$PHASE'"
+# K1: Phase validation — docs runs in implementation or closing
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if ! echo "$CURRENT_PHASE" | grep -qE '^(implementation|closing)$'; then
+  echo "STOP: fabric-docs requires phase=implementation|closing, current=$CURRENT_PHASE"
+  exit 1
 fi
 
 # Precondition 3: config.md má DOCS_ROOT
@@ -72,6 +73,11 @@ fi
 LATEST_CLOSE_REPORT=$(ls -t {WORK_ROOT}/reports/close-*.md 2>/dev/null | head -1)
 if [ -z "$LATEST_CLOSE_REPORT" ]; then
   echo "WARN: no close report found — continuing with codebase scan only"
+fi
+
+# K6: Dependency enforcement — close report should exist
+if ! ls "{WORK_ROOT}/reports/close-"*.md 1>/dev/null 2>&1; then
+  echo "WARN: No close report found — fabric-close should run before fabric-docs (fail-open)"
 fi
 ```
 
@@ -143,14 +149,24 @@ cp /tmp/current-funcs.txt {WORK_ROOT}/reports/baseline-funcs-$(date +%Y-%m-%d).t
 ### FAST PATH Initialization:
 ```bash
 DOC_COUNTER=0
-MAX_DOC_ITEMS=100
+MAX_DOC_ITEMS=${MAX_DOC_ITEMS:-100}
+
+# K2: Numeric validation
+if ! echo "$MAX_DOC_ITEMS" | grep -qE '^[0-9]+$'; then
+  MAX_DOC_ITEMS=100
+  echo "WARN: MAX_DOC_ITEMS not numeric, reset to default (100)"
+fi
+
+# K5: Classification thresholds from config.md
+MUST_DOC_TYPES=$(grep 'DOCS.must_document_types:' "{WORK_ROOT}/config.md" | sed 's/.*: //' || echo "api_change,breaking_change,new_module")
+SHOULD_DOC_TYPES=$(grep 'DOCS.should_document_types:' "{WORK_ROOT}/config.md" | sed 's/.*: //' || echo "refactor,bugfix,config_change")
 ```
 
 **Vše je detailně popsáno v `references/workflow.md`.**
 
 Přehled kroků:
 
-1. **Načti context** — merged items ze close reportu (nebo codebase scan)
+1. **Načti context** — merged items ze close reportu (nebo codebase scan) (yaml.safe_load pro all YAML parsing — K7)
 2. **Klasifikuj items** — MUST_DOCUMENT vs SHOULD_DOCUMENT vs SKIP (s MAX_DOC_ITEMS guardem)
 3. **Aktualizuj docs** — přidej/uprav soubory v DOCS_ROOT s code references
 4. **Validuj linky** — broken links, orphaned files, syntax errors
@@ -161,6 +177,14 @@ Přehled kroků:
 9. **Loguj END** — protocol log
 
 Pro detaily každého kroku, příklady, anti-patterns a heurystiky viz: **[references/workflow.md](./references/workflow.md)**
+
+### K10 Inline Example — LLMem API Documentation Update
+
+Příklad: Po přidání `/capture/batch` endpointu:
+- MUST_DOCUMENT: Nový endpoint, request/response schema, error codes
+- SHOULD_DOCUMENT: Performance benchmarks, rate limits
+- SKIP: Internal helper functions
+Output: {DOCS_ROOT}/api/capture-batch.md + CHANGELOG entry + ADR (pokud breaking)
 
 ---
 

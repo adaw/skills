@@ -60,6 +60,13 @@ python skills/fabric-init/tools/protocol_log.py \
 Ověř, že tyto soubory existují PŘED spuštěním:
 
 ```bash
+# K1: Phase validation — gap analysis runs in orientation
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$CURRENT_PHASE" != "orientation" ]; then
+  echo "STOP: fabric-gap requires phase=orientation, current=$CURRENT_PHASE"
+  exit 1
+fi
+
 # --- Path traversal guard (K7) ---
 for VAR in "{WORK_ROOT}" "{CODE_ROOT}" "{TEST_ROOT}" "{DOCS_ROOT}" "{VISIONS_ROOT}"; do
   if echo "$VAR" | grep -qE '\.\.'; then
@@ -144,6 +151,12 @@ python skills/fabric-init/tools/fabric.py backlog-scan \
 ```bash
 MAX_GAPS=${MAX_GAPS:-50}
 GAP_COUNTER=0
+
+# K5: Gap thresholds from config.md
+MIN_COVERAGE_PCT=$(grep 'GAP.min_coverage_pct:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MIN_COVERAGE_PCT=${MIN_COVERAGE_PCT:-80}
+GAP_SEVERITY_THRESHOLD=$(grep 'GAP.severity_threshold:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+GAP_SEVERITY_THRESHOLD=${GAP_SEVERITY_THRESHOLD:-medium}
 ```
 
 ### 7.1) Extrahuj capabilities z vize

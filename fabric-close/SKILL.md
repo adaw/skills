@@ -58,10 +58,10 @@ python skills/fabric-init/tools/protocol_log.py \
 Verify prerequisites before starting merge loop:
 
 ```bash
-# --- Path traversal guard (K7) ---
-for VAR in "{WORK_ROOT}"; do
+# K7: Path traversal guard
+for VAR in "{WORK_ROOT}" "{CODE_ROOT}"; do
   if echo "$VAR" | grep -qE '\.\.'; then
-    echo "STOP: Path traversal detected in '$VAR'"
+    echo "STOP: Path traversal detected in $VAR"
     exit 1
   fi
 done
@@ -177,6 +177,19 @@ Update merge_commit and status metadata via plan/apply pattern, not manually.
 ---
 
 # §7 POSTUP (Orchestrace a Sekvence)
+
+### K2: Counter initialization and validation
+```bash
+# K2: Counter initialization for merge loop
+MAX_MERGE_TASKS=${MAX_MERGE_TASKS:-100}
+MERGE_COUNTER=0
+
+# K2: Numeric validation
+if ! echo "$MAX_MERGE_TASKS" | grep -qE '^[0-9]+$'; then
+  MAX_MERGE_TASKS=100
+  echo "WARN: MAX_MERGE_TASKS not numeric, reset to default (100)"
+fi
+```
 
 Close is a **procedural batching skill** — run once per sprint, iterates all tasks in Task Queue sequentially.
 

@@ -72,6 +72,13 @@ if [ ! -f "{WORK_ROOT}/state.md" ]; then
   exit 1
 fi
 
+# K1: Phase validation — check runs in implementation or closing or planning
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if ! echo "$CURRENT_PHASE" | grep -qE '^(implementation|closing|planning)$'; then
+  echo "STOP: fabric-check requires phase=implementation|closing|planning, current=$CURRENT_PHASE"
+  exit 1
+fi
+
 # --- Precondition 3: Backlog struktura existuje ---
 if [ ! -f "{WORK_ROOT}/backlog.md" ]; then
   echo "WARN: {WORK_ROOT}/backlog.md not found — check will auto-regenerate it"
@@ -131,8 +138,16 @@ python skills/fabric-init/tools/fabric.py governance-index
 
 ### FAST PATH Initialization:
 ```bash
+# K5: Read MAX_FINDINGS from config.md
+MAX_FINDINGS=$(grep 'QUALITY.max_findings:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
 MAX_FINDINGS=${MAX_FINDINGS:-500}
 FINDINGS_COUNTER=0
+
+# K2: Numeric validation
+if ! echo "$MAX_FINDINGS" | grep -qE '^[0-9]+$'; then
+  MAX_FINDINGS=500
+  echo "WARN: MAX_FINDINGS not numeric, reset to default (500)"
+fi
 ```
 
 Detailní procedury jsou v `references/workflow.md`. Zde je přehled kroků:
