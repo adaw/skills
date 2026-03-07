@@ -210,9 +210,11 @@ fi
 ### K5: Analysis Thresholds
 
 ```bash
-# K5: Analysis thresholds from config.md
-EFFORT_BASE=$(grep 'ANALYSIS.effort_base:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "1")
-MAX_DEPS_PER_TASK=$(grep 'ANALYSIS.max_deps_per_task:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "10")
+# K5: Analysis thresholds from config.md (with fallback defaults)
+EFFORT_BASE=$(grep 'ANALYSIS.effort_base:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+EFFORT_BASE=${EFFORT_BASE:-1}
+MAX_DEPS_PER_TASK=$(grep 'ANALYSIS.max_deps_per_task:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_DEPS_PER_TASK=${MAX_DEPS_PER_TASK:-10}
 ```
 
 ### K10: Inline Example — LLMem Task Decomposition

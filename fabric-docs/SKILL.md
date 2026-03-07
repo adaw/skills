@@ -69,15 +69,13 @@ if ! grep -q '^DOCS_ROOT:' "{WORK_ROOT}/config.md"; then
   exit 1
 fi
 
-# Precondition 4: close report existuje (dependency z fabric-close)
-LATEST_CLOSE_REPORT=$(ls -t {WORK_ROOT}/reports/close-*.md 2>/dev/null | head -1)
-if [ -z "$LATEST_CLOSE_REPORT" ]; then
-  echo "WARN: no close report found — continuing with codebase scan only"
-fi
-
-# K6: Dependency enforcement — close report should exist
+# K6: Dependency enforcement — close report required for full docs generation
 if ! ls "{WORK_ROOT}/reports/close-"*.md 1>/dev/null 2>&1; then
-  echo "WARN: No close report found — fabric-close should run before fabric-docs (fail-open)"
+  echo "STOP: No close report found — run fabric-close before fabric-docs"
+  python skills/fabric-init/tools/protocol_log.py \
+    --work-root "{WORK_ROOT}" --skill "docs" --event error \
+    --status ERROR --message "Missing close report — run fabric-close first"
+  exit 1
 fi
 ```
 

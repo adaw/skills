@@ -61,6 +61,14 @@ python skills/fabric-init/tools/protocol_log.py \
 Před spuštěním ověř:
 
 ```bash
+# K7: Path traversal guard
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # K1: Phase validation — archive runs in closing only
 CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
 if [ "$CURRENT_PHASE" != "closing" ]; then

@@ -131,7 +131,8 @@ python skills/fabric-init/tools/fabric.py governance-index
 python skills/fabric-init/tools/fabric.py backlog-scan \
   --json-out "{WORK_ROOT}/reports/backlog-scan-{YYYY-MM-DD}.json"
 
-# 4. K2 Fix: Initialize generation counter
+# 4. K2+K5: Initialize generation counter from config
+MAX_ITEMS=$(grep 'GENERATE.max_items:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
 MAX_ITEMS=${MAX_ITEMS:-100}
 GENERATION_COUNTER=0
 

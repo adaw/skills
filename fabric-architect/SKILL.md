@@ -179,12 +179,14 @@ done
 ```
 
 ```bash
-# --- K2: Scanning limits ---
+# K5: Read scanning limits from config.md
+MAX_SCAN_FILES=$(grep 'ARCHITECT.max_scan_files:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
 MAX_SCAN_FILES=${MAX_SCAN_FILES:-5000}
-
-# K5: Read from config.md
-CONFIG_SCAN=$(grep 'ARCHITECT.max_scan_files:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
-MAX_SCAN_FILES=${CONFIG_SCAN:-${MAX_SCAN_FILES:-5000}}
+# K2: Numeric guard
+if ! echo "$MAX_SCAN_FILES" | grep -qE '^[0-9]+$'; then
+  MAX_SCAN_FILES=5000
+  echo "WARN: MAX_SCAN_FILES not numeric, reset to default (5000)"
+fi
 ```
 
 1. **Backlog Index:**

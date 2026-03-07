@@ -149,6 +149,8 @@ python skills/fabric-init/tools/fabric.py backlog-scan \
 
 ### FAST PATH Initialization:
 ```bash
+# K5: Read max gaps from config.md
+MAX_GAPS=$(grep 'GAP.max_gaps:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
 MAX_GAPS=${MAX_GAPS:-50}
 GAP_COUNTER=0
 
