@@ -47,6 +47,21 @@ python skills/fabric-init/tools/protocol_log.py \
 ## § 3 Preconditions (bash validation)
 
 ```bash
+# --- Path traversal guard (K7) ---
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
+# 0. Phase validation (K1)
+PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$PHASE" != "implementation" ]; then
+  echo "STOP: fabric-review requires phase=implementation, current: $PHASE"
+  exit 1
+fi
+
 # 1. WIP item and branch exist
 WIP_ITEM=$(python skills/fabric-init/tools/fabric.py state-get --field wip_item 2>/dev/null)
 WIP_BRANCH=$(python skills/fabric-init/tools/fabric.py state-get --field wip_branch 2>/dev/null)

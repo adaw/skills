@@ -52,6 +52,14 @@ python skills/fabric-init/tools/protocol_log.py \
 Před spuštěním ověř:
 
 ```bash
+# --- Path traversal guard (K7) ---
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # Precondition 1: config.md existuje
 if [ ! -f "{WORK_ROOT}/config.md" ]; then
   echo "STOP: {WORK_ROOT}/config.md not found"

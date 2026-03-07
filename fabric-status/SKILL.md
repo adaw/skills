@@ -193,7 +193,7 @@ Z configu načti `COMMANDS.test` a volitelně `COMMANDS.test_e2e`. Pokud `COMMAN
 
 Jinak spusť:
 ```bash
-{COMMANDS.test}
+timeout 120 {COMMANDS.test}
 ```
 
 **Minimum:**
@@ -217,13 +217,13 @@ Z configu načti `COMMANDS.lint` a `COMMANDS.format_check`. Pokud je `TBD` → r
 
 ```bash
 if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then
-  {COMMANDS.lint}
+  timeout 120 {COMMANDS.lint}
 else
   echo "lint: SKIPPED or UNKNOWN"
 fi
 
 if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then
-  {COMMANDS.format_check}
+  timeout 120 {COMMANDS.format_check}
 else
   echo "format_check: SKIPPED or UNKNOWN"
 fi

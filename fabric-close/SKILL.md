@@ -58,6 +58,14 @@ python skills/fabric-init/tools/protocol_log.py \
 Verify prerequisites before starting merge loop:
 
 ```bash
+# --- Path traversal guard (K7) ---
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # Config validation
 COMMANDS_TEST=$(grep '^COMMANDS.test:' "{WORK_ROOT}/config.md" | awk '{print $2}')
 COMMANDS_LINT=$(grep '^COMMANDS.lint:' "{WORK_ROOT}/config.md" | awk '{print $2}')
@@ -294,6 +302,23 @@ if ! grep -q "schema: fabric.report.v1" "{WORK_ROOT}/reports/close-sprint-${SPRI
   echo "ERROR: sprint report missing schema frontmatter"
   exit 1
 fi
+
+# 5. Merge verified: branch deleted or marked (K9 verification)
+for TASK_ID in $(grep "^| T-" "{WORK_ROOT}/reports/close-sprint-${SPRINT_N}-{YYYY-MM-DD}.md" | grep "DONE" | awk '{print $2}'); do
+  BRANCH=$(grep "^branch:" "{WORK_ROOT}/backlog/${TASK_ID}.md" | awk '{print $2}')
+  if [ -n "$BRANCH" ] && git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
+    echo "WARN: branch '$BRANCH' for $TASK_ID still exists (should be deleted after merge)"
+  fi
+done
+
+# 6. All linked backlog items status=DONE (K9 verification)
+for TASK_ID in $(grep "^| T-" "{WORK_ROOT}/reports/close-sprint-${SPRINT_N}-{YYYY-MM-DD}.md" | grep "DONE" | awk '{print $2}'); do
+  STATUS=$(grep "^status:" "{WORK_ROOT}/backlog/${TASK_ID}.md" | awk '{print $2}')
+  if [ "$STATUS" != "DONE" ]; then
+    echo "ERROR: task $TASK_ID marked DONE in report but status is '$STATUS' in backlog"
+    exit 1
+  fi
+done
 
 echo "Self-check passed: sprint close complete"
 ```

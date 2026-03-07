@@ -147,15 +147,17 @@ Použij backlog snapshot pro počet READY/DESIGN položek, deduplikaci, rozhodnu
 
 ## §7 — Postup (JÁDRO SKILLU)
 
-Detailní kroky viz `references/7-POSTUP.md`.
+**Key Steps (inline summary):**
 
-Shrnutí:
-1. **7.1 Zjisti, jestli generovat** — Backlog index: pokud < 10 READY → generuj; jinak jen quality improvements
-2. **7.2 Discovery zdroje** — Scan 7 kategorií (Security, Reliability, Tests, Docs, Performance, DX, Governance); kandidáty se evidence
-3. **7.3 Vision alignment** — HIGH/MED/LOW + zdůvodnění (reference na vision.md goals)
-4. **7.4 Deduplikace** — Backlog snapshot dedup; skip existující; log evidence
-5. **7.5 Vytvoř items** — Top 3–8 deduplikovaných; max 8; source=generate; priority 1–10; evidence
-6. **7.6 Generate report** — Schema fabric.report.v1; souhrn, state, sources, dedup tabulka, items tabulka, warnings
+1. **Load state** — Read backlog index (READY count), current phase, vision goals
+2. **Decide** — If READY < 10 or strategic gap detected: generate; else skip with OK status
+3. **Discover candidates** — Scan codebase + vision for: security gaps, untested code, undocumented APIs, stale items, performance hotspots, DX friction, governance debt (7 categories)
+4. **Score & align** — Rate each candidate HIGH/MEDIUM/LOW via vision alignment + impact heuristics
+5. **Dedup** — Compare against backlog snapshot; skip duplicates; log evidence
+6. **Create intake** — Generate 0–8 items (max 100 respect); each: title, type, priority 1–10, evidence
+7. **Report** — Schema fabric.report.v1 with discovery sources, dedup table, generated items, warnings
+
+Detailní kroky viz `references/7-POSTUP.md` pro konkrétní regex patterns, scoring formule, vision alignment heuristics.
 
 ---
 

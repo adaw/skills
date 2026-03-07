@@ -52,6 +52,14 @@ python skills/fabric-init/tools/protocol_log.py \
 Před spuštěním ověř:
 
 ```bash
+# --- Path traversal guard (K7) ---
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # --- Precondition 1: Config existuje ---
 if [ ! -f "{WORK_ROOT}/config.md" ]; then
   echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
@@ -120,6 +128,12 @@ python skills/fabric-init/tools/fabric.py governance-index
 ---
 
 ## §7 — Postup (JÁDRO SKILLU)
+
+### FAST PATH Initialization:
+```bash
+MAX_FINDINGS=${MAX_FINDINGS:-500}
+FINDINGS_COUNTER=0
+```
 
 Detailní procedury jsou v `references/workflow.md`. Zde je přehled kroků:
 

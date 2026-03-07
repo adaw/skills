@@ -66,6 +66,13 @@ python skills/fabric-init/tools/protocol_log.py \
 ## §3 — Preconditions (temporální kauzalita)
 
 ```bash
+# --- Phase validation (K1) ---
+PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}')
+if [ "$PHASE" != "implementation" ]; then
+  echo "STOP: fabric-analyze requires phase=implementation, current: $PHASE"
+  exit 1
+fi
+
 # --- Precondition 1: Config existuje ---
 if [ ! -f "{WORK_ROOT}/config.md" ]; then
   echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"

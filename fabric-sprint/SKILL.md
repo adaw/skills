@@ -57,6 +57,14 @@ python skills/fabric-init/tools/protocol_log.py \
 Před spuštěním ověř:
 
 ```bash
+# --- Path traversal guard (K7) ---
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # --- Precondition 1: Config existuje ---
 if [ ! -f "{WORK_ROOT}/config.md" ]; then
   echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
@@ -83,6 +91,13 @@ fi
 # --- Precondition 5: Vision existuje (for goal alignment) ---
 if [ ! -f "{WORK_ROOT}/vision.md" ]; then
   echo "WARN: {WORK_ROOT}/vision.md not found — sprint goal may not align with vision"
+fi
+
+# --- Precondition: Phase validation ---
+PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$PHASE" != "planning" ] && [ "$PHASE" != "implementation" ]; then
+  echo "STOP: Expected phase=planning or implementation, got '$PHASE'"
+  exit 1
 fi
 ```
 

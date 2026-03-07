@@ -81,412 +81,64 @@ Before full execution, perform quick checks:
 
 ## §7 Postup — 5 steps (E1-E5)
 
-### State Validation (K1: State Machine)
+### Validation Guards
 
-```bash
-# State validation — check current phase is compatible with this skill
-CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
-EXPECTED_PHASES="implementation"
-if ! echo "$EXPECTED_PHASES" | grep -qw "$CURRENT_PHASE"; then
-  echo "STOP: Current phase '$CURRENT_PHASE' is not valid for fabric-e2e. Expected: $EXPECTED_PHASES"
-  exit 1
-fi
-```
-
-### Path Traversal Guard (K7: Input Validation)
-
-```bash
-# Path traversal guard — reject any input containing ".."
-validate_path() {
-  local INPUT_PATH="$1"
-  if echo "$INPUT_PATH" | grep -qE '\.\.'; then
-    echo "STOP: path traversal detected in: $INPUT_PATH"
-    exit 1
-  fi
-}
-
-# Apply to all dynamic path inputs:
-# validate_path "$TEST_FILE"
-# validate_path "$TEMP_DIR"
-```
-
-### K2 Fix: E2E Test Run Counter
-
-```bash
-MAX_TEST_RUNS=${MAX_TEST_RUNS:-20}
-TEST_RUN_COUNTER=0
-
-# Validate MAX_TEST_RUNS is numeric (K2 tight validation)
-if ! echo "$MAX_TEST_RUNS" | grep -qE '^[0-9]+$'; then
-  MAX_TEST_RUNS=20
-  echo "WARN: MAX_TEST_RUNS not numeric, reset to default (20)"
-fi
-```
-
-When iterating through E2E test cases:
-```bash
-while read -r test_case; do
-  TEST_RUN_COUNTER=$((TEST_RUN_COUNTER + 1))
-
-  # Numeric validation of counter (K2 strict check)
-  if ! echo "$TEST_RUN_COUNTER" | grep -qE '^[0-9]+$'; then
-    TEST_RUN_COUNTER=0
-    echo "WARN: TEST_RUN_COUNTER corrupted, reset to 0"
-  fi
-
-  if [ "$TEST_RUN_COUNTER" -ge "$MAX_TEST_RUNS" ]; then
-    echo "WARN: max E2E test runs reached ($TEST_RUN_COUNTER/$MAX_TEST_RUNS)"
-    break
-  fi
-  # ... run test
-done
-```
+See `references/guards-and-validation.md` for:
+- State Validation (K1: State Machine)
+- Path Traversal Guard (K7: Input Validation)
+- K2 Fix: E2E Test Run Counter
 
 ### 7.1) E1: Setup
 
 **Co:** Start the live LLMem system in a clean temporary environment with isolated state. This phase creates the sandbox, configures the server, and waits for readiness.
 
-**Jak (detailed):**
+**Jak:** See `references/step-e1-setup.md` for full implementation.
 
-1. **Create isolated temporary home directory:**
-   ```bash
-   export E2E_HOME=$(mktemp -d)
-   export E2E_PORT=${E2E_PORT:-8099}
-   echo "E2E_HOME=$E2E_HOME, E2E_PORT=$E2E_PORT"
-   ```
-
-2. **Check for API keys in .env (fallback to mock):**
-   ```bash
-   if [ -f .env ]; then
-     source .env
-   else
-     echo "No .env found, using mock provider"
-   fi
-   # Set backend (default inmemory for E2E)
-   export LLMEM_BACKEND=${LLMEM_BACKEND:-inmemory}
-   export LLMEM_DATA_DIR="$E2E_HOME"
-   ```
-
-3. **Extract server command from config.md or use default:**
-   ```bash
-   # From config: {COMMANDS.serve} typically:
-   # "uvicorn llmem.api.server:app --host 127.0.0.1 --port {PORT}"
-   SERVE_CMD="uvicorn llmem.api.server:app --host 127.0.0.1 --port $E2E_PORT --reload"
-   ```
-
-4. **Start server in background with output capture:**
-   ```bash
-   mkdir -p "$E2E_HOME/logs"
-   $SERVE_CMD > "$E2E_HOME/logs/server.log" 2>&1 &
-   SERVER_PID=$!
-   echo "Server PID: $SERVER_PID"
-   sleep 1  # Give OS time to start process
-   ```
-
-5. **Health check wait loop (max 30s):**
-   ```bash
-   HEALTH_OK=0
-   for i in $(seq 1 30); do
-     if curl -sf http://localhost:$E2E_PORT/healthz > /dev/null 2>&1; then
-       HEALTH_OK=1
-       echo "Server healthy after $i seconds"
-       break
-     fi
-     echo "Waiting for server... ($i/30)"
-     sleep 1
-   done
-
-   if [ $HEALTH_OK -eq 0 ]; then
-     echo "FAILED: Server health check timeout after 30s"
-     kill -9 $SERVER_PID 2>/dev/null
-     cat "$E2E_HOME/logs/server.log"
-     exit 1
-   fi
-   ```
+**Summary:** Create isolated temp directory, set environment variables, extract server command, start server in background, run health check (max 30s).
 
 **Minimum:** Server running, health check `/healthz` returning 200, PID captured, isolated data directory set.
-
-**Anti-patterns:**
-- ❌ Don't use production data directory — always use temp (`mktemp -d`)
-- ❌ Don't use default port 8080 — use 8099 to avoid conflicts with development servers
-- ❌ Don't skip health wait loop — server needs 5-15s to start up
-- ❌ Don't forget to capture PID and output — needed for teardown and debugging
-- ❌ Don't skip `sleep 1` after `&` — process needs time to fork
-- ❌ Don't hardcode backend — use LLMEM_BACKEND from config
 
 ### 7.2) E2: Test Execution
 
 **Co:** Run the E2E test suite against the live server. This phase executes all tests, captures results, and determines pass/fail status.
 
-**Jak:**
+**Jak:** See `references/step-e2-tests.md` for full implementation.
 
-1. **Set environment for test discovery:**
-   ```bash
-   export LLMEM_E2E_URL="http://localhost:$E2E_PORT"
-   export LLMEM_E2E_HOME="$E2E_HOME"
-   cd "$CODE_ROOT"  # cd to project root for test discovery
-   ```
+**Summary:** Set test environment, run pytest with 300s timeout, parse results, optionally filter tests.
 
-2. **Run pytest with timeout and output capture:**
-   ```bash
-   mkdir -p reports
-   LOG_FILE="reports/e2e-$(date +%Y-%m-%d).log"
-
-   timeout 300 pytest tests/e2e/ -v --tb=short 2>&1 | tee "$LOG_FILE"
-   E2E_EXIT=$?
-
-   if [ $E2E_EXIT -eq 124 ]; then
-     echo "Tests timed out after 300s"
-   fi
-   ```
-
-3. **Parse and count test results from output:**
-   ```bash
-   PASSED=$(grep -c "PASSED" "$LOG_FILE" || echo 0)
-   FAILED=$(grep -c "FAILED" "$LOG_FILE" || echo 0)
-   ERRORS=$(grep -c "ERROR" "$LOG_FILE" || echo 0)
-   TOTAL=$((PASSED + FAILED + ERRORS))
-   echo "Results: $PASSED passed, $FAILED failed, $ERRORS errors (Total: $TOTAL)"
-   ```
-
-4. **If FILTER environment variable is set, run only matching tests:**
-   ```bash
-   if [ -n "$FILTER" ]; then
-     timeout 300 pytest tests/e2e/ -k "$FILTER" -v --tb=short 2>&1 | tee -a "$LOG_FILE"
-   fi
-   ```
-
-**Target E2E test structure (10 test categories adapted to LLMem):**
-
-| Test File | Tests | Coverage | Minimum |
-|-----------|-------|----------|---------|
-| `test_health_live.py` | /healthz returns 200, server info | Health endpoint | ≥1 test |
-| `test_api_live.py` | POST /capture/event, GET /recall, GET /memories | HTTP API surface | ≥3 tests |
-| `test_capture_live.py` | Event capture, JSONL logging, idempotency | Capture pipeline | ≥2 tests |
-| `test_triage_live.py` | Secret detection, PII hashing, deterministic IDs | Triage heuristics | ≥2 tests |
-| `test_recall_live.py` | Candidate scoring, budget, dedup, XML injection | Recall pipeline | ≥2 tests |
-| `test_memory_live.py` | Write → Read → Context retrieval flow | End-to-end memory flow | ≥2 tests |
-| `test_batch_live.py` | Batch capture endpoint, bulk insert | Batch operations | ≥1 test |
-| `test_error_live.py` | Invalid JSON, missing fields, type errors, edge cases | Error handling | ≥3 tests |
-| `test_backend_live.py` | InMemory and Qdrant (if running) backend switching | Backend abstraction | ≥1 test |
-| `test_injection_live.py` | XML CDATA escaping, budget truncation, preamble | Injection format | ≥1 test |
-
-**Total: ≥18 E2E tests recommended; minimum gate: ≥8 tests must pass**
+**Test Coverage:** 10 test categories (health, API, capture, triage, recall, memory, batch, error, backend, injection). Minimum 8 tests; target 18.
 
 **Minimum:** All tests run without timeout, at least 8 tests passing, test output logged, results parsed.
-
-**Anti-patterns:**
-- ❌ Don't run pytest without timeout — 300s max per test suite
-- ❌ Don't swallow test output — always `tee` to log file
-- ❌ Don't skip error/edge case tests — they validate robustness
-- ❌ Don't hardcode URLs — use LLMEM_E2E_URL environment variable
-- ❌ Don't ignore timeout exit code (124) — log it as a failure
-- ❌ Don't run tests from the wrong directory — cd to CODE_ROOT first
-- ❌ Don't run without `-v --tb=short` — need verbose output for debugging
 
 ### 7.3) E3: Capture & Logs
 
 **Co:** Collect all logs, server output, and diagnostic data for the report. This phase gathers evidence of what happened during the test run.
 
-**Jak:**
+**Jak:** See `references/step-e3-logs.md` for full implementation.
 
-1. **Capture server stdout/stderr to log file:**
-   ```bash
-   cp "$E2E_HOME/logs/server.log" "reports/e2e-$(date +%Y-%m-%d)-server.log"
-   ```
-
-2. **If available, fetch event/observation log from server:**
-   ```bash
-   curl -s "http://localhost:$E2E_PORT/memories?limit=100" \
-     > "reports/e2e-$(date +%Y-%m-%d)-memories.json" 2>/dev/null || true
-   ```
-
-3. **Extract failed test details from pytest output:**
-   ```bash
-   LOG_FILE="reports/e2e-$(date +%Y-%m-%d).log"
-   grep -A 10 "FAILED\|ERROR" "$LOG_FILE" > "reports/e2e-$(date +%Y-%m-%d)-failures.txt" || true
-   ```
-
-4. **Capture system diagnostics (optional but useful):**
-   ```bash
-   {
-     echo "=== Test Run Diagnostics ==="
-     echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-     echo "Backend: $LLMEM_BACKEND"
-     echo "Port: $E2E_PORT"
-     echo "Data dir: $E2E_HOME"
-     echo "Python: $(python --version)"
-     echo "Pytest: $(pytest --version)"
-   } >> "$LOG_FILE"
-   ```
+**Summary:** Copy server logs, fetch observation log from server, extract failed test details, capture system diagnostics.
 
 **Minimum:** Combined log file with server output + test results, failed test details extracted, diagnostics captured.
-
-**Anti-patterns:**
-- ❌ Don't discard logs on success — logs are useful for regression analysis and performance tracking
-- ❌ Don't lose stderr from server — capture both stdout and stderr
-- ❌ Don't run tests without logging output — you'll lose debugging info
-- ❌ Don't forget to copy logs before teardown — temp directory will be deleted
 
 ### 7.4) E4: Teardown
 
 **Co:** Gracefully stop the server and clean up all resources. This phase ensures no orphan processes or leftover files block the next test run.
 
-**Jak:**
+**Jak:** See `references/step-e4-teardown.md` for full implementation.
 
-1. **Graceful shutdown with TERM signal:**
-   ```bash
-   if [ -n "$SERVER_PID" ] && kill -0 $SERVER_PID 2>/dev/null; then
-     echo "Sending SIGTERM to $SERVER_PID..."
-     kill -TERM $SERVER_PID
-
-     # Wait up to 10s for graceful shutdown
-     for i in $(seq 1 10); do
-       if ! kill -0 $SERVER_PID 2>/dev/null; then
-         echo "Server stopped after $i seconds"
-         break
-       fi
-       sleep 1
-     done
-   fi
-   ```
-
-2. **Force kill if necessary:**
-   ```bash
-   if kill -0 $SERVER_PID 2>/dev/null; then
-     echo "Server did not stop gracefully, sending SIGKILL..."
-     kill -9 $SERVER_PID 2>/dev/null || true
-     sleep 1
-   fi
-   ```
-
-3. **Clean temporary directory:**
-   ```bash
-   if [ -d "$E2E_HOME" ]; then
-     rm -rf "$E2E_HOME"
-     echo "Cleaned $E2E_HOME"
-   fi
-   ```
-
-4. **Verify port is free:**
-   ```bash
-   if ! lsof -i :$E2E_PORT > /dev/null 2>&1; then
-     echo "Port $E2E_PORT is free"
-   else
-     echo "WARNING: Port $E2E_PORT still in use after teardown"
-     lsof -i :$E2E_PORT
-   fi
-   ```
+**Summary:** Send SIGTERM (graceful), then SIGKILL if needed, remove temp directory, verify port is free.
 
 **Minimum:** Server process terminated, temp directory deleted, port verified free.
-
-**Anti-patterns:**
-- ❌ Don't skip teardown on test failure — ALWAYS teardown, even if tests fail
-- ❌ Don't use `kill -9` first — try SIGTERM for clean shutdown
-- ❌ Don't leave orphan processes — they will interfere with next test run
-- ❌ Don't leave temp directories — they waste disk and cause confusion
-- ❌ Don't skip port verification — next test run may fail if port is still bound
-- ❌ Don't skip this step even if tests passed — cleanup is mandatory
 
 ### 7.5) E5: Report
 
 **Co:** Generate structured E2E report with pass/fail summary, timing, and regression comparison. This phase produces the artifact that documents the test run.
 
-**Jak:**
+**Jak:** See `references/step-e5-report.md` for full implementation.
 
-1. **Compile test results and timing:**
-   ```bash
-   LOG_FILE="reports/e2e-$(date +%Y-%m-%d).log"
-   REPORT_FILE="reports/e2e-$(date +%Y-%m-%d).md"
-
-   PASSED=$(grep -c "passed" "$LOG_FILE" || echo 0)
-   FAILED=$(grep -c "failed" "$LOG_FILE" || echo 0)
-   ERRORS=$(grep -c "error" "$LOG_FILE" || echo 0)
-   TOTAL=$((PASSED + FAILED + ERRORS))
-   DURATION=$(grep "in.*s" "$LOG_FILE" | tail -1 | grep -oE "[0-9]+\.[0-9]+" || echo "0")
-   ```
-
-2. **Compare with previous e2e report for regression detection:**
-   ```bash
-   PREV_REPORT=$(ls -t reports/e2e-*.md 2>/dev/null | grep -v "$(date +%Y-%m-%d)" | head -1)
-   REGRESSIONS=0
-
-   if [ -n "$PREV_REPORT" ]; then
-     PREV_PASSED=$(grep "tests_passed:" "$PREV_REPORT" | grep -oE "[0-9]+")
-     if [ "$PREV_PASSED" -gt "$PASSED" ]; then
-       REGRESSIONS=$((PREV_PASSED - PASSED))
-       echo "WARNING: $REGRESSIONS tests regressed since last run"
-     fi
-   fi
-   ```
-
-3. **Generate report in standard fabric.report.v1 format:**
-   ```bash
-   cat > "$REPORT_FILE" << EOF
-   # E2E Report $(date +%Y-%m-%d)
-
-   **Status:** $([ $FAILED -eq 0 ] && echo "PASS" || echo "FAIL")
-
-   ## Summary
-   - **Tests:** $PASSED/$TOTAL passed
-   - **Failed:** $FAILED
-   - **Errors:** $ERRORS
-   - **Duration:** ${DURATION}s
-   - **Backend:** $LLMEM_BACKEND
-   - **Provider:** $([ -n "$API_KEY" ] && echo "real" || echo "mock")
-   - **Regressions:** $REGRESSIONS
-
-   ## Test Categories
-   - Health: ✓ (e2e server healthz passing)
-   - Capture: $(grep -q "test_capture_live" "$LOG_FILE" && echo "✓" || echo "✗")
-   - Triage: $(grep -q "test_triage_live" "$LOG_FILE" && echo "✓" || echo "✗")
-   - Recall: $(grep -q "test_recall_live" "$LOG_FILE" && echo "✓" || echo "✗")
-   - Memory: $(grep -q "test_memory_live" "$LOG_FILE" && echo "✓" || echo "✗")
-   - Batch: $(grep -q "test_batch_live" "$LOG_FILE" && echo "✓" || echo "✗")
-   - Error: $(grep -q "test_error_live" "$LOG_FILE" && echo "✓" || echo "✗")
-   - Injection: $(grep -q "test_injection_live" "$LOG_FILE" && echo "✓" || echo "✗")
-
-   ## Logs
-   - Full test output: \`e2e-$(date +%Y-%m-%d).log\`
-   - Server output: \`e2e-$(date +%Y-%m-%d)-server.log\`
-   - Failed tests: \`e2e-$(date +%Y-%m-%d)-failures.txt\`
-
-   EOF
-   ```
-
-4. **Create intake items for each FAILED test:**
-   ```bash
-   if [ $FAILED -gt 0 ]; then
-     grep "FAILED" "$LOG_FILE" | while read line; do
-       TEST_NAME=$(echo "$line" | cut -d' ' -f1)
-       echo "Intake: E2E test $TEST_NAME failed in $REPORT_FILE" >> reports/intake.txt
-     done
-   fi
-   ```
-
-**Report template (schema: fabric.report.v1):**
-
-```
-kind: e2e
-status: {PASS|WARN|FAIL}
-timestamp: {ISO8601}
-duration_seconds: {N}
-tests_total: {N}
-tests_passed: {N}
-tests_failed: {N}
-backend: {inmemory|qdrant}
-provider: {mock|real}
-regressions: {N}
-```
+**Summary:** Compile test results and timing, compare with previous reports (regression detection), generate fabric.report.v1 report, create intake items for failures.
 
 **Minimum:** Report file created with pass/fail counts, duration, provider info, log file reference. Intake items created for failures.
-
-**Anti-patterns:**
-- ❌ Don't report PASS if any test failed — report WARN or FAIL
-- ❌ Don't skip regression comparison — failing tests that previously passed are critical
-- ❌ Don't forget intake items — failures must be tracked for next sprint
-- ❌ Don't hardcode paths — use environment variables
-- ❌ Don't lose test output — reference log files in report
 
 ## §8 Quality Gates
 
@@ -556,26 +208,14 @@ report_file: reports/e2e-2026-03-05.md
 
 ## §11 Failure Handling
 
-| Phase | Error | Action |
-|-------|-------|--------|
-| Preconditions | Port `${E2E_PORT}` busy | STOP with message: "port ${E2E_PORT} in use; run `lsof -i :${E2E_PORT}` to find process" |
-| Preconditions | tests/e2e/ missing | STOP: "No E2E tests found; create tests/e2e/test_*.py files" |
-| Preconditions | pip install failed | STOP: "pip install -e '.[dev]' failed; check dependencies" |
-| E1 Setup | Server won't start | STOP + capture startup log + intake item "Server failed to start" |
-| E1 Setup | Health timeout (30s) | STOP + capture log + intake item "Server health check timeout" |
-| E2 Tests | Test timeout (300s) | WARN + kill tests + capture partial results + intake item "E2E tests timeout" |
-| E2 Tests | All tests fail | Report FAIL + intake item for each failure |
-| E2 Tests | Some tests fail | Report WARN + intake item per failure + continue |
-| E3 Logs | Can't read server output | WARN + continue (logs are diagnostic, not blocking) |
-| E4 Teardown | Server won't stop (TERM) | Send SIGKILL + WARN in report |
-| E4 Teardown | Port still busy after SIGKILL | WARN + print `lsof -i :${E2E_PORT}` output + manual cleanup instruction |
-| E5 Report | Can't parse pytest output | WARN + write manual results based on stderr |
+See `references/failure-handling-reference.md` for detailed failure matrix and fallback behaviors.
 
-**Fallback behaviors:**
-- If server won't start: check startup log for "Address already in use" or similar
-- If health check times out: increase timeout to 60s and retry once
-- If tests timeout: run a subset with FILTER=test_health_live to confirm system is alive
-- If teardown hangs: log warning but don't block; next test will fail on port check (early gate)
+**Quick reference:**
+- Port busy: STOP with diagnostic message
+- Missing tests: STOP with action item
+- Server won't start: STOP + capture log
+- Tests fail: Report FAIL + create intake items
+- Teardown hangs: WARN but don't block
 
 ## §12 Metadata
 
@@ -606,4 +246,3 @@ metadata:
 - Regression detection compares with previous e2e reports automatically
 - Failure handling is defensive: phases can fail independently; teardown always happens
 - Health gate is non-negotiable: if server doesn't start, stop immediately
-

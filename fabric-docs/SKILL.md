@@ -110,6 +110,14 @@ fi
 Před analýzou proveď strojové kroky:
 
 ```bash
+# --- Path traversal guard (K7) ---
+for VAR in "{WORK_ROOT}" "{CODE_ROOT}" "{DOCS_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # 1. Backlog index sync
 python skills/fabric-init/tools/fabric.py backlog-index 2>/dev/null || true
 
@@ -132,12 +140,18 @@ cp /tmp/current-funcs.txt {WORK_ROOT}/reports/baseline-funcs-$(date +%Y-%m-%d).t
 
 ## §7 — Postup (JÁDRO SKILLU)
 
+### FAST PATH Initialization:
+```bash
+DOC_COUNTER=0
+MAX_DOC_ITEMS=100
+```
+
 **Vše je detailně popsáno v `references/workflow.md`.**
 
 Přehled kroků:
 
 1. **Načti context** — merged items ze close reportu (nebo codebase scan)
-2. **Klasifikuj items** — MUST_DOCUMENT vs SHOULD_DOCUMENT vs SKIP
+2. **Klasifikuj items** — MUST_DOCUMENT vs SHOULD_DOCUMENT vs SKIP (s MAX_DOC_ITEMS guardem)
 3. **Aktualizuj docs** — přidej/uprav soubory v DOCS_ROOT s code references
 4. **Validuj linky** — broken links, orphaned files, syntax errors
 5. **Vytvoř/uprav CHANGELOG** — Keep a Changelog format

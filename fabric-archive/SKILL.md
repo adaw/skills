@@ -270,9 +270,10 @@ feeds_into:
 
 ## Anti-patterns (ZAKÁZÁNO)
 
-- **A1: Partial Archive** — Nearchivuj bez kompletního close reportu
-- **A2: Active WIP Archive** — Nearchivuj s aktivním WIP itemem (state.wip_item != null)
-- **A3: Missing Reports** — Nearchivuj bez verifikace reportu kompletnosti
+- **A1: Archive active (non-DONE) items** — Nearchivuj s `status != DONE` — jen hotové položky se archivují
+- **A2: Delete instead of move to archive/** — NESMÍ smazat; vždy kopíruj do `archive/` a pak teprve odstraň z aktivního backlog/
+- **A3: Archive without preserving YAML frontmatter** — Snapshoty MUSÍ mít identické YAML; diff -q verifikace
+- **A4: Skip quarantine for items with missing fields** — Konflikty MUSÍ jít do quarantine, ne přepisovat; intiake item pro každý konflikt
 
 ---
 

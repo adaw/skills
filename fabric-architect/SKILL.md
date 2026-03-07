@@ -110,6 +110,13 @@ find "$CODE_ROOT" -name "*.py" -type f | head -1 > /dev/null || {
   exit 1;
 }
 
+# --- Precondition: Phase validation ---
+PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$PHASE" != "orientation" ]; then
+  echo "STOP: Expected phase=orientation, got '$PHASE'"
+  exit 1
+fi
+
 echo "✓ All preconditions met"
 ```
 
@@ -161,25 +168,40 @@ Architect can run after init alone, but intake may feed intake items for A3 cros
 
 **Quick Context Gathering (< 2 min):**
 
+```bash
+# --- Path traversal guard (K7) ---
+for VAR in "{WORK_ROOT}" "{CODE_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+```
+
+```bash
+# --- K2: Scanning limits ---
+MAX_SCAN_FILES=${MAX_SCAN_FILES:-5000}
+```
+
 1. **Backlog Index:**
    ```bash
-   find backlog/ -name "*.md" | xargs grep -l "^# T[0-3]:" | wc -l
+   find backlog/ -name "*.md" | head -${MAX_SCAN_FILES} | xargs grep -l "^# T[0-3]:" | wc -l
    ```
    Output: Count of T0-T3 epics
 
 2. **Governance Index:**
    ```bash
-   find "${WORK_ROOT}/${DECISIONS_ROOT}" -name "*.md" 2>/dev/null | wc -l
-   find "${WORK_ROOT}/${SPECS_ROOT}" -name "*.md" 2>/dev/null | wc -l
+   find "${WORK_ROOT}/${DECISIONS_ROOT}" -name "*.md" 2>/dev/null | head -${MAX_SCAN_FILES} | wc -l
+   find "${WORK_ROOT}/${SPECS_ROOT}" -name "*.md" 2>/dev/null | head -${MAX_SCAN_FILES} | wc -l
    ```
    Output: Count of ADRs and specs
 
 3. **Module Inventory:**
    ```bash
-   find $CODE_ROOT -name "*.py" -type f | wc -l
-   find $CODE_ROOT -name "*.py" -type f -exec wc -l {} + | tail -1
+   find $CODE_ROOT -name "*.py" -type f | head -${MAX_SCAN_FILES} | wc -l
+   find $CODE_ROOT -name "*.py" -type f | head -${MAX_SCAN_FILES} | xargs wc -l | tail -1
    ```
-   Output: File count + total LOC
+   Output: File count + total LOC (capped at MAX_SCAN_FILES)
 
 4. **Import Graph (sample):**
    ```bash

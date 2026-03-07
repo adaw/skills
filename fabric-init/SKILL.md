@@ -439,6 +439,7 @@ Před návratem ověř:
 - Všechny povinné adresáře existují: `backlog/`, `intake/`, `reports/`, `sprints/`, `analyses/`, `templates/`, `decisions/`, `specs/`, `reviews/`, `logs/`, `archive/`
 - `{VISIONS_ROOT}/` existuje
 - Všechny `TEMPLATES_REQUIRED` soubory existují v `{WORK_ROOT}/templates/`
+- **Templates have valid YAML frontmatter with correct schema field** — Ověř, že každý template v `{WORK_ROOT}/templates/` má `schema:` v YAML bloku
 - `COMMANDS.test` není `TBD` (pokud je → STOP, nelze bezpečně pokračovat)
 - `COMMANDS.lint` a `COMMANDS.format_check` nejsou `TBD` (mohou být `""` = vypnuto)
 - Init report existuje v `{WORK_ROOT}/reports/init-{YYYY-MM-DD}.md`

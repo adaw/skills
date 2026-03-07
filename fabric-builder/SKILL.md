@@ -136,35 +136,7 @@ description: "{1-2 věty: CO skill dělá + KDY ho použít}"
 <!-- built from: builder-template -->
 ```
 
-**Podporované frontmatter atributy (Claude Code + Agent Skills standard):**
-
-| Atribut | Povinný | Popis |
-|---------|---------|-------|
-| `name` | Ne (default = dirname) | max **64 znaků**, jen lowercase, čísla, pomlčky |
-| `description` | Doporučený | max **1024 znaků**, non-empty, bez XML tagů. 3. osoba. CO dělá + KDY použít |
-| `disable-model-invocation` | Ne | `true` = jen manuální `/name` invokace |
-| `user-invocable` | Ne | `false` = skrytý z `/` menu, jen Claude invokuje |
-| `allowed-tools` | Ne | Povolené nástroje bez per-use potvrzení |
-| `argument-hint` | Ne | Nápověda pro autocomplete: `[issue-number]` |
-| `model` | Ne | Model pro tento skill |
-| `context` | Ne | `fork` pro subagent |
-| `agent` | Ne | Typ subagenta (`Explore`, `Plan`, ...) |
-| `hooks` | Ne | Hooks pro lifecycle |
-| `compatibility` | Ne | Platformová kompatibilita (Agent Skills standard) |
-| `license` | Ne | Licence (Agent Skills standard) |
-| `metadata` | Ne | Custom metadata (Agent Skills standard) |
-
-**Pravidla pro fabric skills:**
-- **`name`**: MUSÍ odpovídat názvu adresáře (`fabric-{name}`)
-- **`description`**: MUSÍ říct CO dělá + KDY to použít. Claude ho používá k rozhodování, zda skill aktivovat
-- **`<!-- built from: builder-template -->`**: VŽDY na řádku ZA uzavíracím `---`, NIKDY uvnitř frontmatteru
-- Závislosti (upstream/downstream) se dokumentují v **§12 Metadata** uvnitř skill body, NE ve frontmatteru
-
-**Anti-patterns:**
-- ❌ `title`, `type`, `schema`, `version`, `tags`, `depends_on`, `feeds_into` — nepatří do frontmatteru
-- ❌ Description v první osobě ("I process...") nebo druhé ("You can use...")
-- ❌ Vágní description ("Helps with stuff", "Processes data")
-- ❌ Builder tag uvnitř YAML bloku `---`
+> **Detailní frontmatter spec:** Přečti `references/frontmatter-spec.md` — obsahuje tabulku všech podporovaných atributů, pravidla pro fabric skills a anti-patterns.
 
 ### B4) Vyplň šablonu sekci po sekci
 

@@ -60,6 +60,14 @@ python skills/fabric-init/tools/protocol_log.py \
 Ověř, že tyto soubory existují PŘED spuštěním:
 
 ```bash
+# --- Path traversal guard (K7) ---
+for VAR in "{WORK_ROOT}" "{CODE_ROOT}" "{TEST_ROOT}" "{DOCS_ROOT}" "{VISIONS_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # --- Precondition 1: Config existuje ---
 if [ ! -f "{WORK_ROOT}/config.md" ]; then
   echo "STOP: {WORK_ROOT}/config.md not found — run fabric-init first"
@@ -131,6 +139,12 @@ python skills/fabric-init/tools/fabric.py backlog-scan \
 ---
 
 ## §7 — Postup (JÁDRO SKILLU)
+
+### FAST PATH Initialization:
+```bash
+MAX_GAPS=${MAX_GAPS:-50}
+GAP_COUNTER=0
+```
 
 ### 7.1) Extrahuj capabilities z vize
 
