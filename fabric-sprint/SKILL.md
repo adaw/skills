@@ -1,6 +1,9 @@
 ---
 name: fabric-sprint
-description: "Create a sprint plan from the prioritized backlog. Selects top candidates (respecting SPRINT.max_tasks and WIP=1 flow), writes {WORK_ROOT}/sprints/sprint-{N}.md using the sprint-plan template, and sets sprint metadata in state.md (goal/start/end). Does not implement code."
+description: "Create sprint plan from prioritized backlog by selecting top candidates respecting WIP=1 flow and constraints. Writes sprint-N.md with task queue, updates state.md with goal/dates, but does not implement code. Clear handoff to analyze."
+tags: [fabric, planning, sprint, task-selection, wip=1]
+depends_on: [fabric-prio, fabric-architect]
+feeds_into: [fabric-analyze]
 ---
 
 <!-- built from: builder-template -->

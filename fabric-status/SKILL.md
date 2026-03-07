@@ -1,6 +1,9 @@
 ---
 name: fabric-status
-description: "Produce a holistic project health snapshot (codebase, tests, backlog, docs, CI/tooling). Language-agnostic by default: detects dominant file types, uses configured COMMANDS for tests, lint, format_check, and summarizes risks/trends. Outputs a dashboard-style status report."
+description: "Produce holistic project health snapshot: codebase signals, test health, backlog flow, docs drift, and CI/tooling status. Language-agnostic detection with configured commands. Dashboard-style report enabling informed strategic decisions."
+tags: [fabric, status, health-check, dashboard, metrics]
+depends_on: [fabric-vision]
+feeds_into: [fabric-process, fabric-architect]
 ---
 
 <!-- built from: builder-template -->

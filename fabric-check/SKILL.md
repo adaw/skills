@@ -1,6 +1,9 @@
 ---
 name: fabric-check
-description: "Consistency and quality audit of the Fabric workspace. Validates directory structure, templates, backlog item schemas, backlog index, sprint plan integrity, and basic code health signals (via configured COMMANDS). Applies safe auto-fixes (e.g., regenerate backlog.md) and creates intake items for anything requiring human/agent follow-up."
+description: "Consistency and quality audit of the Fabric workspace. Validates directory structure, templates, backlog schemas, sprint plans, and code health signals. Applies safe auto-fixes (regenerate indices, fill missing fields) and creates intake items for issues requiring follow-up."
+tags: [fabric, audit, consistency, validation, auto-fix]
+depends_on: [fabric-init]
+feeds_into: [fabric-intake]
 ---
 
 <!-- built from: builder-template -->

@@ -1,6 +1,9 @@
 ---
 name: fabric-builder
-description: "Tvoří, opravuje a migruje fabric skills. Tři módy: `build <name>` vytvoří nový skill z template, `fix` opraví findings z checker reportu, `migrate <name>` konvertuje legacy skill na builder-template. Vždy používá assets/builder-template.md jako základ."
+description: "Create, fix, and migrate fabric skills. Three modes: build creates new skills from template, fix applies checker findings, migrate converts legacy skills. Always uses builder-template.md as foundation, never modifies itself based on its own output."
+tags: [fabric, skills, builder, template, migration]
+depends_on: [fabric-checker]
+feeds_into: [fabric-checker]
 ---
 
 # FABRIC-BUILDER — Build, Fix & Migrate Skills

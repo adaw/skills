@@ -1,20 +1,11 @@
 ---
 name: fabric-implement
-description: "Implement exactly one task (WIP=1) from the sprint Task Queue. VERIFY-FIRST workflow: read config+analysis, inspect code, create/reuse feature branch, implement minimal change + tests, run COMMANDS (test/lint/format_check), commit, and update backlog item metadata (status/branch). Only updates state.md fields wip_item/wip_branch."
-tags:
-  - implementation
-  - quality-gates
-  - verify-first
-  - wip=1
-depends_on:
-  - fabric-analyze
-feeds_into:
-  - fabric-review
-  - fabric-close
-schema: fabric.skill.v1
-version: "1.0"
-<!-- built from: builder-template -->
+description: "Implement exactly one task (WIP=1) from the sprint Task Queue using VERIFY-FIRST workflow: read config+analysis, inspect code, create feature branch, implement minimal change + tests, run quality gates, and update backlog item status. Single-piece flow enforcement."
+tags: [fabric, implementation, quality-gates, verify-first, wip=1]
+depends_on: [fabric-analyze]
+feeds_into: [fabric-test, fabric-review]
 ---
+<!-- built from: builder-template -->
 
 # IMPLEMENT — Kód + testy (WIP=1, VERIFY-FIRST)
 

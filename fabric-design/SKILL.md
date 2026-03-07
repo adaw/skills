@@ -1,6 +1,9 @@
 ---
 name: fabric-design
-description: "Převést READY/DESIGN backlog item na implementační specifikaci: datový model, komponenty, API, integrace, konfigurace, testy, závislosti, rizika a alternativy. Most mezi ideou a implementací — bez něj LLM implementuje z vágního popisu."
+description: "Convert READY/DESIGN backlog items into detailed implementation specifications: data models, components, APIs, configuration, tests, dependencies, risks, and alternatives. Bridge between vision and implementation preventing vague hand-offs."
+tags: [fabric, design, specification, architecture]
+depends_on: [fabric-prio]
+feeds_into: [fabric-sprint]
 ---
 <!-- built from: builder-template -->
 

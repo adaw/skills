@@ -1,6 +1,9 @@
 ---
 name: fabric-docs
-description: "Synchronize documentation with the current codebase and recent merged changes. Updates {DOCS_ROOT}/ (and optionally in-code docstrings/README) based on code reality, adds/updates ADRs if needed, and writes a docs sync report. Never invent APIs that are not in code."
+description: "Synchronize documentation with current codebase and merged changes. Updates docs, docstrings, and ADRs based on code reality without inventing APIs. Ensures knowledge is accessible and prevents drift between documentation and implementation."
+tags: [fabric, documentation, sync, adr, knowledge-base]
+depends_on: [fabric-close]
+feeds_into: [fabric-loop]
 ---
 
 <!-- built from: builder-template -->

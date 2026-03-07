@@ -1,6 +1,9 @@
 ---
 name: fabric-process
-description: "Mapuje vnější procesy (user↔system interakce), vnitřní procesní řetězce (kauzální závislosti v kódu) a cross-mapping mezi nimi. Vytváří živou procesní mapu konzumovanou downstream skills."
+description: "Map external processes (user-system interactions) and internal process chains (causal code dependencies) with cross-mapping. Produces live process map consumed by downstream skills for risk assessment and change impact analysis."
+tags: [fabric, process-mapping, dependencies, business-processes]
+depends_on: [fabric-status]
+feeds_into: [fabric-architect, fabric-gap]
 ---
 
 # FABRIC-PROCESS — Business Process Mapping

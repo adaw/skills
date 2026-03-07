@@ -1,8 +1,9 @@
 ---
 name: fabric-gap
-description: "Detect gaps between vision, backlog, and reality (code, tests, docs). Produces a gap report and generates actionable intake items (source=gap) for the most important missing pieces (features, tests, docs, security, reliability)."
-depends_on:
-  - fabric-process
+description: "Detect gaps between vision, backlog, and reality (code, tests, docs). Produces gap report and generates actionable intake items for most important missing pieces: features, tests, documentation, security, reliability."
+tags: [fabric, gap-analysis, vision-alignment, intake-generation]
+depends_on: [fabric-architect, fabric-process]
+feeds_into: [fabric-generate, fabric-intake]
 ---
 
 <!-- built from: builder-template -->

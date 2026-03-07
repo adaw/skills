@@ -1,7 +1,9 @@
 ---
-name: "fabric-architect"
-title: "fabric-architect"
-type: "skill"
+name: fabric-architect
+description: "Performs comprehensive architectural analysis across 20 dimensions (Coherence, Modularity, Scalability, Evolution) and produces weighted health scores with evidence-based findings. Identifies structural debt and principle violations to guide refactoring priorities."
+tags: [fabric, architecture, analysis, health-scoring]
+depends_on: [fabric-status]
+feeds_into: [fabric-process, fabric-gap, fabric-sprint]
 ---
 <!-- built from: builder-template -->
 

@@ -1,6 +1,9 @@
 ---
 name: fabric-checker
-description: "Read-only audit celého fabric ekosystému. Boduje každý skill 100/100, spouští extrémní simulace, hodnotí work quality. Nikdy nic nemodifikuje — pouze produkuje scoring report s findings. Opravy provádí fabric-builder."
+description: "Read-only audit of the entire fabric ecosystem. Scores each skill 0-100, runs extreme simulations, and evaluates work quality. Never modifies anything—only produces scoring report with findings for fabric-builder to fix."
+tags: [fabric, audit, scoring, read-only, quality-gates]
+depends_on: [fabric-builder]
+feeds_into: [fabric-builder]
 ---
 
 # FABRIC-CHECKER — Read-only Audit & Scoring

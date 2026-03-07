@@ -1,6 +1,9 @@
 ---
 name: fabric-hotfix
-description: "Ad-hoc implementace mimo sprint: analýza, kód, testy, review, merge do main v jednom dispatch. Pro XS/S urgentní fixy a drobné features. Fast-track lifecycle s plnými quality gates."
+description: "Ad-hoc implementation outside sprint planning: analysis, code, tests, review, and merge in one dispatch. For urgent XS/S fixes and small features with full quality gates and fast-track lifecycle."
+tags: [fabric, hotfix, fast-track, urgent, out-of-sprint]
+depends_on: [fabric-intake]
+feeds_into: [fabric-close, fabric-loop]
 ---
 <!-- built from: builder-template -->
 
