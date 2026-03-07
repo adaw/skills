@@ -1,9 +1,6 @@
 ---
 name: fabric-loop
 description: "Orchestrate full Fabric lifecycle as file-driven state machine. Reads config.md and state.md, dispatches next skill, validates outputs, advances state, and performs crash recovery. Single entrypoint for agent via RUN command."
-tags: [fabric, orchestration, state-machine, loop, dispatcher]
-depends_on: [fabric-init]
-feeds_into: [fabric-vision, fabric-status]
 ---
 
 # FABRIC-LOOP — Orchestrátor (RUN)

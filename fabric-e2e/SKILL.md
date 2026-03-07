@@ -1,9 +1,6 @@
 ---
 name: fabric-e2e
 description: "Run end-to-end tests against a live running LLMem system to validate the full stack: API, CLI, capture pipeline, triage, recall with scoring, storage, and error handling. Final quality gate before close confirming observations flow correctly."
-tags: [fabric, e2e, testing, integration, quality-gates]
-depends_on: [fabric-test]
-feeds_into: [fabric-review, fabric-close]
 ---
 <!-- built from: builder-template -->
 

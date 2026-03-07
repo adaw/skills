@@ -1,9 +1,6 @@
 ---
 name: fabric-archive
 description: "Archive completed work safely. Moves DONE backlog items from backlog/ to backlog/done/, creates immutable snapshots under archive/, and archives sprint plans and reports. Preserves provenance for audits without deleting history."
-tags: [fabric, archive, immutable-snapshots, reporting]
-depends_on: [fabric-close]
-feeds_into: [fabric-loop]
 ---
 
 <!-- built from: builder-template -->

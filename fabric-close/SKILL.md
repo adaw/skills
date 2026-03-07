@@ -1,9 +1,6 @@
 ---
 name: fabric-close
 description: "Close the current sprint: merge approved task branches into main (squash), run quality gates on main, update backlog items to DONE with evidence (merge_commit), regenerate backlog index, and write a close report. Leaves carry-over items untouched and documents why."
-tags: [fabric, sprint, merge, quality-gates, reporting]
-depends_on: [fabric-review]
-feeds_into: [fabric-archive, fabric-loop]
 ---
 <!-- built from: builder-template -->
 

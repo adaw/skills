@@ -1,9 +1,6 @@
 ---
 name: fabric-generate
 description: "Autonomously generate high-value work items from vision goals, security/quality gaps, and codebase signals when backlog is thin. Produces 0–8 intake items with strong deduplication preventing spam and maintaining quality."
-tags: [fabric, generation, intake, backlog-health, autonomous]
-depends_on: [fabric-gap, fabric-vision]
-feeds_into: [fabric-intake]
 ---
 
 <!-- built from: builder-template -->

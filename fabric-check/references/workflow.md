@@ -393,19 +393,11 @@ for SKILL_DIR in "$SKILLS_ROOT"/fabric-*/; do
     FM_WARN=$((FM_WARN + 1))
   fi
 
-  # Zakázaná pole: title, type, schema, version
-  for FIELD in title type schema version; do
+  # Zakázaná pole (nepodporované Claude Code spec)
+  for FIELD in title type schema version tags depends_on feeds_into; do
     if echo "$FM" | grep -q "^${FIELD}:"; then
-      echo "WARNING: $SKILL_NAME — forbidden field '$FIELD' in frontmatter"
-      FM_WARN=$((FM_WARN + 1))
-    fi
-  done
-
-  # Doporučená pole: tags, depends_on, feeds_into
-  for FIELD in tags depends_on feeds_into; do
-    if ! echo "$FM" | grep -q "^${FIELD}:"; then
-      echo "WARNING: $SKILL_NAME — missing recommended field '$FIELD'"
-      FM_WARN=$((FM_WARN + 1))
+      echo "CRITICAL: $SKILL_NAME — unsupported field '$FIELD' in frontmatter"
+      FM_CRIT=$((FM_CRIT + 1))
     fi
   done
 
@@ -420,8 +412,8 @@ echo "Skill frontmatter: $FM_CRIT CRITICAL, $FM_WARN WARNING"
 ```
 
 **Severity mapping:**
-- CRITICAL: chybí frontmatter, chybí `name`, chybí `description` → intake item
-- WARNING: zakázaná pole, chybějící optional pole, délka přesažena → reportuj, auto-fix kandidát
+- CRITICAL: chybí frontmatter, nepodporované atributy (IDE je flaguje jako error) → intake item
+- WARNING: chybí description, name != dirname, délka přesažena → reportuj
 
 ## 8) Vygeneruj audit report
 

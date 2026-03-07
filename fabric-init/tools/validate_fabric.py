@@ -422,15 +422,15 @@ def validate_skills(repo_root: Path, skills_root_rel: str) -> Result:
             if "<" in str(fm_desc) and ">" in str(fm_desc):
                 warnings.append(f"{skill_file}: frontmatter description contains XML-like tags (not recommended).")
 
-        # Forbidden fields (not part of Claude Code spec)
-        for forbidden in ["title", "type", "schema", "version"]:
-            if forbidden in fm:
-                errors.append(f"{skill_file}: frontmatter contains forbidden field '{forbidden}'.")
-
-        # Recommended fields
-        for recommended in ["tags", "depends_on", "feeds_into"]:
-            if recommended not in fm:
-                warnings.append(f"{skill_file}: frontmatter missing recommended field '{recommended}'.")
+        # Supported fields (Claude Code + Agent Skills standard)
+        supported_fields = {
+            "name", "description", "disable-model-invocation", "user-invocable",
+            "allowed-tools", "argument-hint", "model", "context", "agent", "hooks",
+            "compatibility", "license", "metadata",
+        }
+        for field in fm:
+            if field not in supported_fields:
+                errors.append(f"{skill_file}: frontmatter contains unsupported field '{field}'.")
 
         # builder-template tag position check (must be AFTER ---, not inside YAML)
         fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", md, flags=re.S)

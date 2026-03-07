@@ -1,9 +1,6 @@
 ---
 name: fabric-vision
 description: "Analyze and validate project vision documents extracting goals, pillars, constraints, success metrics, and decision principles. Produces vision report and generates intake items for incomplete/ambiguous specifications preventing drift."
-tags: [fabric, vision, validation, strategy, principles]
-depends_on: [fabric-init]
-feeds_into: [fabric-status, fabric-loop]
 ---
 
 <!-- built from: builder-template -->

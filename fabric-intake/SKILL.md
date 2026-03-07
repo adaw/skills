@@ -1,9 +1,6 @@
 ---
 name: fabric-intake
 description: "Triage intake items into normalized backlog items (Epic/Story/Task/Bug/Chore/Spike). Creates/updates {WORK_ROOT}/backlog/*.md using canonical templates, regenerates {WORK_ROOT}/backlog.md index, and moves processed intake files to intake/done or intake/rejected (never deletes)."
-tags: [fabric, intake, triage, backlog]
-depends_on: [fabric-init]
-feeds_into: [fabric-prio]
 ---
 <!-- built from: builder-template -->
 

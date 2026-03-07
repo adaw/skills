@@ -1,9 +1,6 @@
 ---
 name: fabric-check
 description: "Consistency and quality audit of the Fabric workspace. Validates directory structure, templates, backlog schemas, sprint plans, and code health signals. Applies safe auto-fixes (regenerate indices, fill missing fields) and creates intake items for issues requiring follow-up."
-tags: [fabric, audit, consistency, validation, auto-fix]
-depends_on: [fabric-init]
-feeds_into: [fabric-intake]
 ---
 
 <!-- built from: builder-template -->
@@ -208,14 +205,13 @@ Ověř existence a freshness `{WORK_ROOT}/fabric/processes/process-map.md` (>7 d
 
 Pro každý skill v `skills/fabric-*/SKILL.md` ověř frontmatter dle Claude Code Agent Skills spec:
 
-- `name`: povinný, ≤64 znaků, lowercase+hyphens, musí odpovídat názvu adresáře
-- `description`: povinný, ≤1024 znaků, non-empty, 3. osoba ("Performs…", "Validates…")
-- `tags`: povinný, pole stringů (alespoň `[fabric]`)
-- `depends_on` / `feeds_into`: povinné, pole stringů
-- Zakázaná pole: `title`, `type`, `schema`, `version` (nejsou součástí spec)
+- `name`: doporučený, ≤64 znaků, lowercase+hyphens, musí odpovídat názvu adresáře
+- `description`: doporučený, ≤1024 znaků, non-empty, 3. osoba ("Performs…", "Validates…")
+- Podporované: `name`, `description`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `argument-hint`, `model`, `context`, `agent`, `hooks`, `compatibility`, `license`, `metadata`
+- Zakázaná pole: `title`, `type`, `schema`, `version`, `tags`, `depends_on`, `feeds_into`
 - `<!-- built from: builder-template -->` tag: musí být ZA `---`, ne uvnitř YAML (pro T2 skills)
 
-**Severity:** WARNING (fixable auto-fix kandidát) pokud chybí optional pole; CRITICAL pokud chybí `name`/`description` nebo je `description` prázdný.
+**Severity:** WARNING pokud chybí description; CRITICAL pokud frontmatter obsahuje nepodporované atributy.
 
 ### 7.15) Vygeneruj audit report
 

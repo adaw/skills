@@ -1,9 +1,6 @@
 ---
 name: fabric-review
 description: "Perform automated code review for the current WIP task across 9 dimensions (R1–R9). Uses config COMMANDS.lint + COMMANDS.format_check as objective gates, then performs a structured diff review including process-chain validation. Writes a review report, updates backlog item review_report, and creates intake items for systemic improvements."
-tags: [code-review, quality-gates, compliance, reporting]
-depends_on: [fabric-test]
-feeds_into: [fabric-close, fabric-loop]
 ---
 
 <!-- built from: builder-template -->

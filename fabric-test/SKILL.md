@@ -1,9 +1,6 @@
 ---
 name: fabric-test
 description: "Run configured test suites for current WIP task and write evidence report. Uses COMMANDS.test and optional COMMANDS.test_e2e without modifying code. Fails fast on missing config, ensuring measurable test results."
-tags: [fabric, testing, quality-gates, evidence, reporting]
-depends_on: [fabric-implement]
-feeds_into: [fabric-e2e, fabric-review]
 ---
 
 <!-- built from: builder-template -->

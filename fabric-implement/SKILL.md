@@ -1,9 +1,6 @@
 ---
 name: fabric-implement
 description: "Implement exactly one task (WIP=1) from the sprint Task Queue using VERIFY-FIRST workflow: read config+analysis, inspect code, create feature branch, implement minimal change + tests, run quality gates, and update backlog item status. Single-piece flow enforcement."
-tags: [fabric, implementation, quality-gates, verify-first, wip=1]
-depends_on: [fabric-analyze]
-feeds_into: [fabric-test, fabric-review]
 ---
 <!-- built from: builder-template -->
 

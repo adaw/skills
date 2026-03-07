@@ -1,9 +1,6 @@
 ---
 name: fabric-prio
 description: "Recalculate and normalize priority across all active backlog items using transparent scoring. Updates frontmatter, regenerates sorted backlog.md, and produces report with rationale. Prevents chaotic backlog and enables objective sprint planning."
-tags: [fabric, prioritization, scoring, backlog, planning]
-depends_on: [fabric-intake]
-feeds_into: [fabric-design, fabric-sprint]
 ---
 
 <!-- built from: builder-template -->

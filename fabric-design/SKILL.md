@@ -1,9 +1,6 @@
 ---
 name: fabric-design
 description: "Convert READY/DESIGN backlog items into detailed implementation specifications: data models, components, APIs, configuration, tests, dependencies, risks, and alternatives. Bridge between vision and implementation preventing vague hand-offs."
-tags: [fabric, design, specification, architecture]
-depends_on: [fabric-prio]
-feeds_into: [fabric-sprint]
 ---
 <!-- built from: builder-template -->
 

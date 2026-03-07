@@ -1,9 +1,6 @@
 ---
 name: fabric-analyze
 description: "Convert Sprint Targets into Task Queue + per-task analyses with explicit governance constraints."
-tags: [fabric, analyze, planning, task-queue]
-depends_on: [fabric-sprint]
-feeds_into: [fabric-implement]
 ---
 <!-- built from: builder-template -->
 

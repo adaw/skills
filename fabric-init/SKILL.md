@@ -1,9 +1,6 @@
 ---
 name: fabric-init
 description: "Bootstrap WORK_ROOT into clean, idempotent Fabric runtime: directory structure, templates, state.md, vision.md, backlog.md. Single-command start point enabling loop to run without human intervention."
-tags: [fabric, bootstrap, initialization, idempotent]
-depends_on: []
-feeds_into: [fabric-loop, fabric-check]
 ---
 
 # FABRIC-INIT — Bootstrap (idempotent)
