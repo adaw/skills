@@ -313,6 +313,78 @@ Runnable bash procedury v references/ — copy-paste a customize {CODE_ROOT}/{WO
 
 ---
 
+## K10 — Concrete Example & Anti-patterns
+
+### Audit Execution Runner (inline pseudocode)
+
+```bash
+# Per-skill audit loop (Fáze 1 core)
+for SKILL_FILE in skills/fabric-*/SKILL.md; do
+  SKILL_NAME=$(basename "$(dirname "$SKILL_FILE")")
+  LINES=$(wc -l < "$SKILL_FILE")
+
+  # 1. Read ENTIRE skill (including references/)
+  # 2. Read config.md for cross-reference
+  # 3. Score K1-K10 using checklists above
+  # 4. Record findings with line numbers
+
+  # Scoring rules:
+  # - Counter without `grep -qE '^[0-9]+$'` → max K2=7
+  # - Hardcoded threshold without config.md grep → max K5=7
+  # - Phase WARN not STOP → max K1=6
+  # - K4=N/A for non-git skills → Max=90
+  # - §7 vague ("analyzuj") without detail → max K10=5
+
+  echo "$SKILL_NAME | K1=$K1 K2=$K2 ... K10=$K10 | $TOTAL/$MAX = $PCT%"
+done
+```
+
+### Example: Checker Audit — fabric-implement Score 94%
+
+```
+Audit fabric-implement (T2 builder-born):
+
+FÁZE 0: Tier classification → T2 (has builder-template tag)
+FÁZE 1 Scoring:
+  K1=10: reads phase (line 59), STOP on mismatch, no illegal state modification
+  K2=10: rework_count max=3 enforced (line 89), loop counter with numeric guard
+  K3=8: MINOR — git commit lacks conflict check (line 296), fallback chains present elsewhere
+  K4=10: all vars quoted ("${WIP_BRANCH}"), no --force, no --hard
+  K5=10: COMMANDS.test from config (line 59), schema present in report template
+  K6=10: bash preconditions (lines 51–73), dependency chain: analyze→implement
+  K7=9: MINOR — TASK_ID needs regex [a-z0-9-]+ guard (path traversal OK at line 66)
+  K8=10: protocol START/END present (lines 25–37), schema=fabric.report.v1
+  K9=10: 8 testable items, existence+quality+invariants covered
+  K10=9: MINOR — regression check heuristic could reference specific pytest flags
+  → Total: 96/100 = 96%
+
+FÁZE 2 Invariants: PASS (I1-I5 all verified)
+FÁZE 3 Work Quality: concrete §7 steps, LLMem examples, anti-patterns with bash
+```
+
+### Anti-patterns (FORBIDDEN detection & prevention)
+
+```bash
+# A1: Scoring WITHOUT reading references/
+# FIX: MUST read skill's references/*.md before K10 score
+if [ ! -d "skills/${SKILL}/references" ]; then
+  echo "WARN: K10 assessment incomplete (no references/ directory)"
+fi
+
+# A2: K10 PASS when §7 vague (no anti-patterns documented)
+# FIX: Require ≥3 anti-pattern blocks in §7
+COUNT=$(grep -c 'Anti-pattern\|FORBIDDEN\|MUST NOT' "skills/${SKILL}/SKILL.md" || echo 0)
+[ "$COUNT" -lt 3 ] && echo "WARN: K10 reduced — only $COUNT anti-patterns (need ≥3)"
+
+# A3: Template compliance (FÁZE 4) on T3 legacy skills
+# FIX: Skip FÁZE 4 for T3, only audit T2 builder-born
+if ! grep -q 'built from: builder-template' "skills/${SKILL}/SKILL.md"; then
+  echo "INFO: T3 legacy detected — skipping template compliance"
+fi
+```
+
+---
+
 ## FÁZE 4 — Template Compliance (JEN pro Tier 2 builder-born skills)
 
 > **PŘESKOČ pro T1, T3 a SKIP.** Tato fáze se týká POUZE T2 skills.

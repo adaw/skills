@@ -178,13 +178,18 @@ Přehled kroků:
 
 Pro detaily každého kroku, příklady, anti-patterns a heurystiky viz: **[references/workflow.md](./references/workflow.md)**
 
-### K10 Inline Example — LLMem API Documentation Update
+### K10: Inline Example — LLMem API Documentation Update
 
-Příklad: Po přidání `/capture/batch` endpointu:
-- MUST_DOCUMENT: Nový endpoint, request/response schema, error codes
-- SHOULD_DOCUMENT: Performance benchmarks, rate limits
-- SKIP: Internal helper functions
-Output: {DOCS_ROOT}/api/capture-batch.md + CHANGELOG entry + ADR (pokud breaking)
+**Input:** Merged task-b015 (POST /capture/batch endpoint) with merge_commit abc123, close report listing MUST_DOCUMENT classification.
+**Output:** New api/capture-batch.md documenting endpoint (signature, request/response schemas, error codes 207/400/413), CHANGELOG entry under [Unreleased] → "## Added" section, code reference: src/llmem/api/routes.py:L42. Docstring coverage in capture module: 85%.
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Documenting internal helpers not in public API — Detection: grep -E 'def _|class _.*:' {CODE_ROOT}/ in updated DOCS
+# A2: Code examples with stale syntax — Detection: python3 -m py_compile fails on code block extracted from {DOCS_ROOT}/*.md
+# A3: Broken markdown links in docs — Detection: grep -oP '\[.*\]\(\K[^)]+' {DOCS_ROOT}/*.md | xargs -I {} test ! -f {}
+# A4: CHANGELOG not following Keep a Changelog format — Detection: ! grep -E '^## \[(Unreleased|[0-9]+\.[0-9]+)' CHANGELOG.md
+```
 
 ---
 

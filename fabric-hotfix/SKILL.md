@@ -72,12 +72,34 @@ Hotfix NEMÁ sprint prereqs — celý smysl je obejít sprint planning. Ale pot�
 4. Git working tree čistý (no uncommitted changes)
 5. Effort guard: akceptuj jen effort z config.md `HOTFIX.max_effort` (default: XS,S; M+ → doporuč sprint)
 
+```bash
+# K7: Path traversal guard
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # K6: Dependency enforcement — init must have run
 if [ ! -f "{WORK_ROOT}/config.md" ] || [ ! -f "{WORK_ROOT}/state.md" ]; then
   echo "STOP: fabric-init must run first (config.md or state.md missing)"
   exit 1
 fi
-# K6: Checks 1-2 above enforce fabric-init dependency ✓
+
+# K4: Git safety — verify clean working tree before hotfix
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  echo "STOP: git working tree not clean — commit or stash changes first"
+  exit 1
+fi
+
+# K4: COMMANDS.test configured
+COMMANDS_TEST=$(grep 'COMMANDS.test:' "{WORK_ROOT}/config.md" | grep -v test_e2e | head -1 | sed 's/.*: //')
+if [ -z "$COMMANDS_TEST" ] || [ "$COMMANDS_TEST" = "TBD" ]; then
+  echo "STOP: COMMANDS.test not configured"
+  exit 1
+fi
+```
 
 **Detail implementace viz:** `references/preconditions.md`
 
@@ -140,7 +162,9 @@ Reject any input containing `..` (path traversal attack prevention).
 ### Counter Initialization (K2)
 
 ```bash
-MAX_RETRIES=${MAX_RETRIES:-3}
+# K5: Read from config.md
+CONFIG_MAX_RETRIES=$(grep 'HOTFIX.max_retries:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_RETRIES=${CONFIG_MAX_RETRIES:-${MAX_RETRIES:-3}}
 LINT_RETRY_COUNT=0
 FORMAT_RETRY_COUNT=0
 
@@ -179,14 +203,18 @@ Aktualizuj backlog item na DONE, regeneruj index, updatuj docs pokud se týká.
 Hotfix report se souhrnem evidence (schema: fabric.report.v1).
 **Detail:** `references/h7-report.md`
 
----
+### K10: Inline Example — LLMem Hotfix Null Pointer Fix
 
-### K10: Inline Anti-patterns
+**Input:** Critical bug report: "null pointer in scoring.py L127 when recall_query.scope is None", effort: XS, task-b020 created.
+**Output:** Hotfix branch created, bug fixed in scoring.py (1 file touched), 3 tests added (happy: scope=None returns default, edge: scope=explicit, error: invalid scope type), lint PASS, tests PASS pre-merge, squash merged: fix(b020): handle null scope in scoring.combine_score, post-merge tests PASS, backlog item task-b020 status→DONE, report: hotfix-2026-03-06-run1.md with evidence table.
 
-- **A1: Hot-fixing M-effort tasks** → STOP, doporuč sprint místo hotfix
-- **A2: Hotfix bez testů** → NESMÍ mergovat bez min. 3 testů (happy/edge/error)
-- **A3: Force push na main** → ZAKÁZÁNO, vždy squash merge z hotfix branch
-- **A4: Skip lint/format** → NESMÍ přeskočit; auto-fix max MAX_RETRIES pokusů
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Hotfixing M-effort tasks (>1 day work) — Detection: effort field = M|L|XL in hotfix request
+# A2: Hotfix without minimum 3 tests — Detection: git diff --name-only hotfix | grep test | wc -l < 3
+# A3: Force push to main (git push --force) — Detection: git log --oneline -5 | grep 'Merge pull request' (should be merge commit)
+# A4: Skipping lint/format gates — Detection: ! grep -E 'lint_result: (PASS|SKIP)' {hotfix-report}
+```
 
 ---
 

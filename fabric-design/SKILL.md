@@ -67,14 +67,35 @@ než upfront design.
 
 ## §2 — Protokol (povinné — NEKRÁTIT)
 
-Protocol logging is MANDATORY and must not be shortened. Detailed commands in **references/01-protocol.md**.
+Protocol logging is MANDATORY and must not be shortened.
 
-**Summary:**
-- **START:** Log event start before beginning design work
-- **END:** Log event end with status (OK/WARN/ERROR) and report path
-- **ERROR:** Log if design hits STOP condition (critical failure)
+**START:**
+```bash
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" \
+  --skill "fabric-design" \
+  --event start
+```
 
-Every design run must have START and END entries. See references/01-protocol.md for exact commands.
+**END (OK/WARN/ERROR):**
+```bash
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" \
+  --skill "fabric-design" \
+  --event end \
+  --status {OK|WARN|ERROR} \
+  --report "{WORK_ROOT}/reports/design-{YYYY-MM-DD}.md"
+```
+
+**ERROR (pokud STOP/CRITICAL):**
+```bash
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" \
+  --skill "fabric-design" \
+  --event error \
+  --status ERROR \
+  --message "{krátký důvod — max 1 věta}"
+```
 
 ---
 
@@ -322,6 +343,19 @@ Design work consists of 8 sequential sections. Each has a dedicated reference fi
 - All dependencies listed with versions
 - Implementation order specified
 - Parallelizable work identified
+
+### K10: Inline Example — LLMem Batch Capture API
+
+**Input:** Backlog item task-b015 "Add /capture/batch endpoint" (S effort): Accept POST with ≤100 observations, validate each, store deterministically, return 207 Multi-Status.
+**Output:** Design with D1–D8: (D1) existing capture.py + triage flow understood, (D2) BatchCaptureRequest model with validators, (D3) endpoint signature POST /capture/batch with request/response schemas, (D4) integration flow diagram, (D5) config: BATCH_MAX_ITEMS=100, (D6) 3 test cases: happy path (3 items), edge case (100 items), error (1 invalid item mixed with valid), (D7) 2 alternatives (sequential vs parallel processing) + risks (rate limiting, memory), (D8) depends_on: triage.py stable, pydantic ≥2.0.
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Designing without reading existing code — Detection: D1 section lacking 'read {CODE_ROOT}/' references
+# A2: Test cases without concrete input/output values — Detection: grep -E 'test.*pass|TODO|TBD' {design-spec} in D6 section
+# A3: Pseudokód too vague (no numbered steps) — Detection: grep -c '^[0-9]\.' {D3} < 3 for complex logic
+# A4: Missing alternatives or unjustified choices — Detection: ! grep -E '| Alternative |' {D7} or no pro/con table
+```
 
 ---
 

@@ -250,6 +250,45 @@ Detailed scanning procedures, dimension definitions, and scoring criteria are in
 
 **Anti-patterns with detection bash:** [references/workflow.md § Anti-patterns](references/workflow.md#anti-patterns-with-detection-bash--fix-procedures-wq4)
 
+### K10: Inline Example — LLMem Architectural Assessment
+
+**Input:**
+```
+LLMem codebase scanned:
+Modules: storage/ (backend), triage/ (heuristics), recall/ (scoring), api/ (FastAPI)
+Imports: circular dependency detected (triage ← recall ← triage)
+Design principle: "deterministic, fail-open" — check adherence
+```
+
+**Output:**
+Dimension scores:
+```
+A0: Coherence (modules vs vision): 7/10 — slight coupling
+A1: Modularity (circular deps detected): 5/10 — CRITICAL
+A2: Testability (70% coverage): 8/10 — GOOD
+A3: Scalability (Qdrant backend scales): 9/10 — EXCELLENT
+
+Overall: 72/100 (NEEDS ATTENTION)
+Mutations created:
+- T0-break-circular-triage-recall.md (effort: L, priority: 9)
+- T1-add-integration-tests.md (effort: M, priority: 7)
+```
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Scanning Only Python Files
+# Detection: find CODE_ROOT -type f | cut -d. -f2 | sort | uniq -c | head -3
+# Fix: Scan all relevant types (py, go, ts, yaml, etc.) per config LANGUAGES
+
+# A2: Dimensions Scored Without Evidence
+# Detection: grep "score: [89]/10" architect-*.md | grep -v "Evidence:" | wc -l
+# Fix: Every score >7 must have file:line proof; else lower score to confidence level
+
+# A3: Mutations Created Without Impact Analysis
+# Detection: grep "T0\|T1" backlog/T*architect*.md | grep -v "Resolves\|Blocks\|Related"
+# Fix: Each mutation links to dimension score <40 and risk assessment
+```
+
 ---
 
 ## §8 Quality Gates

@@ -117,9 +117,10 @@ for VAR in "{WORK_ROOT}" "{CODE_ROOT}"; do
   fi
 done
 
-# K6: Dependency enforcement — test report should exist
+# K6: Dependency enforcement — test report MUST exist
 if ! ls "{WORK_ROOT}/reports/test-"*.md 1>/dev/null 2>&1; then
-  echo "WARN: No test report found — fabric-test should run before fabric-e2e (fail-open)"
+  echo "STOP: No test report found — fabric-test must run before fabric-e2e"
+  exit 1
 fi
 ```
 
@@ -181,6 +182,19 @@ See `references/guards-and-validation.md` for:
 **Summary:** Compile test results and timing, compare with previous reports (regression detection), generate fabric.report.v1 report, create intake items for failures.
 
 **Minimum:** Report file created with pass/fail counts, duration, provider info, log file reference. Intake items created for failures.
+
+### K10: Inline Example — LLMem E2E Test Run
+
+**Input:** Server started on port 8099, 18 E2E tests from tests/e2e/ (health, API, capture, triage, recall, memory, batch, error, backend, injection categories), test execution with 300s timeout.
+**Output:** All 18 tests PASS, health check /healthz=200 in 1.2s, capture→triage→recall chain verified (POST /capture/event, verify /recall returns result), injection XML output validated, report e2e-2026-03-06.md shows tests_total: 18, tests_passed: 18, duration: 95s, backend: inmemory, regressions: 0.
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Running E2E without server health check — Detection: ! grep -E 'healthz.*200' {e2e-report}
+# A2: E2E test suite has <8 tests — Detection: find tests/e2e -name 'test_*.py' | wc -l < 8
+# A3: Orphan server process after E2E fails — Detection: lsof -i :{E2E_PORT} still shows uvicorn/llmem after run
+# A4: Temp directory not cleaned → disk leaks — Detection: ls -la /tmp | grep e2e_ | wc -l > previous_run_count
+```
 
 ## §8 Quality Gates
 

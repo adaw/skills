@@ -80,6 +80,11 @@ if [ -z "$WIP_ITEM" ] || [ "$WIP_ITEM" = "null" ]; then
   echo "STOP: state.wip_item not set — run fabric-implement first"
   exit 1
 fi
+# K7: WIP_ITEM filename format guard (prevent injection via backlog path)
+if ! echo "$WIP_ITEM" | grep -qE '^[a-z0-9_-]+$'; then
+  echo "STOP: WIP_ITEM='$WIP_ITEM' contains invalid characters"
+  exit 1
+fi
 
 if [ ! -f "{WORK_ROOT}/backlog/${WIP_ITEM}.md" ]; then
   echo "STOP: backlog file missing for wip_item=$WIP_ITEM"
@@ -141,10 +146,11 @@ fi
 Deterministické kroky PŘED LLM prací — neplytvej tokeny parsováním a strukturováním:
 
 ```bash
-# 1. State validation — check phase compatibility
-CURRENT_PHASE=$(grep 'phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+# 1. State validation — phase must be implementation (K1)
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
 if [ "$CURRENT_PHASE" != "implementation" ]; then
-  echo "WARN: phase is '$CURRENT_PHASE', expected 'implementation' — proceeding anyway"
+  echo "STOP: fabric-test requires phase=implementation, current=$CURRENT_PHASE"
+  exit 1
 fi
 
 # 2. Spusť testy deterministicky (gate-test vytvoří parsovatelný report)
@@ -294,6 +300,96 @@ status: {PASS|WARN|FAIL}
 
 ## Notes
 {Interpretation: what was tested, any regressions, next action if FAIL}
+```
+
+---
+
+## K10 — Concrete Example & Anti-patterns
+
+### Example: Test Run b015 — 49 PASS, 1 FAIL, Coverage 87%
+
+```
+WIP branch: feat/b015-recall-scoring-tests
+COMMANDS.test: pytest -q --cov=llmem --cov-report=term-missing
+
+Checkout b015:
+  git checkout feat/b015-recall-scoring-tests
+  Status: working tree clean
+
+Run gate-test:
+  python skills/fabric-init/tools/fabric.py gate-test --tail 200
+  Exit code: 0 (PASS)
+
+Test Results:
+  ✓ 49 passed
+  ✗ 1 failed: test_triage_secret_masking (test_triage_secret_masking.py:87)
+  ✓ 0 errors
+  ✓ 0 skipped
+
+Root cause (1 failed):
+  AssertionError: expected 'SECRET' but got 'MASKED' in log line
+  → Changes to triage/heuristics.py changed mask format (breaking existing test)
+  Action: Revert format change OR update test assertion
+
+Coverage:
+  llmem.recall: 92%
+  llmem.triage: 87% (below target 85%... wait, 87% > 85% OK)
+  llmem.models: 95%
+  llmem.api: 78% (below core target)
+  → Overall: 87% PASS (≥60% minimum)
+
+Test/Code LOC ratio:
+  Code: 2,340 LOC (src/llmem/)
+  Tests: 1,847 LOC ({TESTS_ROOT})
+  Ratio: 79% (healthy, >50%)
+
+Flakiness detection:
+  - No @pytest.mark.skip detected
+  - No time.sleep detected in test code
+  - No random seed issues
+
+Notes:
+  Changed code: recall/scoring.py (4 new test functions)
+  Coverage impact: +7% for recall module
+  Regression: 1 test broken in triage (pre-existing, not from b015 changes)
+  Recommendation: Fix test_triage_secret_masking assertion before review
+
+Status: WARN (1 pre-existing failure, needs triage investigation)
+```
+
+### Anti-patterns (FORBIDDEN detection & prevention)
+
+```bash
+# A1: Marking PASS when skipped tests hide failures
+# DETECTION: Report says "PASS" but contains skipped tests
+# FIX: If any @pytest.mark.skip present → mark as FAIL not PASS
+SKIPPED=$(pytest --collect-only -q 2>/dev/null | grep -c 'skipped' || echo 0)
+if [ "$SKIPPED" -gt 0 ]; then
+  echo "FAIL: $SKIPPED tests marked skip — skipped tests hide failures"
+  exit 1
+fi
+
+# A2: Ignoring pre-existing failures (regression detection)
+# DETECTION: Test report doesn't compare against baseline
+# FIX: Always run on clean branch first, capture baseline, then on feature
+git stash
+pytest -q >/tmp/baseline.log 2>&1
+BASELINE_FAIL=$(grep -c '^FAILED' /tmp/baseline.log || echo 0)
+git stash pop
+pytest -q >/tmp/feature.log 2>&1
+FEATURE_FAIL=$(grep -c '^FAILED' /tmp/feature.log || echo 0)
+if [ "$FEATURE_FAIL" -gt "$BASELINE_FAIL" ]; then
+  echo "FAIL: New regressions introduced ($BASELINE_FAIL → $FEATURE_FAIL failures)"
+  exit 1
+fi
+
+# A3: Coverage claim without running pytest --cov
+# DETECTION: Report mentions coverage % but .coverage file absent
+# FIX: Require `pytest --cov` execution, verify .coverage artifact exists
+if [ ! -f ".coverage" ] && [ ! -f ".coverage.json" ]; then
+  echo "FAIL: pytest --cov not executed — coverage data missing"
+  exit 1
+fi
 ```
 
 ---

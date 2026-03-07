@@ -49,6 +49,13 @@ python skills/fabric-init/tools/protocol_log.py --work-root "{WORK_ROOT}" \
 
 **Fail-fast bash checks:**
 ```bash
+# K1: Phase validation — implement runs in implementation phase
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$CURRENT_PHASE" != "implementation" ]; then
+  echo "STOP: fabric-implement requires phase=implementation, current=$CURRENT_PHASE"
+  exit 1
+fi
+
 # Precondition: backlog file exists
 if [ ! -f "{WORK_ROOT}/backlog/${TASK_ID}.md" ]; then
   echo "STOP: backlog file not found"
@@ -62,7 +69,13 @@ if [ -z "$TEST_CMD" ] || [ "$TEST_CMD" = "TBD" ]; then
   exit 1
 fi
 
-# Path traversal guard
+# K4: Git safety — verify clean working tree before branch creation
+if [ -n "$(git -C "{CODE_ROOT}" status --porcelain 2>/dev/null)" ]; then
+  echo "STOP: git working tree not clean — commit or stash changes first"
+  exit 1
+fi
+
+# K7: Path traversal guard
 validate_path() {
   if echo "$1" | grep -qE '\.\.'; then
     echo "STOP: path traversal detected"
@@ -187,6 +200,73 @@ Stručný postup:
 12. **Generate Report** — evidence template s výsledky
 
 > Stress test hledání: **Blocked dependencies detection**, **Spec/ADR drift detection**, **Separace pre-existing fixů**, **Regression detection post auto-fix**, **Code complexity validation**, **Coverage enforcement**.
+
+---
+
+## K10 — Concrete Example & Anti-patterns
+
+### Example: Task b015 — Add Recall Scoring Tests (LLMem)
+
+```
+Input: fabric-implement selected task-b015 from sprint-3 Task Queue
+  backlog/{WORK_ROOT}/backlog/b015.md: type=Task, effort=M, status=READY
+  analysis: {WORK_ROOT}/analyses/b015-analysis.md exists (recall/scoring.py)
+Analysis: recall/scoring.py has 3 scoring functions (tier_boost, scope_boost, recency_boost)
+Test baseline: 2 existing tests, coverage 45% (need ≥60%)
+
+VERIFY-FIRST:
+  - Check current coverage: pytest --cov=llmem.recall.scoring --cov-report=term-missing
+  - Coverage is 45%: test_tier_boost_basic, test_tier_boost_edge missing
+  - Check existing tests for isolation: verified, no shared state
+
+IMPLEMENT (4 new test functions):
+  1. test_combine_score_happy: tier=T0, scope=global, fresh → score ≥90
+  2. test_combine_score_old_memory: recency decay factor applied → score lower
+  3. test_combine_score_minimal: default inputs → score normalizes to [0,100]
+  4. test_combine_score_edge_stale_only: only pre-existing results → SKIPPED
+
+Implementation: 45 LOC added (lines 127–172 in test_scoring.py)
+All 4 tests PASS, coverage rises to 92%, no regressions
+
+QUALITY GATES:
+  - pytest: PASS (49 passed, 0 failed)
+  - lint: PASS (ruff check clean)
+  - format: PASS (ruff format idempotent)
+
+REPORT:
+  Branch: feat/task-b015-recall-scoring-tests
+  Commit: feat(b015): add combine_score integration tests, coverage 45%→92%
+  Status: IN_REVIEW
+```
+
+### Anti-patterns (FORBIDDEN detection & prevention)
+
+```bash
+# A1: Implement WITHOUT running baseline tests first
+# DETECTION: Skip step 5 (VERIFY-FIRST)
+# FIX: Run `pytest --co -q` to baseline before writing code
+if ! pytest --co -q >/dev/null 2>&1; then
+  echo "STOP: baseline test discovery failed — run triage first"
+  exit 1
+fi
+
+# A2: Test coverage claim without evidence
+# DETECTION: report says "coverage improved" but pytest --cov not run
+# FIX: Require `pytest --cov --cov-report=json` in quality gate
+if [ ! -f ".coverage" ]; then
+  echo "FAIL: pytest --cov not executed — coverage report missing"
+  exit 1
+fi
+
+# A3: Commit with @pytest.mark.skip tests
+# DETECTION: grep -c '@pytest.mark.skip' test_file.py > 0 AND verdict=PASS
+# FIX: Count skipped tests, report them as WARN not PASS
+SKIPPED=$(pytest --collect-only -q 2>/dev/null | grep -c skipped || echo 0)
+if [ "$SKIPPED" -gt 0 ]; then
+  echo "WARN: $SKIPPED tests marked skip — hiding failures?"
+  exit 1  # FAIL if skipped tests present post-implement
+fi
+```
 
 ---
 

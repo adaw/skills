@@ -110,6 +110,18 @@ fabric-builder build <name> ref=<workflow>    # s referenčním starým workflow
 
 ### B1) Připrav kontext
 
+```bash
+# K6: Template existence guard (MUST exist before build)
+TEMPLATE="skills/fabric-builder/assets/builder-template.md"
+if [ ! -f "$TEMPLATE" ]; then
+  echo "STOP: builder-template.md not found at $TEMPLATE"
+  python skills/fabric-init/tools/protocol_log.py \
+    --work-root "{WORK_ROOT}" --skill "builder" --event error \
+    --status ERROR --message "builder-template.md missing"
+  exit 1
+fi
+```
+
 1. Přečti `assets/builder-template.md` — toto je tvůj plán stavby
 2. Přečti `fabric/config.md` — cesty, kontrakty, taxonomie
 3. Pokud `ref=<workflow>`: přečti `dev/workflows/<workflow>.md` — extrahuj z něj:
@@ -123,6 +135,14 @@ fabric-builder build <name> ref=<workflow>    # s referenčním starým workflow
 ### B2) Vytvoř adresář
 
 ```bash
+# K3: Validate name + create directory with error handling
+if [ -z "${NAME}" ] || ! echo "${NAME}" | grep -qE '^[a-z][a-z0-9-]*$'; then
+  echo "STOP: Invalid skill name '${NAME}' — must be lowercase alphanumeric+hyphens"
+  python skills/fabric-init/tools/protocol_log.py \
+    --work-root "{WORK_ROOT}" --skill "builder" --event error \
+    --status ERROR --message "Invalid skill name: ${NAME}"
+  exit 1
+fi
 mkdir -p "skills/fabric-${NAME}"
 ```
 
@@ -231,6 +251,89 @@ Další krok:
 
 ---
 
+## K10 — Concrete Example & Anti-patterns
+
+### Example: Build new skill "fabric-deploy" from template
+
+```
+Command: fabric-builder build deploy
+
+B1) Prepare context:
+  - Čti: assets/builder-template.md (13 sections)
+  - Čti: fabric/config.md (lifecycle, enums, cesty)
+  - Čti: dev/workflows/deployment-workflow.md (starý workflow, referenční kvalita)
+  - Extrahuj z workflow: pre-prod validation steps, rollback strategy, smoke tests
+
+B2) Create directory:
+  mkdir -p skills/fabric-deploy
+
+B3) Frontmatter:
+  ---
+  name: fabric-deploy
+  description: "Execute fabric-approved deployment to prod with pre-flight checks, cloud API integration, smoke test validation, and automatic rollback on failure. Single entrypoint for unattended deployments."
+  ---
+  <!-- built from: builder-template -->
+
+B4) Fill template sections:
+  §1 Účel: 2 věty (why deploy skill, why needed)
+  §2 Protokol: Copy template, set skill="deploy"
+  §3 Preconditions: 6 bash checks (approval status, env vars, cloud creds)
+  §4 Vstupy: deployment-plan.md, approval list, rollback snapshot
+  §5 Výstupy: deployment-report.md + rollback-snapshot.md
+  §6 FAST PATH: fabric.py deploy-pre-flight + cloud API validate
+  §7 Postup: 8 detailed steps (pre-flight, acquire lock, deploy wave, smoke test, lock release)
+  §8 Quality Gates: 5 blocking checks (API connectivity, no stubs, test pass)
+  §9 Report template: detailed frontmatter + timeline + evidence
+  §10 Self-check: 6 testable items
+  §11 Failure Handling: rollback scenarios table
+  §12 Metadata: phase=closing, depends_on=[fabric-review]
+
+B5) Size check:
+  wc -l skills/fabric-deploy/SKILL.md = 387 lines (< 500, OK)
+
+B6) Self-check build:
+  ✓ frontmatter valid, name=fabric-deploy
+  ✓ All 12 sections present
+  ✓ §7 is concrete (8 detailed steps, not vague)
+  ✓ §3 has bash precondition code
+  ✓ §10 has 6 testable items
+  ✓ SKILL.md ≤ 500 lines
+
+B7) Output:
+  skills/fabric-deploy/SKILL.md created (387 lines)
+  Recommendation: Run `fabric-checker target=deploy` for quality audit
+```
+
+### Anti-patterns (FORBIDDEN detection & prevention)
+
+```bash
+# A1: Building skill without checking naming conflict
+# DETECTION: New skill name matches existing skill
+# FIX: Check for duplicates in skills/ directory before creating
+if [ -d "skills/fabric-${NAME}" ]; then
+  echo "STOP: skills/fabric-$NAME already exists — choose different name"
+  exit 1
+fi
+
+# A2: Not copying from builder-template (non-canonical structure)
+# DETECTION: Manually wrote SKILL.md structure instead of using template
+# FIX: ALWAYS start from assets/builder-template.md as copy, then customize
+TEMPLATE="skills/fabric-builder/assets/builder-template.md"
+if [ ! -f "$TEMPLATE" ]; then
+  echo "STOP: builder-template.md not found at $TEMPLATE"
+  exit 1
+fi
+
+# A3: §7 Postup is vague (not concrete LLM instructions)
+# DETECTION: Contains phrases like "analyze", "implement", "validate" without detail
+# FIX: Require EVERY step to have: CO (1 sentence), JAK (detailed), MINIMUM (acceptance), ANTI-PATTERNS (3+)
+if ! grep -q "Anti-pattern\|FORBIDDEN\|MUST NOT" "skills/fabric-${NAME}/SKILL.md"; then
+  echo "WARN: §7 Postup missing anti-patterns — add ≥3 per step"
+fi
+```
+
+---
+
 # MÓD 2: FIX — Oprava findings z checker reportu
 
 ## Kdy použít
@@ -300,13 +403,19 @@ UNTIL:
   - NEBO max iterací dosaženo
 ```
 
-### F4) Fix log
+### F4) Fix log + K10 Inline Example (FIX mode)
 
-Zapiš do reportu:
+```
+Report: checker-2026-03-07.md Round 6, Finding: fabric-prio K2=7 (line 148)
+BEFORE: MAX_PRIO_ITEMS=${MAX_PRIO_ITEMS:-500}
+AFTER:  MAX_PRIO_ITEMS=${MAX_PRIO_ITEMS:-500}
+        if ! echo "$MAX_PRIO_ITEMS" | grep -qE '^[0-9]+$'; then MAX_PRIO_ITEMS=500; fi
+Verify: wc -l = 435 (≤500 ✓), validate_fabric.py PASS
+Log: | 1 | fabric-prio | K2 | counter sans validation | grep guard added | L148 |
+```
 
 ```md
 ## Fix Log
-
 | # | Skill | Kategorie | Finding | Oprava | Řádek |
 |---|-------|-----------|---------|--------|-------|
 ```
@@ -331,120 +440,9 @@ Další krok:
 
 # MÓD 3: MIGRATE — Konverze legacy skillu na builder-template
 
-## Kdy použít
+**Kompletní postup migrace (M1–M7):** Viz `references/migrate-mode.md`
 
-Když checker v „Legacy migration radar" doporučí migraci legacy skillu.
-
-## Parametry
-
-```
-fabric-builder migrate <name>         # konvertuj legacy skill
-```
-
-## Pravidla migrace
-
-- Max 2 migrace per sprint
-- VŽDY zachovej VEŠKEROU stávající logiku — migrace je STRUKTURÁLNÍ, ne obsahová
-- Cíl: stejný skill, ale organizovaný podle §1–§12
-
-## Postup
-
-### M1) Baseline
-
-1. Přečti stávající `skills/fabric-{NAME}/SKILL.md` — to je tvůj zdroj
-2. Přečti `assets/builder-template.md` — to je tvůj cíl
-3. Přečti poslední checker report — jaké K1–K10 skóre má skill TEĎ
-
-### M2) Mapování existující obsah → §1–§12
-
-Pro každou sekci template:
-
-| Template sekce | Kde hledat v legacy skillu |
-|----------------|---------------------------|
-| §1 Účel | Sekce „Účel" (obvykle existuje) |
-| §2 Protokol | Sekce „Protokol (povinné)" (obvykle existuje) |
-| §3 Preconditions | Bash kód na začátku, nebo sekce „Předpoklady" |
-| §4 Vstupy | Sekce „Vstupy" (obvykle existuje) |
-| §5 Výstupy | Sekce „Výstupy" (obvykle existuje) |
-| §6 FAST PATH | Sekce „FAST PATH" (pokud existuje) |
-| §7 Postup | Sekce „Postup" — **přenesni BEZ ZTRÁTY obsahu** |
-| §8 Quality Gates | Bash kód s COMMANDS.test/lint (pokud existuje) |
-| §9 Report | Formát reportu (pokud definovaný) |
-| §10 Self-check | Sekce „Self-check" (obvykle existuje) |
-| §11 Failure Handling | Rozptýleno — sbírej error handling z celého skillu |
-| §12 Metadata | Neexistuje v legacy — PŘIDEJ NOVĚ |
-
-### M3) Doplň chybějící sekce
-
-Sekce, které legacy skill nemá, doplň:
-- §11 Failure Handling — vytvoř tabulku ze sebraných error handling bloků
-- §12 Metadata — vyplň phase, step, depends_on, feeds_into
-- Chybějící preconditions bash kód
-- Chybějící anti-patterns v §7
-
-**DŮLEŽITÉ:** Při doplňování §7 (Postup) NEPŘEPISUJ existující instrukce.
-Pouze PŘIDEJ chybějící: příklady, minima, anti-patterns.
-Pokud existující instrukce jsou dobré — nechej je.
-
-### M4) Přidej builder-born tag
-
-```md
-<!-- built from: builder-template -->
-```
-
-### M5) Size check + progressive disclosure split (POVINNÉ pro migraci)
-
-Legacy skills jsou typicky 500–1600+ řádků. Po migraci na §1–§12 bude SKILL.md ještě větší (přidané sekce). Proto je split **téměř vždy nutný** při migraci.
-
-```bash
-LINES=$(wc -l < "skills/fabric-${NAME}/SKILL.md")
-if [ "$LINES" -gt 500 ]; then
-  echo "SPLIT REQUIRED: $LINES lines"
-fi
-```
-
-**Split strategie pro migraci:**
-
-1. Vytvoř `skills/fabric-${NAME}/references/`
-2. §7 Postup — přesuň detailní kroky do `references/workflow.md`, v SKILL.md nech jen přehled kroků s odkazem
-3. K10 příklady — přesuň do `references/examples.md`
-4. Kanonická pravidla / triage rules / dimensions — přesuň do `references/{domain}.md`
-5. Rozsáhlé bash bloky (mimo §3 Preconditions) — přesuň do `references/scripts.md`
-6. Ověř SKILL.md ≤ 500 řádků
-
-**Co ZŮSTÁVÁ v SKILL.md (nesmí se přesunout):**
-- Frontmatter + builder tag
-- §1 Účel, §2 Protokol, §3 Preconditions (kompletní bash kód)
-- §4 Vstupy, §5 Výstupy (krátké seznamy)
-- §6 FAST PATH (bash volání)
-- §7 Postup — **pouze přehled kroků** + odkazy na references/
-- §8 Quality Gates, §9 Report template
-- §10 Self-check (kompletní checkboxy)
-- §11 Failure Handling, §12 Metadata
-
-### M6) Validace migrace
-
-Ověř že migrace nezhoršila skill:
-
-- [ ] VEŠKERÁ stávající logika je zachována (nic nebylo smazáno — přesunuto do references/)
-- [ ] Nová struktura odpovídá §1–§12
-- [ ] Tag `<!-- built from: builder-template -->` přítomen
-- [ ] **SKILL.md ≤ 500 řádků**
-- [ ] Referenční soubory v `references/` obsahují VEŠKERÝ přesunutý obsah
-- [ ] §7 Postup má MINIMÁLNĚ stejnou úroveň detailu jako před migrací (přímo + references)
-
-### M6) Doporučení po migraci
-
-```
-Migrováno: skills/fabric-{NAME}/SKILL.md
-Tag: <!-- built from: builder-template --> přidán
-Přidané sekce: {seznam nových sekcí}
-
-Další krok:
-  Spusť `fabric-checker target={NAME}` pro ověření.
-  Porovnej K1–K10 score PŘED a PO migraci.
-  Pokud score kleslo → REVERT přes git checkout.
-```
+**Shrnutí:** Přečti legacy skill → mapuj na §1–§12 → doplň chybějící sekce → přidej builder-born tag → split na ≤500L → validuj.
 
 ---
 
@@ -461,6 +459,12 @@ python skills/fabric-init/tools/protocol_log.py \
   --status {OK|WARN|ERROR} \
   --report "{WORK_ROOT}/reports/builder-{YYYY-MM-DD}.md"
 ```
+
+---
+
+## Failure Handling
+
+**Detail:** Viz `references/failure-handling.md` pro tabulku failure modes, akce, a anti-patterns.
 
 ---
 

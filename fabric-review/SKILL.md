@@ -86,6 +86,11 @@ fi
 # 3. Check rework counter (max_rework_iters enforcement)
 REWORK_COUNT=$(grep 'rework_count:' "{WORK_ROOT}/backlog/${WIP_ITEM}.md" | awk '{print $2}' | tr -d '[:space:]')
 REWORK_COUNT=${REWORK_COUNT:-0}
+# K7: Numeric guard — prevent shell injection via rework_count field
+if ! echo "$REWORK_COUNT" | grep -qE '^[0-9]*$'; then
+  echo "STOP: rework_count='$REWORK_COUNT' not numeric in backlog/${WIP_ITEM}.md"
+  exit 1
+fi
 if [ "$REWORK_COUNT" -ge 3 ]; then
   echo "STOP: max rework iterations (3) exceeded for $WIP_ITEM"
   exit 1
@@ -177,6 +182,107 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/plans/review-plan-{
 > - R9 Process Chain checklist (contract_modules validation)
 > - Finding severity taxonomy & scoring
 > - Fix strategy per finding type (standardized format)
+
+## K10 — Concrete Example & Anti-patterns
+
+### Example: Task b015 Review — R1–R9 Assessment (LLMem)
+
+```
+Review task-b015 (add recall scoring tests):
+  WIP branch: feat/b015-recall-scoring-tests
+  Diff: 47 LOC added ({CODE_ROOT}/recall/test_scoring.py lines 127–172)
+  Test report: {WORK_ROOT}/reports/test-b015-2026-03-07-r1.md (PASS, 49/49)
+
+Gate results:
+  Lint: PASS (ruff check clean)
+  Format: PASS (black unchanged)
+
+R1 Correctness (85/100):
+  ✓ Logic sound: 4 test cases cover happy/edge/error paths
+  ✓ Edge cases: stale memory, minimal input tested
+  ✗ MEDIUM: test_combine_score_minimal missing docstring (line 165)
+  Finding: Missing docstring for complex assertion
+
+R2 Security (90/100):
+  ✓ No hardcoded secrets
+  ✓ Input validation in test fixtures
+  Finding: None (PASS)
+
+R3 Performance (95/100):
+  ✓ No O(n²) in test loops
+  ✓ Fixtures efficient
+  Finding: None (PASS)
+
+R4 Reliability (80/100):
+  ✗ CRITICAL: test_combine_score_old_memory uses time.sleep(1) — flaky on slow CI
+  Recommendation: Mock time or use pytest-freezegun
+
+R5 Testability (90/100):
+  ✓ Tests isolated (no shared state)
+  ✓ All assertions explicit
+  Finding: None (PASS)
+
+R6 Maintainability (85/100):
+  ✓ Clear naming: test_combine_score_old_memory vs test_combine_score_fresh
+  ✗ MEDIUM: lines 140–155 could extract helper (DRY)
+
+R7 Documentation (80/100):
+  ✗ HIGH: CHANGELOG not updated (product feature, should log)
+  ✓ docstrings on 3/4 functions
+
+R8 Compliance (95/100):
+  ✓ ADR-003 (testing) followed
+  Finding: None (PASS)
+
+R9 Process Chain (90/100):
+  ✓ contract_modules: [recall/scoring.py] — coverage verified
+  Finding: None (PASS)
+
+Verdict: REWORK
+  Critical: 1 (flaky test - time.sleep)
+  High: 1 (CHANGELOG missing)
+  Medium: 2 (docstring + DRY refactor)
+
+Recommendation:
+  1. Replace time.sleep(1) with mock.patch('time.time') or freeze_time fixture
+  2. Add entry to CHANGELOG.md under "[Unreleased]"
+  3. Add docstring to test_combine_score_minimal
+  4. (Optional) extract scoring assertion helper to reduce duplication
+
+Status update: IN_PROGRESS (rework required)
+```
+
+### Anti-patterns (FORBIDDEN detection & prevention)
+
+```bash
+# A1: Approve WITHOUT running tests (review bypasses quality gates)
+# DETECTION: Verdict=CLEAN but test status unknown
+# FIX: Verify test report exists AND status=PASS before verdict
+LATEST_TEST=$(ls -t {WORK_ROOT}/reports/test-${WIP_ITEM}-*.md 2>/dev/null | head -1)
+if [ -z "$LATEST_TEST" ]; then
+  echo "STOP: no test report for $WIP_ITEM — run fabric-test first"
+  exit 1
+fi
+
+# A2: CRITICAL findings with CLEAN verdict (contradiction)
+# DETECTION: Grep for severity:CRITICAL + verdict:CLEAN mismatch
+CRITICAL_COUNT=$(grep -c 'severity: CRITICAL' {REPORT_FILE} 2>/dev/null || echo 0)
+VERDICT=$(grep '^verdict:' {REPORT_FILE} | awk '{print $2}')
+if [ "$CRITICAL_COUNT" -gt 0 ] && [ "$VERDICT" = "CLEAN" ]; then
+  echo "FAIL: $CRITICAL_COUNT CRITICAL findings but verdict is CLEAN → contradiction"
+  exit 1
+fi
+
+# A3: Missing R1–R9 dimensions in report
+# DETECTION: Report doesn't have all 9 dimension scores
+# FIX: Ensure all R1–R9 present (R9 can be SKIPPED but must be documented)
+for DIM in R1 R2 R3 R4 R5 R6 R7 R8 R9; do
+  if ! grep -q "^## $DIM\|^| $DIM " {REPORT_FILE}; then
+    echo "FAIL: Dimension $DIM missing in report"
+    exit 1
+  fi
+done
+```
 
 ## § 8 Quality Gates
 

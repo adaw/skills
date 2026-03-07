@@ -103,6 +103,19 @@ if [ "$CURRENT_PHASE" != "closing" ]; then
   exit 1
 fi
 
+# K4: Git safety — verify clean working tree before merge operations
+if [ -n "$(git -C "{CODE_ROOT}" status --porcelain 2>/dev/null)" ]; then
+  echo "STOP: git working tree not clean — commit or stash changes before close"
+  exit 1
+fi
+# K4: Verify we're on expected branch (main/master) or can switch
+MAIN_BRANCH=$(grep 'GIT.main_branch:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAIN_BRANCH=${MAIN_BRANCH:-main}
+if ! git -C "{CODE_ROOT}" rev-parse --verify "$MAIN_BRANCH" >/dev/null 2>&1; then
+  echo "STOP: main branch '$MAIN_BRANCH' not found in git"
+  exit 1
+fi
+
 # Reviews index governance (P2 fix #37)
 if [ -f "{WORK_ROOT}/reviews/INDEX.md" ]; then
   REWORK_COUNT=$(grep -c "REWORK" "{WORK_ROOT}/reviews/INDEX.md" 2>/dev/null || echo 0)
@@ -191,6 +204,16 @@ if ! echo "$MAX_MERGE_TASKS" | grep -qE '^[0-9]+$'; then
 fi
 ```
 
+```bash
+# K7: Task ID validation in merge loop (prevent shell injection via backlog paths)
+validate_task_id() {
+  if ! echo "$1" | grep -qE '^[a-z0-9_-]+$'; then
+    echo "STOP: Invalid task ID '$1' — skipping"
+    return 1
+  fi
+}
+```
+
 Close is a **procedural batching skill** — run once per sprint, iterates all tasks in Task Queue sequentially.
 
 **High-level workflow overview:**
@@ -210,6 +233,19 @@ Close is a **procedural batching skill** — run once per sprint, iterates all t
 7. **State Reset** — clear wip_item and wip_branch
 
 > **Detaily procedury merge loop, stub verification, commit message validation, squash conflict handling, rebase logic, pre-merge divergence checks, per-task file existence checks, security scan patterns, carry-over classification criteria, and full error recovery procedures viz references/workflow.md**
+
+### K10: Inline Example — LLMem Sprint 3 Close
+
+**Input:** Sprint 3 Task Queue: 2 MERGEABLE tasks (task-b015, task-b016 with review verdict CLEAN), 1 CARRY-OVER (task-b012 with rebase conflict), test/lint/format commands from config.md.
+**Output:** 2 tasks merged to main with squash (commit: fix(b015): add batch capture endpoint), post-merge tests PASS, backlog items updated status→DONE + merge_commit evidence, task-b012 documented as CARRY-OVER (REBASE_CONFLICT), close report with Task Status table.
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Closing sprint with IN_PROGRESS tasks in queue — Detection: grep 'IN_PROGRESS' {WORK_ROOT}/sprints/sprint-{N}.md
+# A2: Merging without review verdict = CLEAN — Detection: ! grep -q 'review_verdict: CLEAN' {WORK_ROOT}/backlog/{id}.md
+# A3: Skipping post-merge tests — Detection: ! grep -E 'test_result: (PASS|FAIL|SKIP)' {close-report}
+# A4: Forgetting to reset wip_item/wip_branch — Detection: grep -E 'wip_item:|wip_branch:' {WORK_ROOT}/state.md | grep -v 'null'
+```
 
 **Stub verification importance:**
 - Task must not contain `pass`, `raise NotImplementedError`, `# TODO`, `# FIXME`, `... # stub`

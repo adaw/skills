@@ -77,15 +77,36 @@ if [ "$CURRENT_PHASE" != "orientation" ]; then
 fi
 
 # K6: Dependency enforcement — fabric-architect must have run
-if [ ! -f "{WORK_ROOT}/reports/architect-"*.md ] 2>/dev/null; then
-  echo "WARN: No architect report found — fabric-architect should run before fabric-process"
+if ! ls {WORK_ROOT}/reports/architect-*.md >/dev/null 2>&1; then
+  echo "STOP: No architect report found — run fabric-architect before fabric-process"
+  python skills/fabric-init/tools/protocol_log.py \
+    --work-root "{WORK_ROOT}" --skill "process" --event error \
+    --status ERROR --message "Missing architect report — run fabric-architect first"
+  exit 1
+fi
+```
+
+```bash
+# K6: CODE_ROOT existence guard (mandatory)
+CODE_ROOT=$(grep 'CODE_ROOT:' "{WORK_ROOT}/config.md" | awk '{print $2}' | tr -d '"')
+if [ -z "$CODE_ROOT" ] || [ ! -d "$CODE_ROOT" ]; then
+  echo "STOP: CODE_ROOT '$CODE_ROOT' not found — cannot analyze processes without source code"
+  exit 1
+fi
+
+# K5: Route coverage threshold from config (not hardcoded)
+ROUTE_COVERAGE_MIN=$(grep 'PROCESS.route_coverage_min:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+ROUTE_COVERAGE_MIN=${ROUTE_COVERAGE_MIN:-80}
+if ! echo "$ROUTE_COVERAGE_MIN" | grep -qE '^[0-9]+$'; then
+  echo "WARN: ROUTE_COVERAGE_MIN='$ROUTE_COVERAGE_MIN' not numeric — using default 80"
+  ROUTE_COVERAGE_MIN=80
 fi
 ```
 
 **Klíčové checks:**
 - `{WORK_ROOT}/config.md` existuje (cesty, schémata)
 - `{WORK_ROOT}/state.md` existuje (aktuální fáze)
-- `{CODE_ROOT}` existuje a obsahuje Python soubory
+- `{CODE_ROOT}` existuje a obsahuje Python soubory (bash guard above)
 - `{WORK_ROOT}/fabric/processes/` adresář vytvoř pokud chybí
 - `vision.md` volitelně (WARN pokud chybí)
 
@@ -172,7 +193,15 @@ if [ "$CRITICAL_PHASE" = "true" ] && [ -z "$RESULT" ]; then
 fi
 ```
 
-Skill se skládá z 5 fází:
+Skill se skládá z 5 fází. **Acceptance criteria per fáze:**
+
+| Fáze | Minimum akceptovatelného výstupu |
+|------|----------------------------------|
+| P1 | ≥1 external process documented; count matches route grep ±5% |
+| P2 | Every P1 process has ≥1 internal chain; contract_modules non-empty |
+| P3 | Cross-mapping table complete; orphan classification for each |
+| P4 | Test validation attempted (SKIP OK if COMMANDS.test=TBD) |
+| P5 | process-map.md exists with valid schema; report generated |
 
 ### **P1: Extract External Processes**
 
@@ -276,15 +305,88 @@ Report šablona: Viz `references/validation.md` — "Report Schema" sekce.
 
 ---
 
+## K10 — Concrete Example & Anti-patterns
+
+### Example: LLMem Process Map — 5 External, 12 Internal Chains
+
+```
+External Processes Detected (API routes):
+  1. ext-capture-event: POST /capture/event → CaptureService.triage_event
+  2. ext-capture-batch: POST /capture/batch → loop triage_event per item
+  3. ext-recall: POST /recall → RecallService.recall + injection
+  4. ext-memories: GET /memories → storage query + list format
+  5. ext-healthz: GET /healthz → health check
+
+Internal Process Chains (vnitřní call řetězce):
+  chain-001: triage_event → extract_secrets → mask_pii → upsert_storage
+  chain-002: recall_query → backend_search → combine_score → dedup → budget → xml_inject
+  chain-003: combine_score → tier_boost + scope_boost + recency_boost (3 sub-chains)
+  chain-004: upsert_storage → append_jsonl_log + backend_upsert (2 side-effects)
+  chain-005: extract_secrets → regex_patterns (OAuth, AWS, Bearer)
+  chain-006: mask_pii → hash_email + hash_phone (deterministic)
+  chain-007: xml_inject → cdata_wrap + preamble + per_memory_block
+  chain-008: backend_search → qdrant_search (if backend=qdrant)
+  chain-009: backend_search → cosine_similarity (if backend=inmemory)
+  chain-010: recall → event_log_append (side-effect)
+  chain-011: storage_rebuild → replay_jsonl → re_triage → upsert (recovery)
+  chain-012: healthz → storage_ping + check_log_exists (diagnostic)
+
+Cross-mapping (orphan detection):
+  ext-capture-event → chain-001 → contract_modules: [triage/heuristics.py, triage/patterns.py, storage/backends/*.py]
+  ext-recall → chain-002 → contract_modules: [recall/pipeline.py, recall/scoring.py, recall/injection.py]
+
+Orphans detected:
+  - DEAD_CODE: models.py MemoryVersion (never instantiated)
+  - INTERNAL_ONLY: test utilities in tests/fixtures.py (OK)
+  - UNDOCUMENTED: embeddings/hash_embedder.py (is called by storage) → intake item
+
+Expected outputs:
+  - process-map.md: schema=fabric.process-map.v1, external_count=5, internal_count=12, orphans=3
+  - 5 individual process files: ext-capture-event.md, ext-capture-batch.md, ext-recall.md, ext-memories.md, ext-healthz.md
+  - 1 intake item: process-undocumented-embeddings (Task: extend process map)
+  - Report: process-2026-03-07.md with route coverage=100%, contract validation PASS
+```
+
+### Anti-patterns (FORBIDDEN detection & prevention)
+
+```bash
+# A1: Missing internal chain for discovered external process
+# DETECTION: Route found (grep @router.post) but no call trace documented
+# FIX: For EVERY external process, must have ≥1 internal chain traced
+EXTERNAL_COUNT=$(grep -c '@router\|@app.command\|@click' {CODE_ROOT}/**/*.py 2>/dev/null || echo 0)
+INTERNAL_COUNT=$(grep -c '^chain-' {WORK_ROOT}/fabric/processes/process-map.md 2>/dev/null || echo 0)
+if [ "$EXTERNAL_COUNT" -gt "$INTERNAL_COUNT" ]; then
+  echo "WARN: external_count ($EXTERNAL_COUNT) > internal_count ($INTERNAL_COUNT)"
+  echo "ACTION: Trace missing call chains"
+fi
+
+# A2: Not validating contract_modules list
+# DETECTION: Process file lists contract_modules but it's empty array []
+# FIX: Require contract_modules to be non-empty list OR explicitly marked "no_contract"
+MODULES=$(grep -c 'contract_modules:' {WORK_ROOT}/fabric/processes/*.md 2>/dev/null || echo 0)
+EMPTY=$(grep -c 'contract_modules: \[\]' {WORK_ROOT}/fabric/processes/*.md 2>/dev/null || echo 0)
+if [ "$EMPTY" -gt 0 ]; then
+  echo "FAIL: $EMPTY process files have empty contract_modules"
+  exit 1
+fi
+
+# A3: Orphan classification without code inspection
+# DETECTION: All orphans classified as DEAD_CODE without checking for test usage
+# FIX: For each orphan, check: grep -r "import module_name" tests/ before classifying
+# Requires: test_root validation + cross-grep orphan search
+```
+
+---
+
 ## §8 — Quality Gates
 
 ### Gate 1: Process Map Schema Validation
 - PASS: Schema `fabric.process-map.v1` přítomné a parsovatelné
 - FAIL: Vytvoř intake item + report FAIL
 
-### Gate 2: Route Coverage (WQ10 — BLOCKING if <80%)
-- PASS: ≥80% routes dokumentovány
-- FAIL: <80% coverage → intake items for missing routes + block report
+### Gate 2: Route Coverage (WQ10 — BLOCKING if below threshold)
+- PASS: ≥${ROUTE_COVERAGE_MIN}% routes dokumentovány (default 80%, from config PROCESS.route_coverage_min)
+- FAIL: coverage below threshold → intake items for missing routes + block report
 
 ### Gate 3: No Duplicate Process IDs
 - PASS: Žádné duplikáty

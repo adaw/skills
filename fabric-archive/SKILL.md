@@ -81,9 +81,11 @@ if [ ! -f "{WORK_ROOT}/state.md" ]; then
 fi
 
 # --- Precondition 3: Close report existuje ---
+# K6: Dependency enforcement — close report MUST exist
 CLOSE_REPORT=$(ls -t "{WORK_ROOT}/reports/close-"*.md 2>/dev/null | head -1)
 if [ -z "$CLOSE_REPORT" ]; then
-  echo "WARN: No close report found — archive assumes sprint is complete"
+  echo "STOP: No close report found — fabric-close must run before fabric-archive"
+  exit 1
 fi
 
 # --- Precondition 4: Backlog a archive struktura ---
@@ -184,6 +186,19 @@ Copy `sprints/sprint-{N}.md` (sprint plan) a key reports (close-*.md, check-*.md
 Vytvoř `reports/archive-{YYYY-MM-DD}.md` s frontmatter a tabulkami:
 - Moved items (Item ID | Status | Destination | Snapshot)
 - Archived reports (Artifact | Source | Destination)
+
+### K10: Inline Example — LLMem Sprint 3 Archive
+
+**Input:** Sprint 3 close: 3 DONE items (task-b015, task-b012, epic-e003) with merge_commit evidence, close reports from previous sprint archived.
+**Output:** 3 snapshots in archive/backlog/{id}-2026-03-06.md, sprint-3.md copied to archive/sprints/, close-sprint-3-*.md copied to archive/reports/, report showing 3 items moved, 0 conflicts, retention policy enforced.
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Archiving non-DONE items — Detection: grep -E 'status: (IN_PROGRESS|DESIGN|READY)' {WORK_ROOT}/backlog/done/*.md
+# A2: Missing backlog/done/ destination on move — Detection: ls {WORK_ROOT}/archive/backlog/ | wc -l vs grep MOVED {report}
+# A3: YAML frontmatter not preserved in snapshots — Detection: ! grep -q '^---$' {WORK_ROOT}/archive/backlog/*-{date}.md
+# A4: Archiving without retention_days check — Detection: task age < config.md ARCHIVE.retention_days but archived anyway
+```
 
 ---
 

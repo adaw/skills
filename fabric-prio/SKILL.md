@@ -143,6 +143,26 @@ python skills/fabric-init/tools/fabric.py backlog-scan --json-out "{WORK_ROOT}/r
 
 ## §7 — Postup (JÁDRO SKILLU)
 
+```bash
+# K2: Counter initialization for item prioritization
+MAX_PRIO_ITEMS=${MAX_PRIO_ITEMS:-500}
+PRIO_ITEM_COUNTER=0
+
+# K2: Numeric validation
+if ! echo "$MAX_PRIO_ITEMS" | grep -qE '^[0-9]+$'; then
+  MAX_PRIO_ITEMS=500
+  echo "WARN: MAX_PRIO_ITEMS not numeric, reset to default (500)"
+fi
+
+# In backlog item loop:
+# PRIO_ITEM_COUNTER=$((PRIO_ITEM_COUNTER+1))
+# if [ "$PRIO_ITEM_COUNTER" -ge "$MAX_PRIO_ITEMS" ]; then
+#   echo "WARN: max prio items reached ($PRIO_ITEM_COUNTER/$MAX_PRIO_ITEMS)"
+#   break
+# fi
+```
+
+```bash
 # K5: Prioritization thresholds from config.md
 PRIO_IMPACT_WEIGHT=$(grep 'PRIO.impact_weight:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
 PRIO_IMPACT_WEIGHT=${PRIO_IMPACT_WEIGHT:-0.4}
@@ -168,109 +188,9 @@ PRIO_EFFORT_WEIGHT=${PRIO_EFFORT_WEIGHT:-0.3}
 - Neignoruй chybějící vision.md (pokračuj s WARN, ne FAIL)
 - Neaplikuj vision bonus za běžné backlog itemy (jen explicitní linked_vision_goal)
 
-### 7.2) Načti a parsuj backlog items
+### 7.2–7.5) Item Parsing, Factor Scoring, PRIO Calculation, Examples
 
-**Co:** Projdi všechny soubory v `{WORK_ROOT}/backlog/` (mimo `done/`, mimo README), extrahuj frontmatter YAML.
-
-**Jak (detailní instrukce):**
-```bash
-MAX_ITEMS=${MAX_ITEMS:-200}
-ITEM_COUNTER=0
-find {WORK_ROOT}/backlog -maxdepth 1 -type f -name "*.md" | while read backlog_file; do
-  ITEM_COUNTER=$((ITEM_COUNTER + 1))
-  if [ "$ITEM_COUNTER" -ge "$MAX_ITEMS" ]; then
-    echo "WARN: max backlog items reached ($ITEM_COUNTER/$MAX_ITEMS)"
-    break
-  fi
-  # Parsuj: id, title, type, tier, status, effort, prio, depends_on, blocked_by, linked_vision_goal
-done
-```
-
-Je-li počet backlog itemů > 200, použij **dvoufázové skórování**:
-- **FAST pass (O(N)):** parsuj jen YAML frontmatter, spočítej „quick PRIO"
-- **DEEP pass (O(K)):** otevři celé tělo jen pro top 50 a items s chybějícím `prio` nebo `effort=TBD`
-
-**Minimum:** Všechny itemy parsovány, chybějící `title` nebo `type` → intake item `prio-schema-missing-{id}.md`, item dostane PRIO=0.
-
-**Anti-patterns:**
-- Neignoruй itemy bez schématu (vytvoř intake item)
-- Neprocházej `done/` nebo `README*`
-
-### 7.3) Urči skóre faktorů (Impact, Urgency, Readiness, EffortScore)
-
-**Co:** Spočítej čtyři faktory pro každý item podle přehledných tabulek.
-
-**Jak (detailní instrukce):**
-
-**Impact (0–10):**
-- Tier baseline: T0=8, T1=6, T2=4, T3=2
-- Bug/Security hotfix: +1 až +2
-- Item mapuje přímo na vision goal: +1
-
-**Urgency (0–10):**
-- BLOCKED blocker pro T0 chain: 9–10
-- Časově citlivé (release/regrese): 8–10
-- Jinak: T0=7, T1=5, T2=3, T3=1–2
-
-**Readiness (0–10):**
-- READY: 8–10
-- DESIGN: 4–7
-- IDEA: 1–3
-- IN_PROGRESS/IN_REVIEW: 8 (ale WIP=1, neplánují se jako nové)
-
-**Effort → EffortScore:**
-- XS=1, S=3, M=5, L=7, XL=9
-- TBD: odhadni (preferovaně), jinak M + WARNING do reportu
-
-**Vision-fit gate:** T0/T1 bez `linked_vision_goal` → penalizuj Impact -3 (min 0) a vytvoř intake item `prio-missing-vision-link-{id}.md`.
-
-**Minimum:** Čtyři faktory spočítány, viditelné v tabulce Top 20 v reportu.
-
-### 7.4) Spočítej PRIO a zapiš do item frontmatter
-
-**Co:** Aplikuj transparentní model: `PRIO = (Impact × 3) + (Urgency × 2) + (Readiness × 2) - (EffortScore × 1) - (Staleness × 1)`.
-
-**Jak:**
-```bash
-# Pro každý item:
-PRIO=$((($IMPACT * 3) + ($URGENCY * 2) + ($READINESS * 2) - ($EFFORT_SCORE * 1) - ($STALENESS * 1)))
-
-# Normalizuj na 0–100 (relativní škála je důležitá)
-PRIO_NORM=$(($PRIO * 100 / 100))  # nebo use fabric.py apply
-
-# Zapiš do frontmatter: prio: <int>
-```
-
-**Staleness (0–5):**
-- < 7 dní: 0
-- 7–30 dní bez pohybu: 1
-- 30–90 dní: 2
-- 90–180 dní: 3
-- \> 180 dní: 5 + intake item `prio-stale-{id}.md`
-
-**Monotonicity guard:** `updated:` field NESMÍ jít zpět. Pokud nový `updated` < stávající, drž starou hodnotu.
-
-**Minimum:** Všechny itemy mají `prio:` integer (1–100).
-
-**Anti-patterns:**
-- Neměň `status` (to řeší analyze/implement/review/close)
-- Nepoužívej magic čísla (vždy viditel model)
-
-### 7.5) Spočítej konkrétní příklady (K10 Fix)
-
-**Příklad 1: High-Priority Security Task**
-```
-Item: task-b042-add-input-validation.md
-Impact = 9 (T0=8 + 1 security) | Urgency = 9 (T0=7 + 2 DOS) | Readiness = 10 | EffortScore = 5 (M) | Staleness = 0
-PRIO = (9×3) + (9×2) + (10×2) - (5×1) - (0×1) = 27 + 18 + 20 - 5 = 60 (URGENT)
-```
-
-**Příklad 2: Medium-Priority Refactoring**
-```
-Item: task-b031-refactor-triage-service.md
-Impact = 4 (T2) | Urgency = 3 (T2, not urgent) | Readiness = 5 (DESIGN) | EffortScore = 7 (L) | Staleness = 1 (40 days)
-PRIO = (4×3) + (3×2) + (5×2) - (7×1) - (1×1) = 12 + 6 + 10 - 7 - 1 = 20 (MEDIUM)
-```
+**Detail:** Viz `references/scoring-logic.md` pro detailní instructions na parsing itemů, výpočet faktorů (Impact, Urgency, Readiness, EffortScore, Staleness), PRIO formulu a konkrétní příklady se factor breakdowns.
 
 ### 7.6) Regeneruj backlog.md
 
@@ -329,6 +249,44 @@ Reprioritizovány N itemů, top 20 hotovy pro sprint planning. Warnings: M, Stal
 ```
 
 **Minimum:** Report existuje, má povinné sekce (Souhrn, Top 20, Warnings), YAML frontmatter s schematem.
+
+### K10: Inline Example — LLMem Prioritization
+
+**Input:**
+Backlog item: `b042-recall-scoring.md`
+```
+title: "Recall scoring Jaccard + cosine"
+type: Task
+status: READY
+effort: M
+linked_vision_goal: recall-accuracy
+```
+
+**Output:**
+Scoring breakdown:
+```
+Impact: 8 (HIGH: links to vision, recall core capability)
+Urgency: 6 (MEDIUM: no active blocker, but affects sprint 4 goal)
+Effort: 5/10 (M = 5, lower effort = higher score)
+Readiness: 7 (READY status, well-defined AC)
+
+PRIO = (8 × 0.4) + (6 × 0.3) + (5 × 0.3) = 3.2 + 1.8 + 1.5 = 6.5 → ranked #8
+```
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Prioritizing Without Vision Fit
+# Detection: grep "PRIO:" backlog/*.md | while read l; do grep linked_vision_goal "${l%:*}" || echo "missing"; done | wc -l
+# Fix: Require vision link for T0/T1; else PRIO capped at 5 (low tier)
+
+# A2: Effort Estimate TBD
+# Detection: grep "effort: TBD\|effort:$" backlog/*.md
+# Fix: Use estimation heuristic (lines of code, test count) or mark as Spike/Research
+
+# A3: Stale PRIO (>30d)
+# Detection: find backlog -name "*.md" -mtime +30 | xargs grep "^prio:" | cut -d: -f1 | uniq
+# Fix: Re-prioritize quarterly or after major backlog changes
+```
 
 ---
 

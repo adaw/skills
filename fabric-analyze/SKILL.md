@@ -66,6 +66,14 @@ python skills/fabric-init/tools/protocol_log.py \
 ## §3 — Preconditions (temporální kauzalita)
 
 ```bash
+# --- K7: Path traversal guard ---
+for VAR in "{WORK_ROOT}" "{CODE_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # --- Phase validation (K1) ---
 PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}')
 if [ "$PHASE" != "implementation" ]; then
@@ -205,6 +213,19 @@ fi
 # K5: Analysis thresholds from config.md
 EFFORT_BASE=$(grep 'ANALYSIS.effort_base:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "1")
 MAX_DEPS_PER_TASK=$(grep 'ANALYSIS.max_deps_per_task:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "10")
+```
+
+### K10: Inline Example — LLMem Task Decomposition
+
+**Input:** Sprint target: "Add per-instance Qdrant support with warmup + async initialization"
+**Output:** 3 tasks (task-b015, task-b016, task-b017) with per-task analysis, effort estimates (M, S, S), dependencies (task-b015 → task-b016 → task-b017), Module Dependency Table showing storage/backends/*.py impact, Test Strategy covering Write Path chain (capture→triage→store→verify).
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Analyzing without governance specs — Detection: grep -L 'decisions/INDEX.md\|specs/INDEX.md' {ANALYSES_ROOT}/*.md
+# A2: Epic→Tasks missing intermediate decomposition — Detection: task has 0 sub-tasks but >8 files_touched
+# A3: Circular dependencies in Task Queue — Detection: task-a depends on task-b depends on task-a
+# A4: Effort estimates missing FILES_TOUCHED — Detection: grep -L 'FILES_TOUCHED:\|NEW_TESTS:' {ANALYSES_ROOT}/*-analysis.md
 ```
 
 Stručný přehled kroků:

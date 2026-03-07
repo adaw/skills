@@ -150,90 +150,7 @@ Pokud config nejde najít nebo YAML nejde parsovat → **STOP** a vytvoř `./boo
 
 ## 0.1) Normalizuj config (autodetect `COMMANDS`)
 
-Cíl: aby další fáze nemusely hádat test/lint/format příkazy a aby `fabric-test`/`fabric-close` mohly bezpečně enforce quality gates.
-
-1. Načti YAML blok `COMMANDS` z `{WORK_ROOT}/config.md`.
-2. Pokud je některá hodnota `TBD`, pokus se ji **deterministicky** doplnit podle repo signálů (viz níže).
-3. Změny zapisuj **jen** pro klíče, které byly `TBD` (nepřepisuj uživatelské hodnoty).
-4. Pokud auto-detekce selže:
-   - pro `COMMANDS.test` nastav fail-fast placeholder: `echo "CONFIGURE COMMANDS.test" && exit 1`
-   - pro `COMMANDS.lint` / `COMMANDS.format_check` nastav `""` (explicitně vypnuto) a vytvoř WARN intake item
-
-### Detekce (v tomto pořadí)
-
-A) **Makefile**
-- pokud existuje `Makefile` a obsahuje target `test:` → `COMMANDS.test = "make test"`
-- pokud existuje `lint:` → `COMMANDS.lint = "make lint"`
-- pokud existuje `lint-fix:` / `lint_fix:` → `COMMANDS.lint_fix = "make <target>"`
-- pokud existuje `format-check:` / `fmt-check:` / `format_check:` → `COMMANDS.format_check = "make <target>"`
-- pokud existuje `format:` / `fmt:` → `COMMANDS.format = "make <target>"`
-
-B) **Node.js (`package.json`)**
-- vyber package manager podle lockfile (`pnpm-lock.yaml`→pnpm, `yarn.lock`→yarn, jinak npm)
-- pokud `scripts.test` existuje → `COMMANDS.test = "<pm> test"`
-- pokud `scripts.lint` existuje → `COMMANDS.lint = "<pm> run lint"`
-- pokud `scripts.lint:fix` nebo `scripts.lint-fix` existuje → `COMMANDS.lint_fix = "<pm> run <script>"`
-- pokud `scripts.format:check` nebo `scripts.format-check` existuje → `COMMANDS.format_check = "<pm> run <script>"`
-- pokud `scripts.format` existuje → `COMMANDS.format = "<pm> run format"`
-
-C) **Python**
-- pokud existuje `pyproject.toml` nebo převaha `*.py` → `COMMANDS.test = "python -m pytest"`
-- pokud v `pyproject.toml` najdeš `ruff`:
-  - `COMMANDS.lint = "python -m ruff check ."`
-  - `COMMANDS.lint_fix = "python -m ruff check --fix ."`
-  - `COMMANDS.format_check = "python -m ruff format --check ."`
-  - `COMMANDS.format = "python -m ruff format ."`
-- jinak pokud najdeš `black`:
-  - `COMMANDS.format_check = "python -m black --check ."`
-  - `COMMANDS.format = "python -m black ."`
-
-D) **Go / Rust (pokud detekováno)**
-- `go.mod`:
-  - `COMMANDS.test = "go test ./..."`
-  - `COMMANDS.lint = "golangci-lint run"` (pokud `golangci-lint` dostupný; jinak `""`)
-  - `COMMANDS.lint_fix = "golangci-lint run --fix"` (pokud dostupný)
-  - `COMMANDS.format_check = "test -z \"$(gofmt -l .)\""`
-  - `COMMANDS.format = "gofmt -w ."`
-- `Cargo.toml`:
-  - `COMMANDS.test = "cargo test"`
-  - `COMMANDS.lint = "cargo clippy -- -D warnings"`
-  - `COMMANDS.lint_fix = "cargo clippy --fix --allow-dirty -- -D warnings"`
-  - `COMMANDS.format_check = "cargo fmt -- --check"`
-  - `COMMANDS.format = "cargo fmt"`
-
-E) **Java / JVM (pokud detekováno)**
-- `build.gradle` nebo `build.gradle.kts`:
-  - `COMMANDS.test = "gradle test"`
-  - `COMMANDS.lint = ""` (Java nemá standardní lint; nastav `""`)
-  - `COMMANDS.format_check = ""` (pokud `spotless` plugin → `gradle spotlessCheck`)
-  - `COMMANDS.format = ""` (pokud `spotless` → `gradle spotlessApply`)
-- `pom.xml`:
-  - `COMMANDS.test = "mvn test"`
-  - `COMMANDS.lint = ""` (pokud `checkstyle` plugin → `mvn checkstyle:check`)
-  - `COMMANDS.format_check = ""`
-  - `COMMANDS.format = ""`
-
-F) **Ruby (pokud detekováno)**
-- `Gemfile` nebo `Rakefile`:
-  - `COMMANDS.test = "bundle exec rake test"` (nebo `bundle exec rspec` pokud `.rspec` existuje)
-  - `COMMANDS.lint = "bundle exec rubocop"` (pokud `.rubocop.yml` existuje)
-  - `COMMANDS.lint_fix = "bundle exec rubocop -A"` (pokud rubocop dostupný)
-  - `COMMANDS.format_check = ""` (Ruby nemá standardní formátování mimo rubocop)
-  - `COMMANDS.format = ""`
-
-G) **Fallback (žádný rozpoznaný projekt)**
-- Pokud žádný z výše uvedených signálů neodpovídá:
-  - `COMMANDS.test` → nastav fail-fast placeholder: `echo "CONFIGURE COMMANDS.test" && exit 1`
-  - Ostatní → `""` (vypnuto)
-  - Vytvoř intake item `intake/init-unknown-project-type.md` s doporučením ručně nakonfigurovat COMMANDS
-
-### Evidence
-
-Pokud jsi něco autodetekoval nebo vypnul:
-
-- ujisti se, že existují `{WORK_ROOT}/reports/` a `{WORK_ROOT}/intake/` (pokud ne, vytvoř je `mkdir -p` ještě před zápisem)
-- vytvoř `{WORK_ROOT}/reports/config-commands-{YYYY-MM-DD}.md` (co bylo `TBD`, co bylo nastaveno, confidence, proč)
-- vytvoř intake item `{WORK_ROOT}/intake/config-commands-autodetected.md` (aby to bylo auditovatelné / přezkoumatelné)
+**Detail:** Viz `references/config-normalization.md` pro detailní autodetekci COMMANDS dle jazyka, fallback strategie a evidence.
 
 
 ## 1) Konfigurace (config.md) — bootstrap a kontrola (povinné)
@@ -422,24 +339,68 @@ Vytvoř report `{WORK_ROOT}/reports/init-{YYYY-MM-DD}.md`:
 
 ---
 
-## K10: Concrete Example — config.md Before/After
+## K10 — Concrete Example & Anti-patterns
 
-**Before init (no config.md):**
+### Example: Init LLMem Workspace — First Run
+
 ```
-$ ls {WORK_ROOT}/
-(empty)
+Input: WORK_ROOT=/home/user/projects/llmem (empty directory)
+FAST PATH execution:
+
+Step 1 - Bootstrap workspace skeleton:
+  python skills/fabric-init/tools/fabric.py bootstrap --create-vision-stub \
+    --out-json "{WORK_ROOT}/reports/bootstrap-2026-03-07.json"
+  Result: config.md, state.md, backlog.md, templates/ created
+
+Step 2 - Validate workspace:
+  python skills/fabric-init/tools/validate_fabric.py --workspace
+  Result: PASS (all directories exist, templates found)
+
+Step 3 - Enforce vision.md:
+  wc -l {WORK_ROOT}/vision.md
+  Result: 10 lines (stub only, WARN)
+  Action: Create intake item "vision-missing" with raw_priority=9
+
+Step 4 - Generate indexes:
+  python skills/fabric-init/tools/fabric.py governance-index
+  Result: DONE, INDEX.md created for decisions/ and specs/
+
+Output structure created:
+  {WORK_ROOT}/
+  ├── config.md (default values, COMMANDS.test=TBD — WARN)
+  ├── state.md (phase=orientation, sprint=1)
+  ├── vision.md (placeholder)
+  ├── backlog.md (empty index)
+  ├── templates/ (14 runtime templates copied)
+  ├── intake/ (vision-missing item created)
+  └── reports/init-2026-03-07.md (execution evidence)
 ```
 
-**After init:**
-```
-$ ls {WORK_ROOT}/
-config.md  state.md  backlog.md  templates/  reports/
-$ head -5 {WORK_ROOT}/config.md
-schema: fabric.config.v1
-PROJECT_ROOT: /home/user/llmem
-CODE_ROOT: src/llmem
-COMMANDS:
-  test: pytest -q
+### Anti-patterns (FORBIDDEN detection & prevention)
+
+```bash
+# A1: Config Overwrite — NESMÍ přepsat existující config.md
+# DETECTION: Test existence before copy
+if [ -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: config.md already exists — do not overwrite"
+  exit 1
+fi
+
+# A2: Vision Auto-generate — NESMÍ generovat obsah vision.md
+# DETECTION: Grep for real content (not placeholder)
+VISION_CONTENT=$(grep -cv '^#\|^>\|^$\|placeholder' "{WORK_ROOT}/vision.md" 2>/dev/null || echo 0)
+if [ "$VISION_CONTENT" -gt 5 ]; then
+  echo "WARN: vision.md appears to have auto-generated content"
+  exit 1  # STOP — vision is author-only
+fi
+
+# A3: State Overwrite — NESMÍ resetovat phase/step pokud validní
+# DETECTION: Read current state before patching
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}')
+if [ -n "$CURRENT_PHASE" ] && [ "$CURRENT_PHASE" != "orientation" ]; then
+  echo "WARN: state.md has phase=$CURRENT_PHASE (existing run) — do not reset"
+  # Only patch missing keys, NEVER overwrite phase/step
+fi
 ```
 
 ---

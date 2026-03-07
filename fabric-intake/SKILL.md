@@ -261,6 +261,48 @@ Stručný přehled kroků:
 4. **Regeneruj backlog index** — přes `fabric.py backlog-index`
 5. **Vytvoř intake report** — processed/created/merged/rejected/warnings
 
+### K10: Inline Example — LLMem Intake Triage
+
+**Input:**
+Raw intake item: `intake/raw-batch-endpoint.md`
+```
+title: "add batch endpoint"
+type: feature
+priority: high
+description: "APIs should support /capture/batch"
+```
+
+**Output:**
+```
+Triage result:
+Deduplicated: NO (new item)
+Vision alignment: HIGH (links to "Capture scalability" goal)
+Normalized: backlog/b051.md
+---
+title: "Add /capture/batch endpoint"
+type: Task
+tier: T1
+status: READY
+prio: 18
+effort: M
+linked_vision_goal: capture-scalability
+```
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Accepting Intake Without Dedup Check
+# Detection: diff <(cut -d: -f2 intake/raw-*.md) <(cut -d: -f2 backlog/*.md) | grep "<"
+# Fix: Run dedup first; skip if title slug matches existing backlog item
+
+# A2: Missing Vision Link on T0/T1
+# Detection: grep "tier: T[01]" backlog/*.md | grep -v "linked_vision_goal:"
+# Fix: Query vision.md for relevant goal; add linked_vision_goal field
+
+# A3: Invalid Type
+# Detection: grep "^type:" backlog/*.md | grep -v "Epic\|Story\|Task\|Bug\|Chore\|Spike"
+# Fix: Map to valid type enum; default to Task if ambiguous
+```
+
 ---
 
 ## §8 — Quality Gates

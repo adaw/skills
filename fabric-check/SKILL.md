@@ -248,6 +248,19 @@ Vytvoř `{WORK_ROOT}/reports/check-{YYYY-MM-DD}.md` s vyhodnocením všech check
 
 **Řešení:** Viz `references/workflow.md` — sektion "8) Vygeneruj audit report"
 
+### K10: Inline Example — LLMem Quality Audit
+
+**Input:** Sprint 3 workspace: test coverage 45%, 2 stale backlog items (>60 days), missing ADR for new /capture/batch endpoint, 3 broken doc links.
+**Output:** Audit report with score 65 (WARN), 4 findings (1 CRITICAL: test coverage <60%, 1 HIGH: ADR missing, 2 MEDIUM: broken links), 3 intake items created, auto-fixed backlog.md regeneration logged.
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Running check without current test results — Detection: ! ls {WORK_ROOT}/reports/test-*.md | xargs ls -tr | tail -1
+# A2: Accepting stale findings without refresh — Detection: grep -o 'updated: [^}]*' {report} shows last_run >3 days
+# A3: Missing CRITICAL findings in intake — Detection: grep CRITICAL {report} but no grep -l 'check-' {WORK_ROOT}/intake/*.md
+# A4: Score calculation ignoring weights — Detection: (CRITICAL×30 + HIGH×10) != (100 - score) from report
+```
+
 ---
 
 ## §8 — Quality Gates

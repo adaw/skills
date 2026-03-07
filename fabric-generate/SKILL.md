@@ -166,6 +166,45 @@ BACKLOG_WARN_THRESHOLD=${BACKLOG_WARN_THRESHOLD:-200}
 
 Detailní kroky viz `references/7-POSTUP.md` pro konkrétní regex patterns, scoring formule, vision alignment heuristics.
 
+### K10: Inline Example — LLMem Item Generation
+
+**Input:**
+```
+Gap report: "recall scoring has no Jaccard tests" (HIGH, 20 priority)
+Backlog: READY=8 items (below threshold 10)
+Vision goal: "Recall module fully tested"
+```
+
+**Output:**
+Generated intake items:
+```
+1. generate-jaccard-test-recall.md
+   Title: "Add Jaccard scoring unit tests"
+   Type: Task | Priority: 8 | Effort: S
+   Source: generate | Evidence: gap-g005, vision-pillar-recall
+
+2. generate-scoring-edge-cases.md
+   Title: "Test recall scoring edge cases (empty vectors, NaN)"
+   Type: Task | Priority: 7 | Effort: M
+```
+
+Dedup evidence: None matched existing backlog items.
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Duplicate Generation
+# Detection: comm -12 <(cut -d_ -f2- generate-*.md | sort) <(cut -d_ -f2- backlog/*.md | sort)
+# Fix: Run backlog-scan before generation; cross-check title slugs
+
+# A2: Missing Evidence
+# Detection: grep -L "Evidence:" intake/generate-*.md
+# Fix: Add evidence field (gap report, vision goal, or code pattern reference)
+
+# A3: Vague Titles
+# Detection: grep -E "improve|fix|enhance" intake/generate-*.md | wc -l
+# Fix: Rewrite as concrete: "Add Jaccard test for X" not "improve testing"
+```
+
 ---
 
 ## §8 — Quality Gates

@@ -219,6 +219,42 @@ Postup je organizován do 5 hlavních kroků. Detailní instrukce, bash skripty,
 
 → Detaily v **references/workflow.md § 5: Report creation** a **references/examples.md**
 
+### K10: Inline Example — LLMem Vision Analysis
+
+**Input:**
+```
+vision.md pillars: [Capture, Triage, Recall] with goals:
+- Capture: deterministic event logging (no LLM in path)
+- Triage: regex-based secrets detection & hashing
+- Recall: cosine + Jaccard scoring, injection format
+Non-goals: inference, fine-tuning, real-time streaming
+```
+
+**Output:**
+Report excerpt:
+```
+## Extracted Artifacts
+Pillars: 3 (Capture, Triage, Recall)
+Principles: 6 found (fail-open, deterministic, event-sourced, PII-safe, …)
+Coverage: 100% (all pillars → backlog items)
+Quality Gate: PASS (4/4 structural checks)
+```
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Undocumented Pillar
+# Detection: grep -c "^## " vision.md && grep -c "WORK_ROOT/backlog" backlog.md | diff
+# Fix: Add backlog items linking to each pillar in vision.md
+
+# A2: Vague Success Metrics
+# Detection: grep "success\|metric" vision.md | grep -v "%" | grep -v "days"
+# Fix: Rewrite as measurable + time-bound (e.g., "80% test coverage by sprint 5")
+
+# A3: Conflicting Principles
+# Detection: grep "^- " vision.md | head -5 > /tmp/p1; grep -A1 visions/ | grep "^- " | uniq -d /tmp/p1
+# Fix: Consolidate or explicitly note trade-offs in Non-Goals
+```
+
 ---
 
 ## §8 — Quality Gates (pokud skill má gates)

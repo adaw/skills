@@ -331,39 +331,45 @@ Pokud existují poslední 3 status reporty, extrahuj health score a key signals.
 
 ---
 
-### 7.10) Health score (heuristický)
+### 7.10 & 7.11) Health Score & Risk Identification
 
-**Co:** Vypočítat health score 0–100 na základě signálů.
+**Detail:** Viz `references/health-scoring.md` pro health scoring formula, risk identification patterns a assessment levels.
 
-**Jak:**
-Start 100:
-- -40 pokud tests FAIL
-- -20 pokud lint FAIL
-- -10 pokud format_check FAIL
-- -10 pokud WIP breach
-- -10 pokud BLOCKED > READY
+### K10: Inline Example — LLMem Status Dashboard
 
-**Minimum:**
-Health score musí být číselný (0–100) a musí být logika explicitní v reportu.
+**Input:**
+```
+Current sprint 3 (day 5 of 10):
+Tests: pytest -q → 47 passed, 2 failed (FAIL)
+Lint: ruff check src/ → 0 violations (PASS)
+Backlog: READY=12, IN_PROGRESS=1, BLOCKED=2, DONE=28
+Docs: modified 3 days ago, 8 .md files
+```
 
----
+**Output:**
+```
+Health Score: 67/100 (at-risk)
+| Signal | Status | Value | Assessment |
+| Tests | FAIL | 47/49 | blockers: test_qdrant, test_injection |
+| Lint | PASS | 0 | excellent |
+| Backlog | RISK | BLOCKED=2 | mitigate: unblock or drop from sprint |
+Risks: (1) test failures prevent merge; (2) 2 blocked items reduce sprint capacity
+```
 
-### 7.11) Risks identifikace (top 3–5)
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Stale Test Results
+# Detection: stat -c %Y reports/status-*.md | sort -n | tail -1; [if >24h ago]
+# Fix: Run fabric-status again; update test command in config.md if broken
 
-**Co:** Naidentifikovat konkrétní rizika, ne generické.
+# A2: Missing COMMANDS.test
+# Detection: grep "COMMANDS.test:" config.md | grep -E "TBD|^$"
+# Fix: Fill in test command (e.g., "pytest -q") and re-run
 
-**Jak:**
-Pro každé riziko: jméno + specifika + impact + next action. Příklady:
-- **2 test failures (1 flaky, 1 regression)**: test_recall_memory je flaky. test_capture_validation je nová regression. → Run tests 3x, investigate regression.
-- **3 BLOCKED backlog items**: task-b008 čeká na API spec. task-b012 čeká na Qdrant. → Unblock by EOD Friday.
-- **2 stale feature branches**: feature/semantic-v2 (15 days), hotfix/rate-limit (12 days). → Merge or delete by sprint end.
-
-**Minimum:**
-Top 3 rizika, každé s konkrétním názvem + impact + action.
-
-**Anti-patterns:**
-- Netvrdíš „dobrý stav" pokud BLOCKED > READY.
-- Nepiš generické riziko „kód je komplexní" bez specifik.
+# A3: Docs Drift (>30 days)
+# Detection: find DOCS_ROOT -name "*.md" -mtime +30 | wc -l
+# Fix: Schedule doc update task or create intake item for stale docs review
+```
 
 ---
 

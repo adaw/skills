@@ -220,6 +220,41 @@ Pro top gaps: vytvoř `{WORK_ROOT}/intake/gap-{gap_id}-{slug}.md` s frontmatter 
 
 Pokud `{WORK_ROOT}/fabric/processes/process-map.md` existuje: ověř, že dokumentované procesy mají implementaci v {CODE_ROOT}.
 
+### K10: Inline Example — LLMem Gap Detection
+
+**Input:**
+```
+Vision: Recall module must support cosine + Jaccard scoring
+Backlog: task-b042 "recall scoring" (READY)
+Code: src/llmem/recall/scoring.py exists, only cosine implemented
+Tests: test_scoring.py → tests cosine only (no Jaccard tests)
+```
+
+**Output:**
+Gap report entry:
+```
+| Gap ID | Type | Root Cause | Evidence | Impact | Priority |
+| G-005 | Code→Tests | OVERSIGHT | test_scoring.py:1-50 | MEDIUM | 18 |
+Intake item created: gap-g005-jaccard-test.md
+Title: "Add Jaccard scoring unit tests (recall module)"
+Type: Task | Priority: 8 | Effort: S
+```
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Reporting Non-Existent Code
+# Detection: grep "gap.*exists" report.md && find CODE_ROOT -path "*recall/scoring.py" | wc -l
+# Fix: Only report gaps for implemented code; planned items → "N/A, design phase"
+
+# A2: Missing Root Cause
+# Detection: grep "^| G-" report.md | grep -v "DEFERRED\|BLOCKED\|OVERSIGHT\|CAPACITY"
+# Fix: Tag each gap with root cause; else skip from intake
+
+# A3: Duplicate Gap Reports
+# Detection: cut -d'|' -f3 gap-report.md | sort | uniq -d
+# Fix: Dedup by evidence (file:line); merge identical gaps into single item
+```
+
 ---
 
 ## §8 — Quality Gates

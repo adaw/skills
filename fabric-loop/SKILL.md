@@ -242,6 +242,9 @@ if [ -z "$WORK_ROOT" ] || [ ! -d "$WORK_ROOT" ]; then
 fi
 
 # P3: state.md musí existovat (nebo bootstrap přes init)
+# NOTE: WARN (not STOP) is intentional — loop auto-bootstraps via fabric-init
+# If state.md is missing, loop dispatches fabric-init which creates it.
+# This is the ONLY precondition that uses WARN because loop IS the bootstrap trigger.
 if [ ! -f "$WORK_ROOT/state.md" ]; then
   echo "WARN: state.md missing — triggering fabric-init bootstrap"
 fi
@@ -397,6 +400,76 @@ Na konci každého RUN cyklu:
 - `{WORK_ROOT}/reports/run-{run_id}.md` existuje (vytvořeno `fabric.py run-report`; timeline + odkazy na step reporty)
 - existuje report pro daný step (pokud ho step generuje)
 - pokud došlo k chybě, existuje intake item s reprodukovatelným popisem
+
+---
+
+## K10 — Concrete Example & Anti-patterns
+
+### Example: Tick #3 — Dispatch fabric-implement, Check Exit
+
+```
+Loop iteration #3:
+  Loop boundary check: MAX_LOOPS=auto (100), current loop=3
+  Idle state check: state.step != idle → proceed
+
+  Tick #3.1 — State read:
+    phase=implementation, step=implement, sprint=2, wip_item=b015
+    Work status check: pending intake=0, backlog=1 (b015 status=IN_PROGRESS)
+    Exit condition? goal=release, tier_max=T3 → work remains
+
+  Tick #3.2 — Dispatch fabric-implement:
+    DISPATCH: skills/fabric-implement/SKILL.md
+    WIP=1, task=b015 checked, branch=feat/b015 exists
+    Preconditions PASS
+
+  Tick #3.3 — Skill execution:
+    RUNNING: fabric-implement (timeout=∞)
+    Result: PASS, report created, status→IN_REVIEW, rework_count=0
+    Duration: 142s
+
+  Tick #3.4 — Output validation:
+    Report exists: reports/implement-b015-2026-03-07-run42.md ✓
+    Backlog updated: status=IN_REVIEW ✓
+    Branch: feat/b015, 1 commit ✓
+    Next step: dispatch fabric-test
+
+  Current state AFTER tick #3:
+    step: test (advanced by dispatcher)
+    wip_item: b015 (stays)
+    wip_branch: feat/b015 (stays)
+    completed_step: implement (recorded)
+```
+
+### Anti-patterns (FORBIDDEN detection & prevention)
+
+```bash
+# A1: Dispatch same skill twice WITHOUT checking result
+# DETECTION: Dispatcher runs fabric-implement, but DOES NOT read report
+# FIX: After dispatch, MUST read {WORK_ROOT}/reports/implement-*.md
+#      and validate status field before next dispatch
+IMPL_REPORT=$(ls -t {WORK_ROOT}/reports/implement-${WIP_ITEM}-*.md 2>/dev/null | head -1)
+if [ -z "$IMPL_REPORT" ]; then
+  echo "STOP: implement report missing — cannot advance state"
+  exit 1
+fi
+
+# A2: Not checking exit condition for loop=auto
+# DETECTION: Loop continues despite no pending work
+# FIX: Before each tick, call `fabric.py work-status` and respect result
+WORK_STATUS=$(python skills/fabric-init/tools/fabric.py work-status --json-out /tmp/ws.json)
+if grep -q '"status": "none"' /tmp/ws.json; then
+  echo "No work remaining (goal=$GOAL) — LOOP BOUNDARY"
+  exit 0  # OK, not error
+fi
+
+# A3: Modifying state.md directly instead of via state-patch
+# DETECTION: Grep for `phase:` or `step:` edits in loop code
+# FIX: Use ONLY `fabric.py state-patch --fields-json '{...}'`
+# WRONG:
+  # sed -i 's/step: implement/step: test/' state.md
+# RIGHT:
+  # python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"step":"test"}'
+```
 
 ---
 

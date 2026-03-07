@@ -199,6 +199,43 @@ Detailní postup je v `references/workflow.md`. Zde shrnutí klíčových kroků
 
 **7.15) Vytvoř sprint report** — `{WORK_ROOT}/reports/sprint-{N}-{YYYY-MM-DD}.md` se summary, risks, analysis.
 
+### K10: Inline Example — LLMem Sprint Planning
+
+**Input:**
+```
+Sprint 4 capacity: 40 points (4 devs × 10 points each)
+Backlog top 5: b045(S/8pts), b038(S/8pts), b017(M/13pts), b029(XS/3pts), b041(M/13pts)
+Vision alignment: All 5 link to "Recall accuracy" pillar
+Dependencies: b017 blocks b041
+```
+
+**Output:**
+```
+Sprint 4 Plan (April 7–20):
+Targets (3 tasks, 24pts):
+| 1 | b045 | Task | Improve cosine scoring | S | 8 |
+| 2 | b038 | Bug | Fix Jaccard overflow | S | 8 |
+| 3 | b029 | Chore | Refactor injection | XS | 3 |
+
+Utilization: 19/40 points (47%) — conservative, leaves buffer
+Risks: b017 (M/13) and b041 (M/13) deferred to sprint 5 (capacity limits)
+```
+
+### K10: Anti-patterns (s detekcí)
+```bash
+# A1: Including M/L Tasks Without Splitting
+# Detection: grep "Effort: M\|Effort: L" sprints/sprint-*.md | wc -l
+# Fix: Break M/L tasks into smaller S/XS subtasks; include only <M effort
+
+# A2: Ignoring WIP=1 (Single-Piece Flow)
+# Detection: grep "IN_PROGRESS" backlog/*.md | wc -l; [should be ≤1 per sprint]
+# Fix: Complete prior sprint items before starting new ones
+
+# A3: Missing Definition of Done
+# Detection: grep "Definition of Done" sprints/sprint-*.md | wc -l
+# Fix: Add DoD checklist (tests pass, docs updated, PR reviewed, deployed to staging)
+```
+
 ---
 
 ## §8 — Quality Gates
