@@ -21,8 +21,12 @@ if ! echo "$MAX_COMPONENTS" | grep -qE '^[0-9]+$'; then
 fi
 
 # K5: Design thresholds from config.md
-MIN_TEST_CASES=$(grep 'DESIGN.min_test_cases:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "3")
-MAX_DEPS_PER_COMPONENT=$(grep 'DESIGN.max_deps_per_component:' "{WORK_ROOT}/config.md" | awk '{print $2}' || echo "5")
+MIN_TEST_CASES=$(grep 'DESIGN.min_test_cases:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MIN_TEST_CASES=${MIN_TEST_CASES:-3}
+if ! echo "$MIN_TEST_CASES" | grep -qE '^[0-9]+$'; then MIN_TEST_CASES=3; fi
+MAX_DEPS_PER_COMPONENT=$(grep 'DESIGN.max_deps_per_component:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_DEPS_PER_COMPONENT=${MAX_DEPS_PER_COMPONENT:-5}
+if ! echo "$MAX_DEPS_PER_COMPONENT" | grep -qE '^[0-9]+$'; then MAX_DEPS_PER_COMPONENT=5; fi
 ```
 
 When iterating through components, API methods, or test cases in design:
@@ -101,32 +105,39 @@ python skills/fabric-init/tools/protocol_log.py \
 
 ## §3 — Preconditions (temporální kauzalita)
 
-Design requires 6 preconditions. Detailed validation in **references/02-preconditions.md**.
-
-**Summary:**
-1. `{WORK_ROOT}/config.md` exists
-2. `{WORK_ROOT}/state.md` exists
-3. `{WORK_ROOT}/backlog/${TASK_ID}.md` exists and accessible
-4. Task status is DESIGN, READY, or IDEA (not IN_PROGRESS/DONE)
-5. `{CODE_ROOT}/` exists (optional; if missing, design is theoretical)
-6. Governance files exist (optional; if missing, governance checks skipped)
-
-**Dependency chain:**
-```
-fabric-init → fabric-intake → fabric-prio → [fabric-design] → fabric-analyze → fabric-implement
-```
-
-**Precondition: Priority validation (K6 — fabric-prio dependency)**
-
-Verify backlog item has been prioritized:
 ```bash
-# Precondition: Priority validation (K6 — fabric-prio dependency)
-# Verify backlog item has been prioritized
-ITEM_PRIO=$(grep 'prio:' "{TARGET_ITEM}" | awk '{print $2}' 2>/dev/null || echo "")
+# K7: Path traversal guard
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
+# K6: Mandatory preconditions (1-3)
+if [ ! -f "{WORK_ROOT}/config.md" ]; then
+  echo "STOP: config.md not found — run fabric-init first"
+  exit 1
+fi
+if [ ! -f "{WORK_ROOT}/state.md" ]; then
+  echo "STOP: state.md not found — run fabric-init first"
+  exit 1
+fi
+if [ ! -f "{WORK_ROOT}/backlog/${TASK_ID}.md" ]; then
+  echo "STOP: backlog item ${TASK_ID} not found"
+  exit 1
+fi
+
+# K6: Priority validation (fabric-prio dependency)
+ITEM_PRIO=$(grep 'prio:' "{WORK_ROOT}/backlog/${TASK_ID}.md" | awk '{print $2}' 2>/dev/null)
 if [ -z "$ITEM_PRIO" ]; then
   echo "WARN: Target item missing prio field — run fabric-prio first"
 fi
 ```
+
+**Dependency chain:** `fabric-init → fabric-intake → fabric-prio → [fabric-design] → fabric-analyze → fabric-implement`
+
+Detail: `references/02-preconditions.md` (optional checks 4-6: task status, CODE_ROOT, governance).
 
 ---
 

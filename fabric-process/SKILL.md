@@ -69,6 +69,14 @@ Detail bash commands: Viz `references/preconditions.md` — "Protocol Logging" s
 Před spuštěním ověř tyto podmínky. Detailní checks a interpretace: Viz `references/preconditions.md`.
 
 ```bash
+# K7: Path traversal guard
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
+
 # K1: Phase validation — process mapping runs in orientation
 CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
 if [ "$CURRENT_PHASE" != "orientation" ]; then

@@ -85,7 +85,8 @@ fi
 
 # --- Precondition 4: Templates existují ---
 if [ ! -f "{WORK_ROOT}/templates/sprint-plan.md" ]; then
-  echo "WARN: sprint-plan.md template not found"
+  echo "STOP: sprint-plan.md template not found — run fabric-init to install templates"
+  exit 1
 fi
 
 # --- Precondition 5: Vision existuje (for goal alignment) ---

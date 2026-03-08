@@ -30,40 +30,38 @@ fabric-checker target=implement   # audit jen jednoho skillu
 
 ---
 
-## Klasifikace skills (důležité — čti PŘED auditem)
+## Klasifikace skills (čti PŘED auditem)
 
-### Tier 1: Orchestrátory (JINÁ pravidla)
+**T1 Orchestrátory** (`fabric-loop`, `fabric-init`): K1-K10 ano, template compliance NE.
+**T2 Builder-born** (mají `<!-- built from: builder-template -->`): K1-K10 + template compliance.
+**T3 Legacy** (vše ostatní): K1-K10 ano, template compliance NE.
+**META** (`fabric-checker`, `fabric-builder`): Neauditují se navzájem — opravy jen manuálně.
 
-Tyto skills ŘÍDÍ ostatní — mají vlastní logiku, kterou nelze vtěsnat do builder-template.
-Audituj je na K1–K10, ale **NE na template compliance (Fáze 4)**.
+---
 
-| Skill | Proč je speciální |
-|-------|-------------------|
-| `fabric-loop` | State machine orchestrátor. Řídí step transitions, idle detection, blocker escalation. Celý skill JE postup — nemá §7 v běžném smyslu. |
-| `fabric-init` | Bootstrap. Vytváří workspace od nuly. Nemá prereqs (je sám prereq všeho). |
+## §3 — Preconditions (bash)
 
-### Tier 2: Builder-born skills (PLNÝ audit + template compliance)
+```bash
+# K7: Path traversal guard
+for VAR in "{WORK_ROOT}"; do
+  if echo "$VAR" | grep -qE '\.\.'; then
+    echo "STOP: Path traversal detected in '$VAR'"
+    exit 1
+  fi
+done
 
-Skills vytvořené přes `fabric-builder build`. Audituj na K1–K10 **A** na template compliance (Fáze 4).
+# K6: skills/ directory must exist
+if [ ! -d "skills/fabric-init" ]; then
+  echo "STOP: skills/fabric-init not found — fabric framework not installed"
+  exit 1
+fi
 
-Jak poznat builder-born skill:
-- Má v SKILL.md komentář `<!-- built from: builder-template -->`
-
+# K7: Scope parameter validation (if provided)
+if [ -n "$SCOPE" ] && ! echo "$SCOPE" | grep -qE '^(quick|deep|target)$'; then
+  echo "STOP: Invalid scope='$SCOPE' — expected quick|deep|target"
+  exit 1
+fi
 ```
-# Builder-born skills (doplňuj při vytváření nových):
-# (zatím žádné — fabric-design bude první)
-```
-
-### Tier 3: Legacy skills (scoring K1–K10, BEZ template compliance)
-
-Všechny ostatní existující skills. Vznikly PŘED builder-template.
-Audituj na K1–K10, ale **NEPOROVNÁVEJ s template** — generovalo by to false positives.
-
-### META: Checker a Builder jsou nedotknutelné
-
-- `fabric-checker` NEAUDITUJE sám sebe ANI `fabric-builder`
-- `fabric-builder` NEOPRAVUJE sám sebe ANI `fabric-checker`
-- Opravy checker/builder se dělají VÝHRADNĚ manuálně (člověk + LLM v přímé konverzaci)
 
 ---
 
@@ -93,16 +91,7 @@ for SKILL_FILE in skills/fabric-*/SKILL.md; do
 done
 ```
 
-### 0.2) Co auditujeme per tier
-
-| Tier | K1–K10 Scoring | Simulace (F2) | Work Quality (F3) | Template Compliance (F4) |
-|------|:-:|:-:|:-:|:-:|
-| T1 orchestrátory | ANO | ANO | ADAPTOVANĚ* | NE |
-| T2 builder-born | ANO | ANO | ANO | **ANO** |
-| T3 legacy | ANO | ANO | ANO | NE |
-| SKIP (checker + builder) | — | — | — | — |
-
-*\* Pro orchestrátory: K10 se hodnotí jinak — „je logika kompletní a deterministická?" místo „má §7 šablony výstupu?"*
+### 0.2) Audit scope per tier: T1=K1-K10+F2 (no F4), T2=K1-K10+F2+F3+**F4**, T3=K1-K10+F2+F3 (no F4), SKIP=checker+builder
 
 ### 0.3) Podpůrné soubory pro audit
 

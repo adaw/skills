@@ -152,11 +152,20 @@ python skills/fabric-init/tools/fabric.py backlog-scan \
 # K5: Read max gaps from config.md
 MAX_GAPS=$(grep 'GAP.max_gaps:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
 MAX_GAPS=${MAX_GAPS:-50}
+# K2: Numeric guard for MAX_GAPS
+if ! echo "$MAX_GAPS" | grep -qE '^[0-9]+$'; then
+  MAX_GAPS=50
+  echo "WARN: MAX_GAPS not numeric, reset to default (50)"
+fi
 GAP_COUNTER=0
 
 # K5: Gap thresholds from config.md
 MIN_COVERAGE_PCT=$(grep 'GAP.min_coverage_pct:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
 MIN_COVERAGE_PCT=${MIN_COVERAGE_PCT:-80}
+if ! echo "$MIN_COVERAGE_PCT" | grep -qE '^[0-9]+$'; then
+  MIN_COVERAGE_PCT=80
+  echo "WARN: MIN_COVERAGE_PCT not numeric, reset to default (80)"
+fi
 GAP_SEVERITY_THRESHOLD=$(grep 'GAP.severity_threshold:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
 GAP_SEVERITY_THRESHOLD=${GAP_SEVERITY_THRESHOLD:-medium}
 ```

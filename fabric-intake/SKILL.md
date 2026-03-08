@@ -236,6 +236,10 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/reports/intake-plan
 # K5: Intake thresholds from config.md
 MAX_INTAKE_ITEMS=$(grep 'INTAKE.max_items:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
 MAX_INTAKE_ITEMS=${MAX_INTAKE_ITEMS:-200}
+if ! echo "$MAX_INTAKE_ITEMS" | grep -qE '^[0-9]+$'; then
+  MAX_INTAKE_ITEMS=200
+  echo "WARN: MAX_INTAKE_ITEMS not numeric, reset to default (200)"
+fi
 ```
 
 > **Detailní triage pravidla a workflow:** Přečti `references/workflow.md` pomocí Read toolu.
