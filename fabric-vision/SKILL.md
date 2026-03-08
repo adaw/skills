@@ -251,8 +251,11 @@ Quality Gate: PASS (4/4 structural checks)
 # Fix: Rewrite as measurable + time-bound (e.g., "80% test coverage by sprint 5")
 
 # A3: Conflicting Principles
-# Detection: grep "^- " vision.md | head -5 > /tmp/p1; grep -A1 visions/ | grep "^- " | uniq -d /tmp/p1
-# Fix: Consolidate or explicitly note trade-offs in Non-Goals
+# Detection:
+grep "^- " "{WORK_ROOT}/vision.md" | sort > /tmp/vision_principles.txt
+for f in "{WORK_ROOT}"/visions/*.md; do grep "^- " "$f" 2>/dev/null; done | sort > /tmp/sub_principles.txt
+comm -12 /tmp/vision_principles.txt /tmp/sub_principles.txt | head -5
+# Pokud duplicity → pravděpodobný konflikt. Fix: Consolidate or note trade-offs in Non-Goals
 ```
 
 ---

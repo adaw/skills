@@ -88,19 +88,19 @@ All preconditions MUST be met. Skill STOPs at first missing dependency.
 
 ```bash
 # 1. config.md exists (stores project-specific configuration)
-test -f config.md || { echo "STOP: config.md missing"; exit 1; }
+test -f "{WORK_ROOT}/config.md" || { echo "STOP: config.md missing"; exit 1; }
 
 # 2. state.md exists (tracks architectural state from prior runs)
-test -f state.md || { echo "STOP: state.md missing"; exit 1; }
+test -f "{WORK_ROOT}/state.md" || { echo "STOP: state.md missing"; exit 1; }
 
 # 3. vision.md exists (CRITICAL — architect scores against principles)
-test -f vision.md || {
+test -f "{WORK_ROOT}/vision.md" || {
   echo "STOP: vision.md missing — architect cannot score without vision principles"
   exit 1
 }
 
 # 4. backlog/ directory exists (for mutations + cross-reference)
-test -d backlog/ || { echo "STOP: backlog/ directory missing"; exit 1; }
+test -d "{WORK_ROOT}/backlog/" || { echo "STOP: backlog/ directory missing"; exit 1; }
 
 # 5. CODE_ROOT exists and has .py files
 CODE_ROOT="${CODE_ROOT:-.}"

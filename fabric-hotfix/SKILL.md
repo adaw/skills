@@ -283,17 +283,13 @@ Schema: `fabric.report.v1` with status, task_id, effort, merge_commit, evidence 
 ## §12 — Metadata (pro fabric-loop orchestraci)
 
 ```yaml
-# Zařazení v lifecycle
+depends_on: [fabric-init]
+feeds_into: [fabric-check]
 phase: utility
-step: hotfix
-
-# Oprávnění
-may_modify_state: false        # hotfix nesmí měnit phase/step/sprint
-may_modify_backlog: true       # vytváří/aktualizuje backlog items
-may_modify_code: true          # implementuje kód + testy
-may_create_intake: true        # při failures
-
-# Pořadí v pipeline
-depends_on: [fabric-init]      # jen init — hotfix obchází sprint planning
-feeds_into: [fabric-check]     # po hotfix je vhodné spustit check
+lifecycle_step: hotfix
+touches_state: false
+touches_git: true
+estimated_ticks: 1
+idempotent: false
+fail_mode: fail-open
 ```

@@ -428,3 +428,17 @@ done
 - ❌ Status not IN_REVIEW
 - ❌ Tests not PASS
 - ❌ Stubs/pass/TODO in code
+
+## §12 — Metadata (pro fabric-loop orchestraci)
+
+```yaml
+depends_on: [fabric-analyze, fabric-close]
+feeds_into: [fabric-test]
+phase: implementation
+lifecycle_step: implement
+touches_state: true
+touches_git: true
+estimated_ticks: 1-3
+idempotent: false
+fail_mode: fail-open
+```

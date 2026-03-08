@@ -484,3 +484,16 @@ python skills/fabric-init/tools/protocol_log.py \
   --status {OK|WARN|ERROR} \
   --report "{WORK_ROOT}/reports/checker-{YYYY-MM-DD}.md"
 ```
+
+## §12 — Metadata
+
+```yaml
+depends_on: []
+feeds_into: []
+phase: meta
+lifecycle_step: checker
+touches_state: false
+touches_git: false
+idempotent: true
+fail_mode: fail-closed
+```

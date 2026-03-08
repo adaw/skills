@@ -300,21 +300,6 @@ Total: {N} items (max 100 respected)
 
 ---
 
-## §12 — Metadata
-
-```yaml
-phase: utility
-step: autonomous_work_generation
-may_modify_state: false
-may_modify_backlog: false
-may_create_intake: true
-may_modify_code: false
-depends_on: [fabric-init]
-feeds_into: [fabric-intake]
-```
-
----
-
 ## Anti-patterns (ZAKÁZÁNO)
 
 - **A1: Duplicate Intake** — Backlog dedup check; skip existující
@@ -363,4 +348,18 @@ validate_path() {
     exit 1
   fi
 }
+```
+
+## §12 — Metadata (pro fabric-loop orchestraci)
+
+```yaml
+depends_on: [fabric-gap]
+feeds_into: [fabric-intake]
+phase: orientation
+lifecycle_step: generate
+touches_state: false
+touches_git: false
+estimated_ticks: 1
+idempotent: true
+fail_mode: fail-open
 ```

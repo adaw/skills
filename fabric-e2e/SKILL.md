@@ -302,3 +302,17 @@ metadata:
 - Regression detection compares with previous e2e reports automatically
 - Failure handling is defensive: phases can fail independently; teardown always happens
 - Health gate is non-negotiable: if server doesn't start, stop immediately
+
+## §12 — Metadata (pro fabric-loop orchestraci)
+
+```yaml
+depends_on: [fabric-implement]
+feeds_into: []
+phase: implementation
+lifecycle_step: e2e
+touches_state: false
+touches_git: false
+estimated_ticks: 1
+idempotent: true
+fail_mode: fail-open
+```

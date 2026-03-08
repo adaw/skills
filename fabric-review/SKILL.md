@@ -458,3 +458,17 @@ findings:
     fix_procedure: "..."
     estimated_effort: "Xmin|Xh"
 ```
+
+## §12 — Metadata (pro fabric-loop orchestraci)
+
+```yaml
+depends_on: [fabric-test]
+feeds_into: [fabric-close, fabric-implement]
+phase: implementation
+lifecycle_step: review
+touches_state: false
+touches_git: false
+estimated_ticks: 1
+idempotent: true
+fail_mode: fail-open
+```

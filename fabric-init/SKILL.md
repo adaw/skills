@@ -429,3 +429,17 @@ Před návratem ověř:
 - `validate_fabric.py --workspace` PASS (nebo warnings only)
 
 Pokud něco chybí → zapiš do init reportu jako CRITICAL + vytvoř intake item.
+
+## §12 — Metadata (pro fabric-loop orchestraci)
+
+```yaml
+depends_on: []
+feeds_into: [fabric-vision]
+phase: orientation
+lifecycle_step: init
+touches_state: true
+touches_git: false
+estimated_ticks: 1
+idempotent: true
+fail_mode: fail-closed
+```

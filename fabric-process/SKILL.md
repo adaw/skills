@@ -85,7 +85,7 @@ if [ "$CURRENT_PHASE" != "orientation" ]; then
 fi
 
 # K6: Dependency enforcement — fabric-architect must have run
-if ! ls {WORK_ROOT}/reports/architect-*.md >/dev/null 2>&1; then
+if ! ls "{WORK_ROOT}"/reports/architect-*.md >/dev/null 2>&1; then
   echo "STOP: No architect report found — run fabric-architect before fabric-process"
   python skills/fabric-init/tools/protocol_log.py \
     --work-root "{WORK_ROOT}" --skill "process" --event error \

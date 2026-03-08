@@ -425,3 +425,17 @@ echo "Self-check passed: sprint close complete"
 **For detailed procedures, concrete examples, stub verification logic, commit message patterns, and full error recovery flows, see:**
 - `references/workflow.md` — detailed closing steps, burndown tracking, merge loop orchestration
 - `references/examples.md` — K10 concrete examples with real LLMem project data
+
+## §12 — Metadata (pro fabric-loop orchestraci)
+
+```yaml
+depends_on: [fabric-review]
+feeds_into: [fabric-implement, fabric-docs]
+phase: closing
+lifecycle_step: close
+touches_state: true
+touches_git: true
+estimated_ticks: 1
+idempotent: true
+fail_mode: fail-open
+```
