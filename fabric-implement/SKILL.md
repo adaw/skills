@@ -404,32 +404,9 @@ done
 
 ---
 
-## §12 Metadata
-
-| Field | Value |
-|-------|-------|
-| **WIP Policy** | WIP=1 (never parallel) |
-| **Timeout (tests)** | 300s |
-| **Timeout (lint/fmt)** | 120s |
-| **Coverage threshold** | ≥60% (CORE modules) |
-| **Max function LOC** | ≤50 |
-| **Max auto-fix counter** | 1× per task |
-| **Phase** | implementation |
-| **Downstream** | fabric-review, fabric-close |
-| **Upstream** | fabric-analyze, Task Queue selection |
-
-**Downstream Contract (WQ7):**
-- fabric-review: Status=IN_REVIEW, all tests PASS, lint PASS
-- fabric-close: Branch exists, commit msg conventional, no stubs
-- backlog-index: Item updated with branch/status, timestamp current
-
-**Errors breaking contract (CRITICAL):**
-- ❌ Branch not created
-- ❌ Status not IN_REVIEW
-- ❌ Tests not PASS
-- ❌ Stubs/pass/TODO in code
-
 ## §12 — Metadata (pro fabric-loop orchestraci)
+
+**Downstream Contract (WQ7):** fabric-review (Status=IN_REVIEW, tests+lint PASS), fabric-close (branch exists, conventional commit, no stubs).
 
 ```yaml
 depends_on: [fabric-analyze, fabric-close]

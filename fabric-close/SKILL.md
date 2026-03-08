@@ -407,26 +407,9 @@ echo "Self-check passed: sprint close complete"
 
 ---
 
-# §12 METADATA
-
-| Field | Value |
-|-------|-------|
-| **Skill Name** | fabric-close |
-| **Phase** | closing |
-| **Depends On** | fabric-review (task reviews must complete first) |
-| **Feeds Into** | fabric-loop (orchestrator), backlog (via index regeneration) |
-| **Estimated Duration** | ~2-5 min per task (merge + gates) |
-| **Failure Mode** | Fail-open (gates failures don't block close, logged as warnings) |
-| **Idempotence** | Per-task reports are write-once (rerunning skips merged tasks) |
-| **Builder Template** | Yes (sections §1-§12) |
-
----
-
-**For detailed procedures, concrete examples, stub verification logic, commit message patterns, and full error recovery flows, see:**
-- `references/workflow.md` — detailed closing steps, burndown tracking, merge loop orchestration
-- `references/examples.md` — K10 concrete examples with real LLMem project data
-
 ## §12 — Metadata (pro fabric-loop orchestraci)
+
+> Detail: `references/workflow.md` (closing steps, merge loop), `references/examples.md` (K10 examples).
 
 ```yaml
 depends_on: [fabric-review]

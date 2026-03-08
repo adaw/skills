@@ -273,37 +273,9 @@ See `references/failure-handling-reference.md` for detailed failure matrix and f
 - Tests fail: Report FAIL + create intake items
 - Teardown hangs: WARN but don't block
 
-## §12 Metadata
-
-```yaml
-metadata:
-  phase: implementation
-  step: e2e
-  skill_type: fabric-builder
-  may_modify_state: false
-  may_modify_backlog: false
-  may_modify_code: false  # e2e is read-only — only runs tests, doesn't fix
-  may_create_intake: true
-  depends_on: [fabric-implement, fabric-test]
-  feeds_into: [fabric-review, fabric-close]
-  timeout_seconds: 600  # 10 min total: setup 2min + tests 5min + teardown 1min + report 2min
-  port_required: 8099
-  backend_required: inmemory|qdrant
-  min_tests_required: 8
-  min_tests_pass_percentage: 75
-```
-
----
-
-**Final notes:**
-- This skill is **read-only** on the codebase — it runs tests, never modifies code or fixes bugs
-- Server startup happens in isolated temp directory; no production data is touched
-- All output is logged; logs are preserved for debugging even if tests pass
-- Regression detection compares with previous e2e reports automatically
-- Failure handling is defensive: phases can fail independently; teardown always happens
-- Health gate is non-negotiable: if server doesn't start, stop immediately
-
 ## §12 — Metadata (pro fabric-loop orchestraci)
+
+> Read-only skill — runs tests, never modifies code. Timeout 600s. Port 8099. Min 8 tests, 75% pass rate.
 
 ```yaml
 depends_on: [fabric-implement]

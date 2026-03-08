@@ -77,7 +77,7 @@ if ! git rev-parse --verify "$WIP_BRANCH" >/dev/null 2>&1; then
 fi
 
 # 2. Test report exists (temporal dependency: implement→test→review)
-LATEST_TEST_REPORT=$(ls -t {WORK_ROOT}/reports/test-${WIP_ITEM}-*.md 2>/dev/null | head -1)
+LATEST_TEST_REPORT=$(ls -t "{WORK_ROOT}"/reports/test-${WIP_ITEM}-*.md 2>/dev/null | head -1)
 if [ -z "$LATEST_TEST_REPORT" ]; then
   echo "STOP: no test report found for wip_item=$WIP_ITEM — run fabric-test first"
   exit 1
@@ -87,7 +87,7 @@ fi
 REWORK_COUNT=$(grep 'rework_count:' "{WORK_ROOT}/backlog/${WIP_ITEM}.md" | awk '{print $2}' | tr -d '[:space:]')
 REWORK_COUNT=${REWORK_COUNT:-0}
 # K7: Numeric guard — prevent shell injection via rework_count field
-if ! echo "$REWORK_COUNT" | grep -qE '^[0-9]*$'; then
+if ! echo "$REWORK_COUNT" | grep -qE '^[0-9]+$'; then
   echo "STOP: rework_count='$REWORK_COUNT' not numeric in backlog/${WIP_ITEM}.md"
   exit 1
 fi

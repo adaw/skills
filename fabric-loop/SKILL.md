@@ -449,7 +449,7 @@ Loop iteration #3:
 # DETECTION: Dispatcher runs fabric-implement, but DOES NOT read report
 # FIX: After dispatch, MUST read {WORK_ROOT}/reports/implement-*.md
 #      and validate status field before next dispatch
-IMPL_REPORT=$(ls -t {WORK_ROOT}/reports/implement-${WIP_ITEM}-*.md 2>/dev/null | head -1)
+IMPL_REPORT=$(ls -t "{WORK_ROOT}"/reports/implement-${WIP_ITEM}-*.md 2>/dev/null | head -1)
 if [ -z "$IMPL_REPORT" ]; then
   echo "STOP: implement report missing — cannot advance state"
   exit 1

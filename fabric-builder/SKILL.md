@@ -356,7 +356,7 @@ fabric-builder fix max=5              # max počet oprav (default: 10)
 
 ```bash
 # Najdi nejnovější checker report
-REPORT=$(ls -t {WORK_ROOT}/reports/checker-*.md 2>/dev/null | head -1)
+REPORT=$(ls -t "{WORK_ROOT}"/reports/checker-*.md 2>/dev/null | head -1)
 if [ -z "$REPORT" ]; then
   echo "STOP: žádný checker report — spusť fabric-checker nejdřív"
   exit 1
