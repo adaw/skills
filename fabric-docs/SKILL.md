@@ -136,8 +136,8 @@ grep -rn "^def \|^async def " {CODE_ROOT}/ --include='*.py' \
   | sort > /tmp/current-funcs.txt 2>/dev/null || true
 
 # 3. Save baseline for delta comparison
-cp /tmp/current-classes.txt {WORK_ROOT}/reports/baseline-classes-$(date +%Y-%m-%d).txt 2>/dev/null || true
-cp /tmp/current-funcs.txt {WORK_ROOT}/reports/baseline-funcs-$(date +%Y-%m-%d).txt 2>/dev/null || true
+cp /tmp/current-classes.txt "{WORK_ROOT}"/reports/baseline-classes-$(date +%Y-%m-%d).txt 2>/dev/null || true
+cp /tmp/current-funcs.txt "{WORK_ROOT}"/reports/baseline-funcs-$(date +%Y-%m-%d).txt 2>/dev/null || true
 ```
 
 ---

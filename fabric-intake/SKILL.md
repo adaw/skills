@@ -141,7 +141,7 @@ fi
 
 When processing intake items, enforce counter:
 ```bash
-for intake_file in {WORK_ROOT}/intake/*.md; do
+for intake_file in "{WORK_ROOT}"/intake/*.md; do
   [ -f "$intake_file" ] || continue
   # Idempotence: skip already-processed files (check done/ directory)
   BASENAME=$(basename "$intake_file")

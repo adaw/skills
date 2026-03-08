@@ -258,7 +258,7 @@ Status update: IN_PROGRESS (rework required)
 # A1: Approve WITHOUT running tests (review bypasses quality gates)
 # DETECTION: Verdict=CLEAN but test status unknown
 # FIX: Verify test report exists AND status=PASS before verdict
-LATEST_TEST=$(ls -t {WORK_ROOT}/reports/test-${WIP_ITEM}-*.md 2>/dev/null | head -1)
+LATEST_TEST=$(ls -t "{WORK_ROOT}"/reports/test-${WIP_ITEM}-*.md 2>/dev/null | head -1)
 if [ -z "$LATEST_TEST" ]; then
   echo "STOP: no test report for $WIP_ITEM — run fabric-test first"
   exit 1

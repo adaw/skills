@@ -361,8 +361,8 @@ Expected outputs:
 # A1: Missing internal chain for discovered external process
 # DETECTION: Route found (grep @router.post) but no call trace documented
 # FIX: For EVERY external process, must have ≥1 internal chain traced
-EXTERNAL_COUNT=$(grep -c '@router\|@app.command\|@click' {CODE_ROOT}/**/*.py 2>/dev/null || echo 0)
-INTERNAL_COUNT=$(grep -c '^chain-' {WORK_ROOT}/fabric/processes/process-map.md 2>/dev/null || echo 0)
+EXTERNAL_COUNT=$(grep -c '@router\|@app.command\|@click' "${CODE_ROOT}"/**/*.py 2>/dev/null || echo 0)
+INTERNAL_COUNT=$(grep -c '^chain-' "{WORK_ROOT}"/fabric/processes/process-map.md 2>/dev/null || echo 0)
 if [ "$EXTERNAL_COUNT" -gt "$INTERNAL_COUNT" ]; then
   echo "WARN: external_count ($EXTERNAL_COUNT) > internal_count ($INTERNAL_COUNT)"
   echo "ACTION: Trace missing call chains"
@@ -371,8 +371,8 @@ fi
 # A2: Not validating contract_modules list
 # DETECTION: Process file lists contract_modules but it's empty array []
 # FIX: Require contract_modules to be non-empty list OR explicitly marked "no_contract"
-MODULES=$(grep -c 'contract_modules:' {WORK_ROOT}/fabric/processes/*.md 2>/dev/null || echo 0)
-EMPTY=$(grep -c 'contract_modules: \[\]' {WORK_ROOT}/fabric/processes/*.md 2>/dev/null || echo 0)
+MODULES=$(grep -c 'contract_modules:' "{WORK_ROOT}"/fabric/processes/*.md 2>/dev/null || echo 0)
+EMPTY=$(grep -c 'contract_modules: \[\]' "{WORK_ROOT}"/fabric/processes/*.md 2>/dev/null || echo 0)
 if [ "$EMPTY" -gt 0 ]; then
   echo "FAIL: $EMPTY process files have empty contract_modules"
   exit 1

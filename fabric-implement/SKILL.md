@@ -392,7 +392,7 @@ fi
 
 **Blocked dependencies (WARN but no auto-proceed):**
 ```bash
-DEPENDS=$(grep 'depends_on:' {WORK_ROOT}/backlog/{id}.md | sed 's/depends_on://')
+DEPENDS=$(grep 'depends_on:' "{WORK_ROOT}/backlog/${id}.md" | sed 's/depends_on://')
 for DEP in $DEPENDS; do
   DEP_STATUS=$(grep 'status:' "{WORK_ROOT}/backlog/${DEP}.md" | awk '{print $2}')
   if [ "$DEP_STATUS" != "DONE" ]; then
