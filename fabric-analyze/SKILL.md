@@ -76,8 +76,8 @@ done
 
 # --- Phase validation (K1) ---
 PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}')
-if [ "$PHASE" != "implementation" ]; then
-  echo "STOP: fabric-analyze requires phase=implementation, current: $PHASE"
+if [ "$PHASE" != "planning" ]; then
+  echo "STOP: fabric-analyze requires phase=planning, current: $PHASE"
   exit 1
 fi
 

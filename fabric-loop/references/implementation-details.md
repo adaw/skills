@@ -4,6 +4,25 @@ This document contains the state diagram, crash recovery algorithms, YAML recove
 
 ---
 
+## Partial State Guard
+
+Po načtení state.md ověř přítomnost povinných polí. Chybějící pole = STOP.
+
+```bash
+# Required fields in state.md (partial state = STOP)
+for FIELD in phase step sprint; do
+  VALUE=$(grep "^${FIELD}:" "{WORK_ROOT}/state.md" | awk '{print $2}')
+  if [ -z "$VALUE" ] || [ "$VALUE" = "null" ]; then
+    echo "STOP: state.md missing required field '${FIELD}' — run fabric-init"
+    python skills/fabric-init/tools/fabric.py state-patch \
+      --fields-json "{\"error\":\"partial state: missing ${FIELD}\"}"
+    exit 1
+  fi
+done
+```
+
+---
+
 ## State Diagram (textual)
 
 ```

@@ -105,6 +105,55 @@ Během běhu do reportu průběžně doplň:
 
 ---
 
+## Drift Detection
+
+Porovnej config LIFECYCLE vs kanonickou sekvenci. Drift = STOP.
+
+```bash
+# State drift detection: compare config LIFECYCLE vs hardcoded canonical
+CANONICAL="vision status architect process gap generate intake prio sprint analyze implement test review close docs check archive"
+CONFIG_STEPS=$(grep -A 50 'LIFECYCLE:' "{WORK_ROOT}/config.md" | grep -oP '^\s+-\s+\K[a-z]+' | tr '\n' ' ' | sed 's/ $//')
+if [ -n "$CONFIG_STEPS" ] && [ "$CONFIG_STEPS" != "$CANONICAL" ]; then
+  echo "STOP: LIFECYCLE drift detected"
+  echo "  Config:    $CONFIG_STEPS"
+  echo "  Canonical: $CANONICAL"
+  python skills/fabric-init/tools/fabric.py state-patch \
+    --fields-json '{"error":"LIFECYCLE drift — config vs canonical mismatch"}'
+  python skills/fabric-init/tools/fabric.py intake-new \
+    --source "loop" --slug "config-lifecycle-drift" \
+    --title "LIFECYCLE drift: config steps differ from canonical sequence"
+  exit 1
+fi
+```
+
+---
+
+## Timeout handling
+
+Každý dispatchnutý skill musí běžet v rámci `SKILL_TIMEOUT` sekund (default 600, z `RUN.skill_timeout` v config.md).
+
+```bash
+# Timeout wrapper for dispatched skill
+timeout ${SKILL_TIMEOUT} <skill_command>
+SKILL_EXIT=$?
+
+if [ $SKILL_EXIT -eq 124 ]; then
+  echo "ERROR: Skill timed out after ${SKILL_TIMEOUT}s"
+  python skills/fabric-init/tools/protocol_log.py \
+    --work-root "{WORK_ROOT}" --skill "loop" --event error \
+    --status ERROR --message "Skill ${CURRENT_STEP} timed out after ${SKILL_TIMEOUT}s"
+  python skills/fabric-init/tools/fabric.py state-patch \
+    --fields-json "{\"error\":\"timeout: ${CURRENT_STEP} exceeded ${SKILL_TIMEOUT}s\"}"
+  # Create intake item for investigation
+  python skills/fabric-init/tools/fabric.py intake-new \
+    --source "loop" --slug "timeout-${CURRENT_STEP}" \
+    --title "Skill ${CURRENT_STEP} timed out (${SKILL_TIMEOUT}s)"
+  exit 1
+fi
+```
+
+---
+
 ## Dispatch pravidla
 1. **Načti `{WORK_ROOT}/state.md`.**
 2. Pokud `state.error != null` → spusť crash recovery (sekce níže).

@@ -91,6 +91,11 @@ else
   MAX_LOOPS=1
 fi
 
+# TIMEOUT parameter: max seconds per dispatched skill (from config or default)
+SKILL_TIMEOUT=$(grep 'RUN.skill_timeout:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+SKILL_TIMEOUT=${SKILL_TIMEOUT:-600}
+if ! echo "$SKILL_TIMEOUT" | grep -qE '^[0-9]+$'; then SKILL_TIMEOUT=600; fi
+
 # GOAL parameter
 GOAL_RAW=$(echo "$USER_PROMPT" | grep -oiE 'goal=[a-z0-9]+' | head -1 | cut -d= -f2)
 if [ -z "$GOAL_RAW" ]; then
@@ -323,14 +328,18 @@ Povinné:
 
 ---
 
-## Bootstrap (první RUN na projektu)
+## Partial State Guard
 
-> **Detailní bootstrap postup (config discovery, init detection, run-start):** viz `references/dispatch-recovery.md` sekce Bootstrap.
+Po načtení state.md ověř povinná pole (`phase`, `step`, `sprint`). Chybějící → STOP + `state.error`.
+Bash implementace viz `references/implementation-details.md` sekce "Partial State Guard".
 
-Zkrácený přehled:
-1. Najdi `config.md` (git ls-files → find fallback → filtruj WORK_ROOT: + COMMANDS:)
-2. 0 match → auto-bootstrap přes fabric-init; 1 match → použij; >1 → nejkratší cesta
-3. Ověř kritické artefakty (state.md, vision.md, backlog/ atd.) — pokud chybí → `fabric-init`
+---
+
+## Bootstrap (první RUN)
+
+> Detailní postup: `references/dispatch-recovery.md` sekce Bootstrap.
+
+Přehled: Najdi config.md → 0=auto-init, 1=použij, >1=nejkratší cesta → ověř artefakty → chybí=fabric-init
 4. `fabric.py run-start` + `fabric.py run-report --ensure-run-id`
 
 ---
@@ -353,12 +362,8 @@ FÁZE 3: UZAVŘENÍ
 
 ### Kontrakt s `{WORK_ROOT}/config.md` (LIFECYCLE)
 - Pokud config obsahuje YAML blok `LIFECYCLE`, musí odpovídat této tabulce „next step".
-- Pokud se liší (drift):
-  - vytvoř intake item `{WORK_ROOT}/intake/config-lifecycle-drift.md` dle `{WORK_ROOT}/templates/intake.md`
-  - do intake přilož oba seznamy kroků (config vs loop) + doporučenou opravu
-  - nastav `state.error` na vysvětlení a **STOP** (nepokračuj v běhu, dokud se drift nevyřeší)
-
-> Cíl: zabránit tichému rozjetí, kdy config říká A a loop dělá B.
+- Pokud se liší (drift) → **STOP** + intake item + `state.error` set
+- Detekce: porovnání config LIFECYCLE steps vs kanonická sekvence (bash viz `references/dispatch-recovery.md` "Drift Detection")
 
 ---
 
@@ -366,10 +371,7 @@ FÁZE 3: UZAVŘENÍ
 ## Okno běhu (loop window)
 Na začátku běhu urč `MAX_LOOPS` a `MAX_TICKS_PER_LOOP` podle parametru `loop=<...>`
 
-Dále urč `GOAL` a připrav `GOAL_ARG`:
-- `GOAL` = token `goal=<...>` nebo `RUN.default_goal` (default `release`)
-- `GOAL_ARG` = prázdné, pokud `GOAL` je `release`/None; jinak `--goal "<GOAL>"`
- (viz sekce *Spuštění*) a podle `RUN.*` v `config.md`:
+Dále urč `GOAL` (`goal=<...>` nebo `RUN.default_goal`, default `release`) a podle `RUN.*`:
 
 - pokud parametr **není**: `MAX_LOOPS = 1`
 - pokud `loop=<N>`: `MAX_LOOPS = clamp(N, 1–50)`
@@ -423,9 +425,9 @@ Loop iteration #3:
     Preconditions PASS
 
   Tick #3.3 — Skill execution:
-    RUNNING: fabric-implement (timeout=∞)
+    RUNNING: fabric-implement (timeout=${SKILL_TIMEOUT}s)
     Result: PASS, report created, status→IN_REVIEW, rework_count=0
-    Duration: 142s
+    Duration: 142s (within timeout)
 
   Tick #3.4 — Output validation:
     Report exists: reports/implement-b015-2026-03-07-run42.md ✓

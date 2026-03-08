@@ -173,16 +173,17 @@ done
 - **0b** pokud self-check chybí nebo je triviální
 
 ### K10: Dokumentace & Work Quality (10b)
-- [ ] Postup je KONKRÉTNÍ — ne vágní
-- [ ] Obsahuje PŘÍKLADY nebo ŠABLONY výstupu
-- [ ] Definuje MINIMUM akceptovatelného výstupu
-- [ ] Definuje ANTI-PATTERNS
-- [ ] Instrukce dostatečné pro JINÉHO LLM bez kontextu
+- [ ] Postup je KONKRÉTNÍ — ne vágní (≥5 kroků s bash/pseudocode)
+- [ ] Obsahuje ≥1 inline PŘÍKLAD s reálnými LLMem daty (task IDs, endpoints, file paths)
+- [ ] Definuje MINIMUM akceptovatelného výstupu (explicitní acceptance criteria)
+- [ ] Definuje ≥3 ANTI-PATTERNS s bash detection příkazy
+- [ ] Instrukce dostatečné pro JINÉHO LLM bez kontextu (no implicit knowledge)
 - [ ] Pokud implementuje: min. test set (3: happy/edge/error)
 - [ ] Pokud analyzuje: alternativy + pseudokód
 - [ ] Pokud reviewuje: fix strategie per finding typ
 - [ ] Deep quality checks (DQ1-DQ6) provedeny pokud scope=deep
 - **0b** pokud postup obsahuje jen vágní „udělej X"
+- **Objektivní metriky:** example ≥10 řádků, anti-patterns ≥3 s bash `grep`/`ls` detection, acceptance criteria tabulka s ≥3 položkami
 
 ### Scoring pravidla
 
@@ -225,7 +226,7 @@ Pro každý skill ověř:
 | I2 | Monotonicity | Counter resetovaný na nižší hodnotu |
 | I3 | Causality | Read artefaktu bez existence check |
 | I4 | Isolation | Modifikace artefaktů jiných skills bez oprávnění |
-| I5 | Convergence | Cyklické závislosti mezi skills |
+| I5 | Convergence | Cyklické závislosti — DFS cycle detection (viz `references/cycle-detection.md`) |
 
 ### S2: Adversarial Fuzzing
 
