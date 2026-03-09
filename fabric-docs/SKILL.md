@@ -69,6 +69,13 @@ if ! grep -q '^DOCS_ROOT:' "{WORK_ROOT}/config.md"; then
   exit 1
 fi
 
+# Precondition 4: DOCS_ROOT directory exists (bootstrap if not)
+DOCS_ROOT=$(grep '^DOCS_ROOT:' "{WORK_ROOT}/config.md" | awk '{print $2}')
+if [ ! -d "{CODE_ROOT}/${DOCS_ROOT}" ]; then
+  echo "BOOTSTRAP: Creating ${DOCS_ROOT} and ${DOCS_ROOT}/api/"
+  mkdir -p "{CODE_ROOT}/${DOCS_ROOT}/api"
+fi
+
 # K6: Dependency enforcement — close report required for full docs generation
 if ! ls "{WORK_ROOT}/reports/close-"*.md 1>/dev/null 2>&1; then
   echo "STOP: No close report found — run fabric-close before fabric-docs"

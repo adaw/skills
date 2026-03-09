@@ -4,6 +4,22 @@ Toto je komprehenzivní guide pro každý krok dokumentačního synchronizační
 
 ---
 
+## Krok 0: Bootstrap docs/ (pokud neexistuje)
+
+Pokud `{DOCS_ROOT}/` neexistuje, vytvoř základní strukturu:
+
+```bash
+DOCS_ROOT=$(grep '^DOCS_ROOT:' "{WORK_ROOT}/config.md" | awk '{print $2}')
+if [ ! -d "{CODE_ROOT}/${DOCS_ROOT}" ]; then
+  mkdir -p "{CODE_ROOT}/${DOCS_ROOT}/api"
+  echo "BOOTSTRAP: Created ${DOCS_ROOT}/ with api/ subdirectory"
+fi
+```
+
+Po vytvoření adresáře pokračuj normálně — Krok 3 (Aktualizuj docs) vytvoří soubory pro všechny MUST_DOCUMENT items ze skenování.
+
+---
+
 ## Krok 1: Načti context
 
 ### Co dělat
