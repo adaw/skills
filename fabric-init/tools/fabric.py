@@ -2271,13 +2271,16 @@ def cmd_reports_validate(args: argparse.Namespace) -> int:
             msg = "missing or invalid YAML frontmatter"
             (errors if strict else warnings).append({"path": e.get("path"), "issue": msg})
             continue
-        if str(fm.get("schema") or "").strip() != schema_reports:
-            errors.append({"path": e.get("path"), "issue": f"schema mismatch: expected {schema_reports}", "schema": fm.get("schema")})
-        if not fm.get("created_at"):
-            (errors if strict else warnings).append({"path": e.get("path"), "issue": "missing created_at"})
+        actual_schema = str(fm.get("schema") or "").strip()
+        valid_schemas = {schema_reports, "fabric.audit.v1"}
+        if actual_schema not in valid_schemas:
+            errors.append({"path": e.get("path"), "issue": f"schema mismatch: expected {schema_reports} or fabric.audit.v1", "schema": fm.get("schema")})
+        if not fm.get("created_at") and not fm.get("date"):
+            (errors if strict else warnings).append({"path": e.get("path"), "issue": "missing created_at or date"})
         else:
-            if _parse_dt(fm.get("created_at")) is None:
-                errors.append({"path": e.get("path"), "issue": "created_at not ISO"})
+            dt_val = fm.get("created_at") or fm.get("date")
+            if _parse_dt(dt_val) is None:
+                errors.append({"path": e.get("path"), "issue": "created_at/date not ISO"})
         if not (fm.get("kind") or fm.get("step")):
             (errors if strict else warnings).append({"path": e.get("path"), "issue": "missing kind/step"})
 
