@@ -209,7 +209,8 @@ Z configu načti `COMMANDS.test` a volitelně `COMMANDS.test_e2e`. Pokud `COMMAN
 
 Jinak spusť:
 ```bash
-timeout 120 {COMMANDS.test}
+TIMEOUT_TEST=$(awk '/timeout_bounds:/,/^[^ ]/{if(/  test:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_TEST=${TIMEOUT_TEST:-120}
+timeout "$TIMEOUT_TEST" {COMMANDS.test}
 ```
 
 **Minimum:**
@@ -232,14 +233,16 @@ Evidence: {count passed}/{count failed} (exit code: {N})
 Z configu načti `COMMANDS.lint` a `COMMANDS.format_check`. Pokud je `TBD` → report `UNKNOWN` + vytvoř intake item. Pokud je prázdné (`""`) → report `SKIPPED` (doporuč doplnit linter/formatter).
 
 ```bash
+TIMEOUT_LINT=$(awk '/timeout_bounds:/,/^[^ ]/{if(/lint:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_LINT=${TIMEOUT_LINT:-120}
+TIMEOUT_FMT=$(awk '/timeout_bounds:/,/^[^ ]/{if(/format_check:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_FMT=${TIMEOUT_FMT:-120}
 if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then
-  timeout 120 {COMMANDS.lint}
+  timeout "$TIMEOUT_LINT" {COMMANDS.lint}
 else
   echo "lint: SKIPPED or UNKNOWN"
 fi
 
 if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then
-  timeout 120 {COMMANDS.format_check}
+  timeout "$TIMEOUT_FMT" {COMMANDS.format_check}
 else
   echo "format_check: SKIPPED or UNKNOWN"
 fi

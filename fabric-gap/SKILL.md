@@ -189,7 +189,8 @@ Pro každou capability ověř: code exists? tests exist? documented?
 **POVINNÉ: SPUSŤ testy.** Nečti jen soubory:
 
 ```bash
-timeout 120 {COMMANDS.test} -x --tb=line -q 2>/dev/null
+TIMEOUT_TEST=$(awk '/timeout_bounds:/,/^[^ ]/{if(/  test:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_TEST=${TIMEOUT_TEST:-120}
+timeout "$TIMEOUT_TEST" {COMMANDS.test} -x --tb=line -q 2>/dev/null
 # Zaznamenej GAP_TEST_STATUS: PASS/FAIL/TIMEOUT
 # Detekuj stubs: grep -rn 'pass$\|NotImplementedError' {CODE_ROOT}/src
 ```
