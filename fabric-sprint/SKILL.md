@@ -95,9 +95,9 @@ if [ ! -f "{WORK_ROOT}/vision.md" ]; then
 fi
 
 # --- Precondition: Phase validation ---
-PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
-if [ "$PHASE" != "planning" ]; then
-  echo "STOP: Expected phase=planning, got '$PHASE'"
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$CURRENT_PHASE" != "planning" ]; then
+  echo "STOP: Expected phase=planning, got '$CURRENT_PHASE'"
   exit 1
 fi
 ```

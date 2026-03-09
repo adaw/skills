@@ -207,7 +207,7 @@ Zkopíruj strukturu z `assets/builder-template.md` a vyplň:
 
 **§11 Failure Handling:** Tabulka per fáze.
 
-**§12 Metadata:** phase, step, depends_on, feeds_into, may_modify_*.
+**§12 Metadata:** phase, step, depends_on, feeds_into, may_modify_*. Viz `references/metadata.md`.
 
 ### B5) Size check + progressive disclosure split
 

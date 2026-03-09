@@ -223,9 +223,10 @@ fi
 **Jak:**
 ```bash
 COMMANDS_E2E=$(grep 'COMMANDS.test_e2e:' "{WORK_ROOT}/config.md" | sed 's/.*: //')
+TIMEOUT_E2E=$(awk '/timeout_bounds:/,/^[^ ]/{if(/test_e2e:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_E2E=${TIMEOUT_E2E:-600}
 
 if [ -n "$COMMANDS_E2E" ] && [ "$COMMANDS_E2E" != "TBD" ]; then
-  timeout 600 $COMMANDS_E2E
+  timeout "$TIMEOUT_E2E" $COMMANDS_E2E
   E2E_EXIT=$?
 
   if [ $E2E_EXIT -eq 124 ]; then

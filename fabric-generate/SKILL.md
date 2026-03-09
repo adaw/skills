@@ -63,9 +63,9 @@ if [ ! -f "{WORK_ROOT}/state.md" ]; then
 fi
 
 # --- Precondition 2: Verifikuj phase ---
-PHASE=$(grep -E '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
-if [ "$PHASE" != "orientation" ]; then
-  echo "STOP: fabric-generate requires phase=orientation, current: $PHASE"
+CURRENT_PHASE=$(grep -E '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$CURRENT_PHASE" != "orientation" ]; then
+  echo "STOP: fabric-generate requires phase=orientation, current: $CURRENT_PHASE"
   exit 1
 fi
 

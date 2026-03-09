@@ -111,9 +111,9 @@ find "$CODE_ROOT" -name "*.py" -type f | head -1 > /dev/null || {
 }
 
 # --- Precondition: Phase validation ---
-PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
-if [ "$PHASE" != "orientation" ]; then
-  echo "STOP: Expected phase=orientation, got '$PHASE'"
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$CURRENT_PHASE" != "orientation" ]; then
+  echo "STOP: Expected phase=orientation, got '$CURRENT_PHASE'"
   exit 1
 fi
 

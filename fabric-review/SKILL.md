@@ -56,9 +56,9 @@ for VAR in "{WORK_ROOT}"; do
 done
 
 # 0. Phase validation (K1)
-PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
-if [ "$PHASE" != "implementation" ]; then
-  echo "STOP: fabric-review requires phase=implementation, current: $PHASE"
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+if [ "$CURRENT_PHASE" != "implementation" ]; then
+  echo "STOP: fabric-review requires phase=implementation, current: $CURRENT_PHASE"
   exit 1
 fi
 
@@ -91,8 +91,9 @@ if ! echo "$REWORK_COUNT" | grep -qE '^[0-9]+$'; then
   echo "STOP: rework_count='$REWORK_COUNT' not numeric in backlog/${WIP_ITEM}.md"
   exit 1
 fi
-if [ "$REWORK_COUNT" -ge 3 ]; then
-  echo "STOP: max rework iterations (3) exceeded for $WIP_ITEM"
+MAX_REWORK=$(grep 'max_rework_iters:' "{WORK_ROOT}/config.md" | awk '{print $2}'); MAX_REWORK=${MAX_REWORK:-3}
+if [ "$REWORK_COUNT" -ge "$MAX_REWORK" ]; then
+  echo "STOP: max rework iterations ($MAX_REWORK) exceeded for $WIP_ITEM"
   exit 1
 fi
 ```
@@ -127,15 +128,19 @@ fi
 **Objective gates + verdict deterministically:**
 
 ```bash
+# K5: Timeout bounds from config (defaults match config.md timeout_bounds)
+TIMEOUT_LINT=$(awk '/timeout_bounds:/,/^[^ ]/{if(/lint:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_LINT=${TIMEOUT_LINT:-120}
+TIMEOUT_FMT=$(awk '/timeout_bounds:/,/^[^ ]/{if(/format_check:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_FMT=${TIMEOUT_FMT:-120}
+
 # 1. Run objective gates (optional if not in config)
 if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then
-  timeout 120 {COMMANDS.lint} && LINT_RESULT="PASS" || LINT_RESULT="FAIL"
+  timeout "$TIMEOUT_LINT" {COMMANDS.lint} && LINT_RESULT="PASS" || LINT_RESULT="FAIL"
 else
   LINT_RESULT="SKIPPED"
 fi
 
 if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then
-  timeout 120 {COMMANDS.format_check} && FMT_RESULT="PASS" || FMT_RESULT="FAIL"
+  timeout "$TIMEOUT_FMT" {COMMANDS.format_check} && FMT_RESULT="PASS" || FMT_RESULT="FAIL"
 else
   FMT_RESULT="SKIPPED"
 fi

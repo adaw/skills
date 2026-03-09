@@ -27,7 +27,7 @@ Bez process mapy:
 
 ## Downstream Contract
 
-**Kdo konzumuje výstupy fabric-process a jaká pole čte:** Viz `references/validation.md` — "Downstream Consumers" sekce.
+**Kdo konzumuje výstupy fabric-process a jaká pole čte:** Viz `references/validation.md` — "Downstream Consumers" sekce. Přehled všech reference souborů: `references/INDEX.md`.
 
 Klíčově:
 - **fabric-gap** → External Processes table (ID, Actor, Entry Point, Status)

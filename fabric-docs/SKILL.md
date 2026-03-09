@@ -174,7 +174,7 @@ Přehled kroků:
 8. **Self-check** — ověř checklist
 9. **Loguj END** — protocol log
 
-Pro detaily každého kroku, příklady, anti-patterns a heurystiky viz: **[references/workflow.md](./references/workflow.md)**
+Pro detaily každého kroku, příklady, anti-patterns a heurystiky viz: **[references/workflow.md](./references/workflow.md)** a **[references/examples.md](./references/examples.md)**
 
 ### K10: Inline Example — LLMem API Documentation Update
 

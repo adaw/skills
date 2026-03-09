@@ -351,7 +351,7 @@ FÁZE 0: ORIENTACE
   vision → status → architect → process → gap → generate → intake → prio
 
 FÁZE 1: PLÁNOVÁNÍ
-  sprint → analyze
+  design → sprint → analyze
 
 FÁZE 2: IMPLEMENTACE (WIP=1, per task)
   implement → test → review (→ případně rework loop)
@@ -392,9 +392,7 @@ Použij tento deterministický výpočet (bez heuristik):
 
 Pak proveď nejvýše `MAX_LOOPS` loopů. Každý loop obsahuje 1+ ticků (dispatchů) až do loop boundary.
 
-> **Detaily algoritmu v references/:**
-> - Tick algoritmus (detailní): viz `references/tick-algorithm.md` (run_id lifecycle, audit, countery, verdict parsing)
-> - Dispatch & recovery (detailní): viz `references/dispatch-recovery.md` (next step tabulka, kontrakt, crash recovery, inter-skill data flow)
+> **Detaily algoritmu v references/:** `references/tick-algorithm.md` (tick lifecycle, audit, countery), `references/dispatch-recovery.md` (dispatch, crash recovery, data flow), `references/metadata.md` (§12 orchestrační metadata)
 
 ## Výstup orchestrátoru
 Na konci každého RUN cyklu:

@@ -137,7 +137,7 @@ fi
 
 **Dependency chain:** `fabric-init → fabric-intake → fabric-prio → [fabric-design] → fabric-analyze → fabric-implement`
 
-Detail: `references/02-preconditions.md` (optional checks 4-6: task status, CODE_ROOT, governance).
+Detail: `references/01-protocol.md` (logging), `references/02-preconditions.md` (optional checks 4-6: task status, CODE_ROOT, governance).
 
 ---
 

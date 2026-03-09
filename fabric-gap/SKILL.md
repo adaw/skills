@@ -373,7 +373,7 @@ may_modify_state: false
 may_modify_backlog: false
 may_modify_code: false
 may_create_intake: true
-depends_on: [fabric-vision, fabric-intake]
+depends_on: [fabric-vision]
 feeds_into: [fabric-process]
 ```
 

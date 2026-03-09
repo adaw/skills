@@ -182,7 +182,7 @@ python skills/fabric-init/tools/fabric.py apply \
 
 Detailní implementační kroky, coding patterns, anti-patterns a komplexní validační logika:
 
-> Detaily viz `references/workflow.md`
+> Detaily viz `references/workflow.md` | Příklady viz `references/examples.md`
 
 Stručný postup:
 
@@ -275,8 +275,13 @@ fi
 **BLOCKING GATES** (MUST PASS):
 
 ```bash
-# 1. Tests (POVINNÉ, timeout 300s)
-timeout 300 {COMMANDS.test}
+# K5: Timeout bounds from config (defaults match config.md timeout_bounds)
+TIMEOUT_TEST=$(awk '/timeout_bounds:/,/^[^ ]/{if(/  test:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_TEST=${TIMEOUT_TEST:-300}
+TIMEOUT_LINT=$(awk '/timeout_bounds:/,/^[^ ]/{if(/lint:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_LINT=${TIMEOUT_LINT:-120}
+TIMEOUT_FMT=$(awk '/timeout_bounds:/,/^[^ ]/{if(/format_check:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_FMT=${TIMEOUT_FMT:-120}
+
+# 1. Tests (POVINNÉ)
+timeout "$TIMEOUT_TEST" {COMMANDS.test}
 TEST_EXIT=$?
 if [ $TEST_EXIT -ne 0 ]; then echo "FAIL: tests"; exit 1; fi
 
@@ -286,13 +291,13 @@ if [ $? -ne 0 ]; then echo "FAIL: coverage <60%"; exit 1; fi
 
 # 3. Lint (volitelné, ale pokud je zapnuté)
 if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then
-  timeout 120 {COMMANDS.lint}
+  timeout "$TIMEOUT_LINT" {COMMANDS.lint}
   if [ $? -ne 0 ]; then echo "FAIL: lint"; exit 1; fi
 fi
 
 # 4. Format check (volitelné)
 if [ -n "{COMMANDS.format_check}" ] && [ "{COMMANDS.format_check}" != "TBD" ]; then
-  timeout 120 {COMMANDS.format_check}
+  timeout "$TIMEOUT_FMT" {COMMANDS.format_check}
   if [ $? -ne 0 ]; then echo "FAIL: format"; exit 1; fi
 fi
 ```
@@ -372,12 +377,12 @@ if [ ! -f "{WORK_ROOT}/backlog/${TASK_ID}.md" ]; then
   exit 1
 fi
 
-# Tests timeout (>300s)
-timeout 300 {COMMANDS.test}
+# Tests timeout (config: timeout_bounds.test)
+timeout "${TIMEOUT_TEST:-300}" {COMMANDS.test}
 if [ $? -eq 124 ]; then
   python skills/fabric-init/tools/fabric.py intake-new \
     --source "implement" --slug "implement-timeout-${TASK_ID}" \
-    --title "Tests exceeded 300s timeout"
+    --title "Tests exceeded ${TIMEOUT_TEST:-300}s timeout"
   exit 1
 fi
 
@@ -409,7 +414,7 @@ done
 **Downstream Contract (WQ7):** fabric-review (Status=IN_REVIEW, tests+lint PASS), fabric-close (branch exists, conventional commit, no stubs).
 
 ```yaml
-depends_on: [fabric-analyze, fabric-close]
+depends_on: [fabric-analyze]
 feeds_into: [fabric-test]
 phase: implementation
 lifecycle_step: implement

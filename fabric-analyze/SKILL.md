@@ -75,9 +75,9 @@ for VAR in "{WORK_ROOT}" "{CODE_ROOT}"; do
 done
 
 # --- Phase validation (K1) ---
-PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}')
-if [ "$PHASE" != "planning" ]; then
-  echo "STOP: fabric-analyze requires phase=planning, current: $PHASE"
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}')
+if [ "$CURRENT_PHASE" != "planning" ]; then
+  echo "STOP: fabric-analyze requires phase=planning, current: $CURRENT_PHASE"
   exit 1
 fi
 
