@@ -413,7 +413,7 @@ echo "Self-check passed: sprint close complete"
 
 ```yaml
 depends_on: [fabric-review]
-feeds_into: [fabric-implement, fabric-docs]
+feeds_into: [fabric-archive, fabric-implement, fabric-docs]
 phase: closing
 lifecycle_step: close
 touches_state: true

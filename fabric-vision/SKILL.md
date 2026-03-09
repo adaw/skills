@@ -453,7 +453,7 @@ may_modify_backlog: false
 may_modify_code: false
 may_create_intake: true
 depends_on: [fabric-init]
-feeds_into: [fabric-gap, fabric-sprint]
+feeds_into: [fabric-architect, fabric-gap, fabric-sprint]
 ```
 
 ---

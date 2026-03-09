@@ -415,7 +415,7 @@ done
 
 ```yaml
 depends_on: [fabric-analyze]
-feeds_into: [fabric-test]
+feeds_into: [fabric-test, fabric-e2e]
 phase: implementation
 lifecycle_step: implement
 touches_state: true

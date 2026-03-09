@@ -422,7 +422,7 @@ Pokud ANY check FAIL → **FAIL + vytvoř intake item `intake/intake-selfcheck-f
 
 ```yaml
 depends_on: [fabric-init]
-feeds_into: [fabric-prio]
+feeds_into: [fabric-prio, fabric-design]
 phase: orientation
 lifecycle_step: intake
 touches_state: false

@@ -93,13 +93,13 @@ done
 
 ### 0.2) Audit scope per tier: T1=K1-K10+F2 (no F4), T2=K1-K10+F2+F3+**F4**, T3=K1-K10+F2+F3 (no F4), SKIP=checker+builder
 
-### 0.3) Podpůrné soubory pro audit
+### 0.3) Podpůrné soubory a nástroje
 
-- `fabric/config.md` — konfigurace (čti CELÝ)
-- `fabric/state.md` — aktuální stav
-- `skills/fabric-builder/assets/builder-template.md` — kanonická šablona (pro Fázi 4)
-- `fabric/reports/work-quality-analysis-*.md` — předchozí analýza kvality (pokud existuje)
-- `dev/workflows/*.md` — historické workflow soubory (referenční kvalita, pokud existují)
+- `fabric/config.md`, `fabric/state.md` — konfigurace + stav (čti CELÝ)
+- `skills/fabric-builder/assets/builder-template.md` — šablona (Fáze 4)
+- `tools/fabric-score.sh` — deterministický K1-K10 scorer
+- `tools/t10_config_stale_check.py` — config key stale read (T10)
+- `tools/s4_symmetry_check.py` — depends_on ↔ feeds_into symetrie (S4)
 
 ---
 

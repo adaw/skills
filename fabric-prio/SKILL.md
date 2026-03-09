@@ -416,7 +416,7 @@ may_create_intake: true      # pro schema errors, vision links, stale items
 
 # Pořadí v pipeline
 depends_on: [fabric-intake]
-feeds_into: [fabric-sprint]
+feeds_into: [fabric-design, fabric-sprint]
 ```
 
 ---
