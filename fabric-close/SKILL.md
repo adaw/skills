@@ -247,6 +247,11 @@ Close is a **procedural batching skill** — run once per sprint, iterates all t
 # A4: Forgetting to reset wip_item/wip_branch — Detection: grep -E 'wip_item:|wip_branch:' {WORK_ROOT}/state.md | grep -v 'null'
 ```
 
+### Minimum acceptance kritéria
+- Close report MUSÍ obsahovat Task Status tabulku se všemi sprint tasks
+- Každý MERGEABLE task musí mít evidence: merge_commit hash + post-merge test result
+- CARRY-OVER tasks musí mít klasifikaci (REBASE_CONFLICT | INCOMPLETE | BLOCKED) + důvod
+
 **Stub verification importance:**
 - Task must not contain `pass`, `raise NotImplementedError`, `# TODO`, `# FIXME`, `... # stub`
 - Review may have missed stubs; verify in merge diff before commit

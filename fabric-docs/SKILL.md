@@ -189,6 +189,11 @@ Pro detaily každého kroku, příklady, anti-patterns a heurystiky viz: **[refe
 # A4: CHANGELOG not following Keep a Changelog format — Detection: ! grep -E '^## \[(Unreleased|[0-9]+\.[0-9]+)' CHANGELOG.md
 ```
 
+### Minimum acceptance kritéria
+- Docs report MUSÍ obsahovat classification tabulku (item | verdict | reason)
+- Každý MUST_DOCUMENT item musí mít vytvořený/aktualizovaný doc soubor s code reference
+- CHANGELOG entry musí existovat pro všechny MUST_DOCUMENT items v [Unreleased] sekci
+
 ---
 
 ## §8 — Quality Gates

@@ -206,6 +206,11 @@ Dedup evidence: None matched existing backlog items.
 # Fix: Rewrite as concrete: "Add Jaccard test for X" not "improve testing"
 ```
 
+### Minimum acceptance kritéria
+- Každý vygenerovaný intake item MUSÍ obsahovat: title, type, description, evidence, priority draft
+- Dedup evidence musí být v reportu (tabulka skippnutých kandidátů nebo "0 duplicates found")
+- Minimálně 1 kandidát musí mít vision alignment HIGH nebo MED (jinak skip s důvodem)
+
 ---
 
 ## §8 — Quality Gates

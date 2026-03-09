@@ -289,6 +289,11 @@ for DIM in R1 R2 R3 R4 R5 R6 R7 R8 R9; do
 done
 ```
 
+### Minimum acceptance kritéria
+- Review report MUSÍ obsahovat všech 9 dimenzí R1–R9 (R9 může být SKIPPED s důvodem)
+- Verdict musí být konzistentní: CRITICAL findings → REWORK (nikdy CLEAN)
+- Každý finding MUSÍ obsahovat: severity, location (file:line), fix strategy, effort estimate
+
 ## §8 Quality Gates
 
 **Blocking validation (MUST PASS):**

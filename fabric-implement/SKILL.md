@@ -268,6 +268,11 @@ if [ "$SKIPPED" -gt 0 ]; then
 fi
 ```
 
+### Minimum acceptance kritéria
+- Implement report MUSÍ obsahovat: baseline test count, post-implement test count, delta
+- Každý nový soubor musí mít alespoň 1 test (coverage evidence z pytest --cov)
+- Backlog item musí být aktualizován na status IN_REVIEW s implement_report evidence
+
 ---
 
 ## §8 Quality Gates (enforcement)

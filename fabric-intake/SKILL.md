@@ -307,6 +307,11 @@ linked_vision_goal: capture-scalability
 # Fix: Map to valid type enum; default to Task if ambiguous
 ```
 
+### Minimum acceptance kritéria
+- Každý backlog item MUSÍ obsahovat validní YAML frontmatter (type, tier, status, priority)
+- T0/T1 items musí mít linked_vision_goal (vazba na vision.md)
+- Intake report MUSÍ obsahovat: processed count, created count, merged count, skipped count
+
 ---
 
 ## §8 — Quality Gates

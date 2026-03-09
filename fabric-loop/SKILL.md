@@ -398,8 +398,8 @@ Pak proveď nejvýše `MAX_LOOPS` loopů. Každý loop obsahuje 1+ ticků (dispa
 ## Výstup orchestrátoru
 Na konci každého RUN cyklu:
 - `state.md` je aktualizovaný a konzistentní
-- `{WORK_ROOT}/reports/run-{run_id}.md` existuje (vytvořeno `fabric.py run-report`; timeline + odkazy na step reporty)
-- existuje report pro daný step (pokud ho step generuje)
+- `{WORK_ROOT}/reports/run-{run_id}.md` existuje s `schema: fabric.report.v1` frontmatter (kind: run-report)
+- per-tick audit reporty mají `schema: fabric.audit.v1` frontmatter (kind: audit-{step})
 - pokud došlo k chybě, existuje intake item s reprodukovatelným popisem
 
 ---
