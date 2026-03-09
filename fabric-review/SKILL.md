@@ -5,7 +5,7 @@ description: "Perform automated code review for the current WIP task across 9 di
 
 <!-- built from: builder-template -->
 
-## § 1 Účel
+## §1 Účel
 
 Zajistit „enterprise-grade" kvalitu před merge:
 - objektivní gates (lint/format),
@@ -13,7 +13,7 @@ Zajistit „enterprise-grade" kvalitu před merge:
 - jednoznačný verdikt: `CLEAN`, `REWORK`, nebo `REDESIGN`,
 - evidence report + intake items pro systémové zlepšení.
 
-## § 2 Protokol (povinné bash)
+## §2 Protokol (povinné bash)
 
 Log START/END events to shared protocol via:
 
@@ -44,7 +44,7 @@ python skills/fabric-init/tools/protocol_log.py \
   --message "Brief error summary (1 sentence)"
 ```
 
-## § 3 Preconditions (bash validation)
+## §3 Preconditions (bash validation)
 
 ```bash
 # --- Path traversal guard (K7) ---
@@ -98,7 +98,7 @@ if [ "$REWORK_COUNT" -ge "$MAX_REWORK" ]; then
 fi
 ```
 
-## § 4 Vstupy
+## §4 Vstupy
 
 - `{WORK_ROOT}/config.md` — COMMANDS.lint, COMMANDS.format_check, QUALITY.mode
 - `{WORK_ROOT}/state.md` — wip_item, wip_branch, phase
@@ -109,7 +109,7 @@ fi
 - `{WORK_ROOT}/fabric/processes/process-map.md` — process contracts (R9, optional)
 - git diff: `main...{wip_branch}` — code changes under review
 
-## § 5 Výstupy
+## §5 Výstupy
 
 - `{WORK_ROOT}/reports/review-{wip_item}-{YYYY-MM-DD}-{run_id}.md`
   - Frontmatter: schema=fabric.report.v1, verdict=CLEAN|REWORK|REDESIGN
@@ -123,7 +123,7 @@ fi
 - Optional intake items: `{WORK_ROOT}/intake/review-*.md` (systemic findings)
 - Optional: publish via `python skills/fabric-init/tools/fabric.py review-publish`
 
-## § 6 FAST PATH (zaměřeno na determinismus)
+## §6 FAST PATH (zaměřeno na determinismus)
 
 **Objective gates + verdict deterministically:**
 
@@ -161,7 +161,7 @@ python skills/fabric-init/tools/fabric.py report-new \
 python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/plans/review-plan-{wip_item}-{YYYY-MM-DD}-{run_id}.yaml"
 ```
 
-## § 7 Postup (Proces)
+## §7 Postup (Proces)
 
 **Overview:** Review is deterministic, multi-dimensional assessment (R1–R9) with objective gates. Detailed workflow in references/workflow.md.
 
@@ -289,7 +289,7 @@ for DIM in R1 R2 R3 R4 R5 R6 R7 R8 R9; do
 done
 ```
 
-## § 8 Quality Gates
+## §8 Quality Gates
 
 **Blocking validation (MUST PASS):**
 
@@ -326,7 +326,7 @@ done
 echo "PASS: Review report validation successful"
 ```
 
-## § 9 Report template (povinné)
+## §9 Report template (povinné)
 
 **Frontmatter:**
 ```yaml
@@ -372,7 +372,7 @@ verdict: "CLEAN|REWORK|REDESIGN"
 
 See `references/examples.md` for complete example with LLMem data.
 
-## § 10 Self-check (povinné)
+## §10 Self-check (povinné)
 
 Before submitting report:
 
@@ -415,7 +415,7 @@ echo "✅ Self-check PASS: report valid, verdict=$VERDICT, criticals=$CRITICAL_C
 - ❌ CRITICAL: R1-R9 scores missing → **EXIT 1**
 - ❌ CRITICAL: CLEAN + CRITICAL findings mismatch → **EXIT 1**
 
-## § 11 Failure Handling
+## §11 Failure Handling
 
 **Failure scenarios:**
 
@@ -434,7 +434,9 @@ echo "✅ Self-check PASS: report valid, verdict=$VERDICT, criticals=$CRITICAL_C
 - Missing process-map.md → R9 = SKIPPED (fail-open)
 - Missing docstring on private function → R7 = MEDIUM (not CRITICAL)
 
-## § 12 Metadata & Contract
+## §12 — Metadata (pro fabric-loop orchestraci)
+
+### Downstream Contract
 
 **Downstream consumers:**
 
@@ -464,7 +466,7 @@ findings:
     estimated_effort: "Xmin|Xh"
 ```
 
-## §12 — Metadata (pro fabric-loop orchestraci)
+### Orchestration Metadata
 
 ```yaml
 depends_on: [fabric-test]

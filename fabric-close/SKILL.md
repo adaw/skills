@@ -4,7 +4,7 @@ description: "Close the current sprint: merge approved task branches into main (
 ---
 <!-- built from: builder-template -->
 
-# §1 ÚČEL — Uzavření sprintu (merge + evidence)
+## §1 ÚČEL — Uzavření sprintu (merge + evidence)
 
 Close the current sprint by:
 - Squash-merge completed tasks into `main`
@@ -21,7 +21,7 @@ Close the current sprint by:
 
 ---
 
-# §2 PROTOKOL (povinné)
+## §2 PROTOKOL (povinné)
 
 Log skill execution events to shared protocol log:
 
@@ -53,7 +53,7 @@ python skills/fabric-init/tools/protocol_log.py \
 
 ---
 
-# §3 PRECONDITIONS (bash)
+## §3 PRECONDITIONS (bash)
 
 Verify prerequisites before starting merge loop:
 
@@ -127,7 +127,7 @@ fi
 
 ---
 
-# §4 VSTUPY
+## §4 VSTUPY
 
 **Required inputs (must exist):**
 
@@ -144,7 +144,7 @@ fi
 
 ---
 
-# §5 VÝSTUPY
+## §5 VÝSTUPY
 
 All reports use schema `fabric.report.v1` with optional `version: "1.0"` field.
 
@@ -170,7 +170,7 @@ All reports use schema `fabric.report.v1` with optional `version: "1.0"` field.
 
 ---
 
-# §6 FAST PATH — Quality gates deterministico
+## §6 FAST PATH — Quality gates deterministico
 
 After each merge to `main`, run gates via `fabric.py` (logs to `{WORK_ROOT}/logs/commands/`):
 
@@ -189,7 +189,7 @@ Update merge_commit and status metadata via plan/apply pattern, not manually.
 
 ---
 
-# §7 POSTUP (Orchestrace a Sekvence)
+## §7 POSTUP (Orchestrace a Sekvence)
 
 ### K2: Counter initialization and validation
 ```bash
@@ -254,7 +254,7 @@ Close is a **procedural batching skill** — run once per sprint, iterates all t
 
 ---
 
-# §8 QUALITY GATES
+## §8 QUALITY GATES
 
 **Gates run AFTER each merge to main:**
 
@@ -275,7 +275,7 @@ Close is a **procedural batching skill** — run once per sprint, iterates all t
 
 ---
 
-# §9 REPORT TEMPLATE
+## §9 REPORT TEMPLATE
 
 Per-task close report structure:
 
@@ -322,7 +322,7 @@ Sprint summary report includes Task Status table with columns: `Task ID`, `Title
 
 ---
 
-# §10 SELF-CHECK
+## §10 SELF-CHECK
 
 Before closing skill execution, verify:
 
@@ -374,7 +374,7 @@ echo "Self-check passed: sprint close complete"
 
 ---
 
-# §11 FAILURE HANDLING
+## §11 FAILURE HANDLING
 
 **Merge conflict during squash merge:**
 - Run `git merge --abort` (or `git reset --merge` if --abort fails)
