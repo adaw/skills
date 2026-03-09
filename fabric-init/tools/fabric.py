@@ -894,9 +894,8 @@ def snapshot_status(repo_root: Path, cfg: Dict[str, Any], out_path: Path, tail_l
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
 
-    goal = args.goal if hasattr(args, "goal") else None
-    tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    # snapshot_status is a helper (not a cmd_* wrapper) — no args namespace available.
+    eff_tier_max = _resolve_tier_max(cfg, None, None)
     code_root = resolve_rel(repo_root, paths.get("CODE_ROOT", "goden/"))
     test_root = resolve_rel(repo_root, paths.get("TEST_ROOT", "tests/"))
     docs_root = resolve_rel(repo_root, paths.get("DOCS_ROOT", "docs/"))
@@ -973,9 +972,8 @@ def apply_plan(repo_root: Path, cfg: Dict[str, Any], plan_path: Path) -> Dict[st
     paths = get_paths_block(cfg)
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
 
-    goal = args.goal if hasattr(args, "goal") else None
-    tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    # apply_plan is a helper (not a cmd_* wrapper) — no args namespace available.
+    eff_tier_max = _resolve_tier_max(cfg, None, None)
     backlog_dir = work_root / "backlog"
     templates_dir = resolve_rel(repo_root, paths.get("TEMPLATES_ROOT", f"{paths.get('WORK_ROOT','fabric/').rstrip('/')}/templates/"))
     state_path = work_root / "state.md"

@@ -272,6 +272,7 @@ if [ ! -f "$SKILLS_ROOT/fabric-init/tools/validate_fabric.py" ]; then
   echo "STOP: validate_fabric.py not found"
   exit 1
 fi
+# P7: READ references/tick-algorithm.md NOW (contains exact CLI commands for contract-check, tick, run-report, audit)
 ```
 
 ## Input Validation (K7 — path traversal ochrana)
@@ -392,7 +393,7 @@ Použij tento deterministický výpočet (bez heuristik):
 
 Pak proveď nejvýše `MAX_LOOPS` loopů. Každý loop obsahuje 1+ ticků (dispatchů) až do loop boundary.
 
-> **Detaily algoritmu v references/:** `references/tick-algorithm.md` (tick lifecycle, audit, countery), `references/dispatch-recovery.md` (dispatch, crash recovery, data flow), `references/metadata.md` (§12 orchestrační metadata)
+> **POVINNÉ: PŘED prvním tickem přečti `references/tick-algorithm.md`** (obsahuje přesné CLI příkazy pro contract-check, tick --completed, run-report, audit). Bez toho budeš hádat CLI syntax a chybovat. Dále: `references/dispatch-recovery.md` (dispatch, crash recovery), `references/metadata.md` (§12 metadata).
 
 ## Výstup orchestrátoru
 Na konci každého RUN cyklu:
