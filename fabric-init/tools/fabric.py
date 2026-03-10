@@ -1636,6 +1636,10 @@ def cmd_state_read(args: argparse.Namespace) -> int:
     eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
     data = state_read(state_path)
+    if hasattr(args, "field") and args.field:
+        val = data.get(args.field)
+        print(json.dumps(val) if not isinstance(val, str) else val)
+        return 0
     if args.json_out:
         out = (repo_root / args.json_out).resolve()
         write_json(out, data)
@@ -2194,21 +2198,28 @@ def _parse_test_result(md: str) -> Optional[str]:
     m = re.search(r"^\s*-\s*Result\s*:\s*(PASS|FAIL|SKIPPED|UNKNOWN)\b", md, flags=re.I | re.M)
     if m:
         return m.group(1).upper()
-    m2 = re.search(r"\bResult\s*[:=]\s*(PASS|FAIL|SKIPPED|UNKNOWN)\b", md, flags=re.I)
+    m2 = re.search(r"\b(?:Result|Verdict)\s*[:=]\s*\*{0,2}(PASS|FAIL|SKIPPED|UNKNOWN)\b", md, flags=re.I)
     if m2:
         return m2.group(1).upper()
+    # Fallback: check YAML frontmatter fields
+    fm = parse_frontmatter(md) or {}
+    for key in ("result", "status", "verdict", "test_result"):
+        v = fm.get(key)
+        if isinstance(v, str) and v.strip().upper() in ("PASS", "FAIL", "SKIPPED", "UNKNOWN"):
+            return v.strip().upper()
     return None
 
 
 def _parse_review_verdict(md: str) -> Optional[str]:
     fm = parse_frontmatter(md) or {}
-    v = fm.get("verdict")
-    if isinstance(v, str) and v.strip():
-        return v.strip().upper()
-    m = re.search(r"^\s*Verdict\s*:\s*(CLEAN|REWORK|REDESIGN)\b", md, flags=re.I | re.M)
+    for key in ("verdict", "result"):
+        v = fm.get(key)
+        if isinstance(v, str) and v.strip().upper() in ("CLEAN", "REWORK", "REDESIGN"):
+            return v.strip().upper()
+    m = re.search(r"^\s*\*{0,2}Verdict\*{0,2}\s*:\s*\*{0,2}(CLEAN|REWORK|REDESIGN)\b", md, flags=re.I | re.M)
     if m:
         return m.group(1).upper()
-    m2 = re.search(r"\bVerdict\s*[:=]\s*(CLEAN|REWORK|REDESIGN)\b", md, flags=re.I)
+    m2 = re.search(r"Verdict\s*[:=]\s*\*{0,2}(CLEAN|REWORK|REDESIGN)\b", md, flags=re.I)
     if m2:
         return m2.group(1).upper()
     return None
@@ -3564,6 +3575,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_backlog_set)
 
     p = sub.add_parser("state-read", help="Read YAML fence from state.md.")
+    p.add_argument("--field", default=None, help="Return single field value (e.g. --field run_id)")
     p.add_argument("--json-out", default=None)
     p.set_defaults(func=cmd_state_read)
 
