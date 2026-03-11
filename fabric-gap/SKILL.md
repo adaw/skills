@@ -294,6 +294,7 @@ Vytvoř `{WORK_ROOT}/reports/gap-{YYYY-MM-DD}.md`:
 ---
 schema: fabric.report.v1
 kind: gap
+step: "gap"
 run_id: "{run_id}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {PASS|WARN|FAIL}

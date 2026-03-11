@@ -225,6 +225,7 @@ Dedup evidence: None matched existing backlog items.
 ---
 schema: fabric.report.v1
 kind: generate
+step: "generate"
 run_id: "{RUN_ID}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {PASS|WARN|FAIL}

@@ -223,6 +223,7 @@ Pořadí:
 ---
 schema: fabric.report.v1
 kind: prio
+step: "prio"
 run_id: "{run_id}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {PASS|WARN|FAIL}
@@ -335,6 +336,7 @@ Vytvoř `{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md` s schematem:
 ---
 schema: fabric.report.v1
 kind: prio
+step: "prio"
 run_id: "{run_id}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {PASS|WARN|FAIL}

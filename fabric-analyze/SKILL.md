@@ -270,6 +270,7 @@ Stručný přehled kroků:
 ---
 schema: fabric.report.v1
 kind: analyze
+step: "analyze"
 run_id: "analyze-{YYYY-MM-DD}-{RUN_ID}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: PASS

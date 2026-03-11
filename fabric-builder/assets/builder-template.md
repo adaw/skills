@@ -285,6 +285,7 @@ Vytvoř `{WORK_ROOT}/reports/{SKILL_NAME_SHORT}-{YYYY-MM-DD}.md`:
 ---
 schema: fabric.report.v1
 kind: {SKILL_NAME_SHORT}
+step: "{SKILL_NAME_SHORT}"
 run_id: "{run_id}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {PASS|WARN|FAIL}
@@ -521,6 +522,7 @@ linked_vision_goal: "{goal, pokud je zřejmé}"
 ---
 schema: fabric.report.v1
 kind: {skill_name_short}
+step: "{skill_name_short}"
 run_id: "{run_id}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {PASS|WARN|FAIL}
@@ -668,6 +670,8 @@ TASK_IDS=$(grep -E '^\|' "{SPRINT_FILE}" | grep -v '^|.*---' | awk -F'|' '{print
 REPORT="{WORK_ROOT}/reports/{SKILL}-{DATE}.md"
 echo "---" > "$REPORT"
 echo "schema: fabric.report.v1" >> "$REPORT"
+echo "kind: {SKILL}" >> "$REPORT"
+echo "step: {SKILL}" >> "$REPORT"
 echo "---" >> "$REPORT"
 echo "" >> "$REPORT"
 echo "# {SKILL} Report" >> "$REPORT"

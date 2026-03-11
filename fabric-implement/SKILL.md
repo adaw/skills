@@ -118,6 +118,7 @@ Deliverables:
 ---
 schema: fabric.report.v1
 kind: implement
+step: "implement"
 version: "1.0"
 task_id: "{wip_item}"
 branch: "{branch_name}"

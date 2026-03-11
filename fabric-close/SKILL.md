@@ -288,6 +288,7 @@ Per-task close report structure:
 ---
 schema: fabric.report.v1
 kind: close
+step: "close"
 version: "1.0"
 task_id: "{task_id}"
 sprint_number: {N}

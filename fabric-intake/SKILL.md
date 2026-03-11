@@ -335,6 +335,7 @@ Intake report `{WORK_ROOT}/reports/intake-{YYYY-MM-DD}.md`:
 ---
 schema: fabric.report.v1
 kind: intake
+step: "intake"
 created_at: "{YYYY-MM-DD}"
 processed_count: N
 created_count: N

@@ -257,6 +257,7 @@ Vytvoř `{WORK_ROOT}/reports/docs-{YYYY-MM-DD}.md`:
 ---
 schema: fabric.report.v1
 kind: docs
+step: "docs"
 run_id: "{run_id}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {PASS|WARN|FAIL}

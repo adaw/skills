@@ -282,6 +282,7 @@ fi
 ---
 schema: fabric.report.v1
 kind: test
+step: "test"
 run_id: "{run_id}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {PASS|WARN|FAIL}

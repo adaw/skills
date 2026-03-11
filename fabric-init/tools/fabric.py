@@ -2294,6 +2294,10 @@ def cmd_reports_validate(args: argparse.Namespace) -> int:
                 errors.append({"path": e.get("path"), "issue": "created_at/date not ISO"})
         if not (fm.get("kind") or fm.get("step")):
             (errors if strict else warnings).append({"path": e.get("path"), "issue": "missing kind/step"})
+        elif not fm.get("kind"):
+            warnings.append({"path": e.get("path"), "issue": "missing kind (has step)"})
+        elif not fm.get("step"):
+            warnings.append({"path": e.get("path"), "issue": "missing step (has kind)"})
 
         k = str(e.get("kind") or "").lower()
         if k == "test":

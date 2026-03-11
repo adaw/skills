@@ -277,6 +277,7 @@ Vytvoř `{WORK_ROOT}/reports/check-{YYYY-MM-DD}.md`:
 ---
 schema: fabric.report.v1
 kind: check
+step: "check"
 run_id: "{YYYY-MM-DD-{random}}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: PASS | WARN | FAIL

@@ -390,6 +390,7 @@ Vytvoř `{WORK_ROOT}/reports/status-{YYYY-MM-DD}.md`:
 ---
 schema: fabric.report.v1
 kind: status
+step: "status"
 run_id: "status-{YYYY-MM-DD}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: OK

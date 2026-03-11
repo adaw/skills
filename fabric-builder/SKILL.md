@@ -478,6 +478,7 @@ python skills/fabric-init/tools/protocol_log.py \
 ---
 schema: fabric.report.v1
 kind: builder
+step: "builder"
 mode: {build|fix|migrate}
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {OK|WARN|ERROR}

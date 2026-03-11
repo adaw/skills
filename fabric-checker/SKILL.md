@@ -416,6 +416,7 @@ Syntéza nálezů z Fází 1–4:
 ---
 schema: fabric.report.v1
 kind: checker
+step: "checker"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
 status: {PASS|WARN|FAIL}
 score_total: {X}

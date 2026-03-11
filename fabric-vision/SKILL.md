@@ -317,6 +317,7 @@ Vytvoř `{WORK_ROOT}/reports/vision-{YYYY-MM-DD}.md` s tímto schematem:
 ---
 schema: fabric.report.v1
 kind: vision
+step: "vision"
 version: "1.0"
 run_id: "{run_id}"
 created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
