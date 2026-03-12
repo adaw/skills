@@ -63,8 +63,8 @@ if [ "$CURRENT_PHASE" != "implementation" ]; then
 fi
 
 # 1. WIP item and branch exist
-WIP_ITEM=$(python skills/fabric-init/tools/fabric.py state-get --field wip_item 2>/dev/null)
-WIP_BRANCH=$(python skills/fabric-init/tools/fabric.py state-get --field wip_branch 2>/dev/null)
+WIP_ITEM=$(python skills/fabric-init/tools/fabric.py state-read --field wip_item 2>/dev/null)
+WIP_BRANCH=$(python skills/fabric-init/tools/fabric.py state-read --field wip_branch 2>/dev/null)
 
 if [ ! -f "{WORK_ROOT}/backlog/${WIP_ITEM}.md" ]; then
   echo "STOP: backlog file missing for wip_item=$WIP_ITEM"

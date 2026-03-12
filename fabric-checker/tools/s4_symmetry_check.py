@@ -21,6 +21,7 @@ Použití:
     python3 scripts/s4_symmetry_check.py
     python3 scripts/s4_symmetry_check.py --strict   # obě úrovně jako WARN
 """
+
 import re
 import os
 import sys
@@ -28,9 +29,9 @@ import sys
 
 def parse_deps(val: str) -> set[str]:
     """Parse '[fabric-x, fabric-y]' or '- fabric-x' into set."""
-    if not val or val == '[]':
+    if not val or val == "[]":
         return set()
-    return set(re.findall(r'fabric-\w+', val))
+    return set(re.findall(r"fabric-\w+", val))
 
 
 def extract_metadata(skill_path: str) -> tuple[set[str], set[str]]:
@@ -42,14 +43,14 @@ def extract_metadata(skill_path: str) -> tuple[set[str], set[str]]:
     text = open(skill_path).read()
 
     # Najdi §12 blok (poslední výskyt)
-    s12_pos = text.rfind('## §12')
+    s12_pos = text.rfind("## §12")
     if s12_pos == -1:
         return set(), set()
 
     s12_block = text[s12_pos:]
 
-    dep_match = re.search(r'^depends_on:\s*(.+?)$', s12_block, re.MULTILINE)
-    feed_match = re.search(r'^feeds_into:\s*(.+?)$', s12_block, re.MULTILINE)
+    dep_match = re.search(r"^depends_on:\s*(.+?)$", s12_block, re.MULTILINE)
+    feed_match = re.search(r"^feeds_into:\s*(.+?)$", s12_block, re.MULTILINE)
 
     deps = parse_deps(dep_match.group(1)) if dep_match else set()
     feeds = parse_deps(feed_match.group(1)) if feed_match else set()
@@ -59,17 +60,17 @@ def extract_metadata(skill_path: str) -> tuple[set[str], set[str]]:
 
 def main():
     strict = "--strict" in sys.argv
-    skills_dir = 'skills'
+    skills_dir = "skills"
     dep_map: dict[str, set[str]] = {}
     feed_map: dict[str, set[str]] = {}
 
     # Meta/orchestration skills kde symetrie nemá smysl
-    META_SKILLS = {'fabric-init', 'fabric-loop', 'fabric-checker', 'fabric-builder'}
+    META_SKILLS = {"fabric-init", "fabric-loop", "fabric-checker", "fabric-builder"}
 
     for d in sorted(os.listdir(skills_dir)):
-        if not d.startswith('fabric-'):
+        if not d.startswith("fabric-"):
             continue
-        skill_path = os.path.join(skills_dir, d, 'SKILL.md')
+        skill_path = os.path.join(skills_dir, d, "SKILL.md")
         if not os.path.exists(skill_path):
             continue
 
@@ -117,8 +118,10 @@ def main():
     total_deps = sum(len(v) for v in dep_map.values())
     total_feeds = sum(len(v) for v in feed_map.values())
 
-    print(f"S4 Symmetry Check — {len(dep_map)} skills, "
-          f"{total_deps} depends_on edges, {total_feeds} feeds_into edges")
+    print(
+        f"S4 Symmetry Check — {len(dep_map)} skills, "
+        f"{total_deps} depends_on edges, {total_feeds} feeds_into edges"
+    )
     print(f"   (Meta skills excluded from L1: {', '.join(sorted(META_SKILLS))})")
 
     if warnings:
@@ -136,5 +139,5 @@ def main():
     sys.exit(1 if warnings else 0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

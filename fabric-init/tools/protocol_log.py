@@ -10,16 +10,14 @@ Design goals:
 - Works even if state.md/config.md are missing (best effort).
 - Safe to call repeatedly; creates logs dir/files if missing.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
-import os
-import sys
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -88,7 +86,6 @@ def _load_state(work_root: Path) -> Dict[str, Any]:
         return {}
 
 
-
 def _resolve_cfg_path(repo_root: Path, value: Any, fallback: Path) -> Path:
     """Resolve a config path.
     - Absolute paths stay absolute.
@@ -131,7 +128,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--work-root", required=True, help="Fabric workspace root, e.g. fabric/")
     ap.add_argument("--skill", required=True, help="Skill name, e.g. fabric-loop")
-    ap.add_argument("--event", required=True, choices=["start", "end", "error"], help="Lifecycle event")
+    ap.add_argument(
+        "--event", required=True, choices=["start", "end", "error"], help="Lifecycle event"
+    )
     ap.add_argument("--status", default=None, help="Optional status: OK|WARN|ERROR|SKIPPED")
     ap.add_argument("--message", default=None, help="Short human message")
     ap.add_argument("--report", default=None, help="Optional path to a report file")
@@ -151,7 +150,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     repo_root = work_root.parent
 
     logs_root = _resolve_cfg_path(repo_root, cfg.get("LOGS_ROOT"), work_root / "logs")
-    jsonl_path = _resolve_cfg_path(repo_root, cfg.get("PROTOCOL_LOG_JSONL"), logs_root / "protocol.jsonl")
+    jsonl_path = _resolve_cfg_path(
+        repo_root, cfg.get("PROTOCOL_LOG_JSONL"), logs_root / "protocol.jsonl"
+    )
     md_path = _resolve_cfg_path(repo_root, cfg.get("PROTOCOL_LOG_MD"), logs_root / "protocol.md")
 
     payload: Dict[str, Any] = {}

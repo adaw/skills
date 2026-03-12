@@ -60,8 +60,8 @@ Counter-bounded termination:
 
 ```bash
 # Krok 1: Načti error
-STATE_ERROR=$(python skills/fabric-init/tools/fabric.py state-get --field error 2>/dev/null)
-FAILED_STEP=$(python skills/fabric-init/tools/fabric.py state-get --field step 2>/dev/null)
+STATE_ERROR=$(python skills/fabric-init/tools/fabric.py state-read --field error 2>/dev/null)
+FAILED_STEP=$(python skills/fabric-init/tools/fabric.py state-read --field step 2>/dev/null)
 
 # Krok 2: Kategorizuj (intentional vs crash)
 STATE_ERROR_TRIMMED=$(echo "$STATE_ERROR" | sed 's/^[[:space:]]*//')

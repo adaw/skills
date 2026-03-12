@@ -9,6 +9,7 @@ Použití:
     python3 scripts/t10_config_stale_check.py
     python3 scripts/t10_config_stale_check.py --verbose
 """
+
 import re
 import os
 import sys
@@ -29,20 +30,20 @@ def extract_config_keys(config_path: str) -> set[str]:
 
     for line in text.splitlines():
         # Top-level key (no indent, uppercase start)
-        m = re.match(r'^([A-Z][\w]*)\s*:', line)
+        m = re.match(r"^([A-Z][\w]*)\s*:", line)
         if m:
             current_top = m.group(1)
             keys.add(current_top)
             continue
         # Nested key (2-space indent)
-        m = re.match(r'^  (\w[\w_]*)\s*:', line)
+        m = re.match(r"^  (\w[\w_]*)\s*:", line)
         if m and current_top:
             nested = m.group(1)
             keys.add(nested)
             keys.add(f"{current_top}.{nested}")
             continue
         # Reset on non-indented non-comment line
-        if re.match(r'^\S', line) and not line.startswith('#'):
+        if re.match(r"^\S", line) and not line.startswith("#"):
             current_top = None
 
     return keys
@@ -51,7 +52,7 @@ def extract_config_keys(config_path: str) -> set[str]:
 def extract_bash_blocks(skill_path: str) -> list[str]:
     """Vytáhne obsah ```bash ... ``` bloků ze SKILL.md."""
     text = Path(skill_path).read_text()
-    return re.findall(r'```bash\n(.*?)```', text, re.DOTALL)
+    return re.findall(r"```bash\n(.*?)```", text, re.DOTALL)
 
 
 def extract_referenced_keys(bash_blocks: list[str]) -> list[tuple[str, str]]:
@@ -68,8 +69,7 @@ def extract_referenced_keys(bash_blocks: list[str]) -> list[tuple[str, str]]:
     for block in bash_blocks:
         # Pattern 1: grep 'KEY:' nebo grep '^KEY:' ... config
         for m in re.finditer(
-            r"""grep\s+(?:-\w+\s+)*['"]?\^?(\w[\w.]*\w?):['"]?\s+.*config""",
-            block
+            r"""grep\s+(?:-\w+\s+)*['"]?\^?(\w[\w.]*\w?):['"]?\s+.*config""", block
         ):
             refs.append((m.group(1), f"grep {m.group(0)[:60]}"))
 
@@ -77,10 +77,10 @@ def extract_referenced_keys(bash_blocks: list[str]) -> list[tuple[str, str]]:
         for m in re.finditer(r"awk\s+'([^']+)'", block):
             pat = m.group(1)
             # Hlavní klíč v awk range: /timeout_bounds:/,/...
-            for k in re.finditer(r'/(\w[\w_]+):', pat):
+            for k in re.finditer(r"/(\w[\w_]+):", pat):
                 key = k.group(1)
                 # Filtr: ignoruj regex metaznaky (^, [^ ] apod.)
-                if key not in ('if', 'print', 'NR', 'NF', 'FS', 'OFS'):
+                if key not in ("if", "print", "NR", "NF", "FS", "OFS"):
                     refs.append((key, f"awk '{pat[:60]}'"))
 
     return refs
@@ -121,26 +121,24 @@ def check_references_files(skill_dir: str, skill_name: str) -> list[str]:
     # (builder/checker obsahují šablony pro jiné skilly)
     in_code_block = False
     for line in text.splitlines():
-        if line.startswith('```'):
+        if line.startswith("```"):
             # Toggle code block state; skip ```bash blocks (real code)
             # but detect ```markdown blocks (templates/examples)
-            if not in_code_block and 'markdown' in line:
+            if not in_code_block and "markdown" in line:
                 in_code_block = True
                 continue
-            elif in_code_block and line.strip() == '```':
+            elif in_code_block and line.strip() == "```":
                 in_code_block = False
                 continue
         if in_code_block:
             continue  # Skip references inside template code blocks
-        if '→' in line or '${' in line:
+        if "→" in line or "${" in line:
             continue  # Skip instruction/template lines
-        for m in re.finditer(r'references/([\w][\w-]*\.md)', line):
+        for m in re.finditer(r"references/([\w][\w-]*\.md)", line):
             ref_file = m.group(1)
             ref_path = os.path.join(skill_dir, "references", ref_file)
             if not os.path.exists(ref_path):
-                warnings.append(
-                    f"WARN: {skill_name} references/{ref_file} — file missing"
-                )
+                warnings.append(f"WARN: {skill_name} references/{ref_file} — file missing")
 
     return warnings
 
@@ -179,9 +177,9 @@ def main():
         warnings = check_references_files(skill_path, skill_name)
         all_warnings.extend(warnings)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"T10 Config Key Stale Check — {skill_count} skills scanned")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     if all_errors:
         for e in all_errors:

@@ -73,8 +73,8 @@ if [ ! -f "{WORK_ROOT}/state.md" ]; then
 fi
 
 # Precondition 3: wip_item + wip_branch + backlog file
-WIP_ITEM=$(python skills/fabric-init/tools/fabric.py state-get --field wip_item 2>/dev/null)
-WIP_BRANCH=$(python skills/fabric-init/tools/fabric.py state-get --field wip_branch 2>/dev/null)
+WIP_ITEM=$(python skills/fabric-init/tools/fabric.py state-read --field wip_item 2>/dev/null)
+WIP_BRANCH=$(python skills/fabric-init/tools/fabric.py state-read --field wip_branch 2>/dev/null)
 
 if [ -z "$WIP_ITEM" ] || [ "$WIP_ITEM" = "null" ]; then
   echo "STOP: state.wip_item not set — run fabric-implement first"

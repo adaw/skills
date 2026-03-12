@@ -9,6 +9,7 @@ Goals:
 
 This module is intentionally dependency-light (stdlib + PyYAML).
 """
+
 from __future__ import annotations
 
 import re
@@ -24,6 +25,7 @@ import yaml  # type: ignore
 # YAML loader without dates
 # ----------------------------
 
+
 class _NoDatesSafeLoader(yaml.SafeLoader):
     pass
 
@@ -31,8 +33,7 @@ class _NoDatesSafeLoader(yaml.SafeLoader):
 # Remove implicit resolver for timestamps (YYYY-MM-DD etc.)
 for ch, resolvers in list(_NoDatesSafeLoader.yaml_implicit_resolvers.items()):
     _NoDatesSafeLoader.yaml_implicit_resolvers[ch] = [
-        (tag, regexp) for (tag, regexp) in resolvers
-        if tag != "tag:yaml.org,2002:timestamp"
+        (tag, regexp) for (tag, regexp) in resolvers if tag != "tag:yaml.org,2002:timestamp"
     ]
 
 
@@ -56,6 +57,7 @@ def yaml_dump(data: Any) -> str:
 # ----------------------------
 
 CONFIG_MARKERS = ["WORK_ROOT:", "CODE_ROOT:", "COMMANDS:"]
+
 
 def find_repo_root(start: Path) -> Path:
     """Walk parents until a directory containing 'skills' is found."""
@@ -115,7 +117,20 @@ def parse_config_md(p: Path) -> Dict[str, Any]:
 def get_paths_block(config: Dict[str, Any]) -> Dict[str, str]:
     # Paths are top-level keys in the paths YAML fence (WORK_ROOT etc.).
     # In merged form, they are top-level keys.
-    keys = ["WORK_ROOT", "SKILLS_ROOT", "CODE_ROOT", "TEST_ROOT", "DOCS_ROOT", "CONFIG_ROOT", "TEMPLATES_ROOT", "ANALYSES_ROOT", "VISIONS_ROOT", "DECISIONS_ROOT", "SPECS_ROOT", "REVIEWS_ROOT"]
+    keys = [
+        "WORK_ROOT",
+        "SKILLS_ROOT",
+        "CODE_ROOT",
+        "TEST_ROOT",
+        "DOCS_ROOT",
+        "CONFIG_ROOT",
+        "TEMPLATES_ROOT",
+        "ANALYSES_ROOT",
+        "VISIONS_ROOT",
+        "DECISIONS_ROOT",
+        "SPECS_ROOT",
+        "REVIEWS_ROOT",
+    ]
     out: Dict[str, str] = {}
     for k in keys:
         v = config.get(k)
@@ -129,6 +144,7 @@ def get_paths_block(config: Dict[str, Any]) -> Dict[str, str]:
 # ----------------------------
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.S)
+
 
 def parse_frontmatter(md: str) -> Optional[dict]:
     m = FRONTMATTER_RE.match(md)
@@ -145,7 +161,7 @@ def parse_frontmatter(md: str) -> Optional[dict]:
 def replace_frontmatter(md: str, fm: dict, key_order: Optional[List[str]] = None) -> str:
     # preserve body after frontmatter
     m = FRONTMATTER_RE.match(md)
-    body = md[m.end():] if m else md
+    body = md[m.end() :] if m else md
 
     ordered: Dict[str, Any] = {}
     if key_order:
@@ -163,6 +179,7 @@ def replace_frontmatter(md: str, fm: dict, key_order: Optional[List[str]] = None
 
 
 YAML_FENCE_RE = re.compile(r"```yaml\s*(.*?)```", re.S | re.I)
+
 
 def parse_yaml_fence(md: str) -> Optional[Tuple[dict, Tuple[int, int]]]:
     """
@@ -192,6 +209,7 @@ def replace_yaml_fence(md: str, data: dict, span: Tuple[int, int]) -> str:
 # ----------------------------
 # Template utilities
 # ----------------------------
+
 
 def read_text(p: Path) -> str:
     return p.read_text(encoding="utf-8", errors="ignore")

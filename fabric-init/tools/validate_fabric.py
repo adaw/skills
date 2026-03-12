@@ -13,6 +13,7 @@ Modes:
 
 This validator is intentionally conservative: it only checks what can be verified statically.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -65,11 +66,16 @@ DEFAULT_REQUIRED_TEMPLATES = [
     "status-report.md",
     "story.md",
     "task.md",
-	"report.md",
-	"test-report.md",
+    "report.md",
+    "test-report.md",
 ]
 
-FORBIDDEN_HARDCODED_SNIPPETS = ["goden/", "tests/", "docs/", "fabric/"]  # allowed only via {VARS} or in marked examples
+FORBIDDEN_HARDCODED_SNIPPETS = [
+    "goden/",
+    "tests/",
+    "docs/",
+    "fabric/",
+]  # allowed only via {VARS} or in marked examples
 
 
 @dataclass
@@ -148,15 +154,16 @@ def read_text(p: Path) -> str:
     return p.read_text(encoding="utf-8", errors="ignore")
 
 
-
-
 # ---------- security lint (skills) ----------
 
 CODE_FENCE_RE = re.compile(r"```(?P<lang>[A-Za-z0-9_-]*)\n(?P<body>.*?)(?:\n)?```", re.DOTALL)
 
 FORBIDDEN_CMD_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\bgit\s+reset\s+--hard\b"), "git reset --hard (history rewrite / destructive)"),
-    (re.compile(r"\bgit\s+push\b[^\n]*\s(--force|-f)\b"), "git push --force/-f (rewriting shared history)"),
+    (
+        re.compile(r"\bgit\s+push\b[^\n]*\s(--force|-f)\b"),
+        "git push --force/-f (rewriting shared history)",
+    ),
     (re.compile(r"\bgit\s+rebase\b"), "git rebase (unsafe on published branches)"),
     (re.compile(r"\brm\s+-rf\b"), "rm -rf (destructive)"),
     (re.compile(r"\bgit\s+clean\b[^\n]*\s-([fF].*)\b"), "git clean -f (destructive)"),
@@ -171,7 +178,9 @@ def extract_code_fences(md: str) -> List[Tuple[str, str]]:
         fences.append((lang, body))
     return fences
 
+
 # ---------- validations ----------
+
 
 def validate_config(config_path: Path, runnable: bool) -> Tuple[Result, dict, dict]:
     warnings: List[str] = []
@@ -343,7 +352,9 @@ def validate_templates(repo_root: Path, templates_root_rel: str, contracts: dict
             warnings.append(f"Template {fname}: missing YAML frontmatter (schema not verifiable).")
             continue
         if fm.get("schema") != expected_schema:
-            errors.append(f"Template {fname}: schema='{fm.get('schema')}' != expected '{expected_schema}'.")
+            errors.append(
+                f"Template {fname}: schema='{fm.get('schema')}' != expected '{expected_schema}'."
+            )
 
     state_tpl = templates_dir / "state.md"
     if state_tpl.exists() and schema.get("state"):
@@ -368,7 +379,6 @@ def validate_skills(repo_root: Path, skills_root_rel: str) -> Result:
         errors.append(f"Missing skills directory: {skills_root}")
         return Result(False, warnings, errors)
 
-    
     # Required deterministic tools (used by many skills)
     required_tools = [
         skills_root / "fabric-init" / "tools" / "protocol_log.py",
@@ -411,22 +421,38 @@ def validate_skills(repo_root: Path, skills_root_rel: str) -> Result:
             if len(fm_name) > 64:
                 errors.append(f"{skill_file}: frontmatter name exceeds 64 chars ({len(fm_name)}).")
             if not re.match(r"^[a-z0-9-]+$", fm_name):
-                errors.append(f"{skill_file}: frontmatter name='{fm_name}' must be lowercase+hyphens only.")
+                errors.append(
+                    f"{skill_file}: frontmatter name='{fm_name}' must be lowercase+hyphens only."
+                )
 
         fm_desc = fm.get("description", "")
         if not fm_desc:
             errors.append(f"{skill_file}: frontmatter missing or empty 'description'.")
         else:
             if len(str(fm_desc)) > 1024:
-                errors.append(f"{skill_file}: frontmatter description exceeds 1024 chars ({len(str(fm_desc))}).")
+                errors.append(
+                    f"{skill_file}: frontmatter description exceeds 1024 chars ({len(str(fm_desc))})."
+                )
             if "<" in str(fm_desc) and ">" in str(fm_desc):
-                warnings.append(f"{skill_file}: frontmatter description contains XML-like tags (not recommended).")
+                warnings.append(
+                    f"{skill_file}: frontmatter description contains XML-like tags (not recommended)."
+                )
 
         # Supported fields (Claude Code + Agent Skills standard)
         supported_fields = {
-            "name", "description", "disable-model-invocation", "user-invocable",
-            "allowed-tools", "argument-hint", "model", "context", "agent", "hooks",
-            "compatibility", "license", "metadata",
+            "name",
+            "description",
+            "disable-model-invocation",
+            "user-invocable",
+            "allowed-tools",
+            "argument-hint",
+            "model",
+            "context",
+            "agent",
+            "hooks",
+            "compatibility",
+            "license",
+            "metadata",
         }
         for field in fm:
             if field not in supported_fields:
@@ -435,11 +461,15 @@ def validate_skills(repo_root: Path, skills_root_rel: str) -> Result:
         # builder-template tag position check (must be AFTER ---, not inside YAML)
         fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", md, flags=re.S)
         if fm_match and "built from" in fm_match.group(1):
-            errors.append(f"{skill_file}: builder-template tag is inside YAML frontmatter (must be after ---).")
+            errors.append(
+                f"{skill_file}: builder-template tag is inside YAML frontmatter (must be after ---)."
+            )
 
         line_count = md.count("\n") + 1
         if line_count > 500:
-            warnings.append(f"{skill_file}: {line_count} lines (>500). Consider splitting to avoid LLM truncation.")
+            warnings.append(
+                f"{skill_file}: {line_count} lines (>500). Consider splitting to avoid LLM truncation."
+            )
 
         for snippet in FORBIDDEN_HARDCODED_SNIPPETS:
             for m in re.finditer(re.escape(snippet), md):
@@ -447,12 +477,13 @@ def validate_skills(repo_root: Path, skills_root_rel: str) -> Result:
                 line = md.splitlines()[line_no - 1]
                 if "PŘÍKLAD" in line or "EXAMPLE" in line:
                     continue
-                if md[max(0, m.start() - 2):m.start()] == "}/":
+                if md[max(0, m.start() - 2) : m.start()] == "}/":
                     continue
-                errors.append(f"{skill_file}: hardcoded '{snippet}' at line {line_no}: {line.strip()}")
+                errors.append(
+                    f"{skill_file}: hardcoded '{snippet}' at line {line_no}: {line.strip()}"
+                )
                 break  # one error per snippet per file is enough
 
-    
     # CANON assets (portable-by-copying skills/)
     canon_templates = repo_root / "skills" / "fabric-init" / "assets" / "templates"
     if not canon_templates.exists():
@@ -520,12 +551,16 @@ def validate_workspace(repo_root: Path, work_root_rel: str, runnable: bool) -> R
         v_txt = read_text(v_path)
         placeholder_re = re.compile(r"\b(TODO|TBD|FIXME|XXX)\b", re.IGNORECASE)
         if placeholder_re.search(v_txt or ""):
-            warnings.append("vision.md contains placeholder markers (TODO/TBD/FIXME/XXX). Consider finishing the core vision.")
+            warnings.append(
+                "vision.md contains placeholder markers (TODO/TBD/FIXME/XXX). Consider finishing the core vision."
+            )
     visions_dir = work_root / "visions"
     if visions_dir.exists():
         md_files = sorted([p for p in visions_dir.glob("*.md") if p.is_file()])
         if len(md_files) == 0:
-            warnings.append("visions/ is empty (recommended to have sub-visions for deeper concepts).")
+            warnings.append(
+                "visions/ is empty (recommended to have sub-visions for deeper concepts)."
+            )
         else:
             # Warn about very short sub-visions
             for p in md_files:
@@ -536,31 +571,39 @@ def validate_workspace(repo_root: Path, work_root_rel: str, runnable: bool) -> R
                 if re.search(r"\b(TODO|TBD|FIXME|XXX)\b", txt, re.IGNORECASE):
                     warnings.append(f"placeholder markers in {p} (consider finishing).")
 
-    
     # Governance indices (recommended for readability + automation)
     for d in ["decisions", "specs", "reviews"]:
         idx = work_root / d / "INDEX.md"
         if not idx.exists():
-            warnings.append(f"Missing governance index file: {idx} (recommended; regenerate via fabric.py governance-index).")
-
-
+            warnings.append(
+                f"Missing governance index file: {idx} (recommended; regenerate via fabric.py governance-index)."
+            )
 
     return Result(len(errors) == 0, warnings, errors)
 
 
-
-
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runnable", action="store_true", help="Require COMMANDS to be resolved for a safe autonomous run.")
-    ap.add_argument("--workspace", action="store_true", help="Validate runtime workspace under WORK_ROOT (requires init).")
+    ap.add_argument(
+        "--runnable",
+        action="store_true",
+        help="Require COMMANDS to be resolved for a safe autonomous run.",
+    )
+    ap.add_argument(
+        "--workspace",
+        action="store_true",
+        help="Validate runtime workspace under WORK_ROOT (requires init).",
+    )
     args = ap.parse_args()
 
     repo_root = Path(os.getcwd()).resolve()
 
     config_path, candidates = discover_config(repo_root)
     if not config_path:
-        die("ERROR: No Fabric config.md found (searched for config.md containing WORK_ROOT:, CODE_ROOT:, COMMANDS:).", code=2)
+        die(
+            "ERROR: No Fabric config.md found (searched for config.md containing WORK_ROOT:, CODE_ROOT:, COMMANDS:).",
+            code=2,
+        )
 
     if len(candidates) > 1:
         print("WARNING: Multiple config.md candidates found; using:", config_path)
@@ -581,13 +624,17 @@ def main() -> None:
     templates_root_rel = paths.get("TEMPLATES_ROOT") or f"{work_root_rel}/templates"
     if not isinstance(templates_root_rel, str):
         templates_root_rel = f"{work_root_rel}/templates"
-        print("WARNING: Could not extract TEMPLATES_ROOT from config.md; defaulting to", templates_root_rel)
+        print(
+            "WARNING: Could not extract TEMPLATES_ROOT from config.md; defaulting to",
+            templates_root_rel,
+        )
 
     skills_root_rel = paths.get("SKILLS_ROOT") or "skills"
     if not isinstance(skills_root_rel, str):
         skills_root_rel = "skills"
-        print("WARNING: Could not extract SKILLS_ROOT from config.md; defaulting to", skills_root_rel)
-
+        print(
+            "WARNING: Could not extract SKILLS_ROOT from config.md; defaulting to", skills_root_rel
+        )
 
     res_tpl = validate_templates(repo_root, templates_root_rel, contracts)
     for w in res_tpl.warnings:

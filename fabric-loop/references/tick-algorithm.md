@@ -70,10 +70,10 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
    **Explicitní kód pro run_id lifecycle:**
    ```bash
    # Na začátku každého tick cyklu (krok 2):
-   RUN_ID=$(python skills/fabric-init/tools/fabric.py state-get --field run_id 2>/dev/null)
+   RUN_ID=$(python skills/fabric-init/tools/fabric.py state-read --field run_id 2>/dev/null)
    STATE_GET_EXIT=$?
    if [ $STATE_GET_EXIT -ne 0 ]; then
-     echo "WARN: state-get failed (exit $STATE_GET_EXIT), treating as null"
+     echo "WARN: state-read failed (exit $STATE_GET_EXIT), treating as null"
      RUN_ID=""
    fi
    # Validate existing run_id format (YYYY-MM-DD-N)
@@ -97,7 +97,7 @@ V rámci každého loopu proveď nejvýše `MAX_TICKS_PER_LOOP` ticků. Pro kaž
    # Po archive (přechod do idle) — preserve run_id monotonicity (P2 fix):
    # run_id MUST be monotonically increasing. When idle, set run_id to next integer, never null.
    # This ensures that each run_id is unique and ordered, enabling reproducibility and audit trails.
-   NEXT_RUN_ID=$(python skills/fabric-init/tools/fabric.py state-get --field run_id 2>/dev/null)
+   NEXT_RUN_ID=$(python skills/fabric-init/tools/fabric.py state-read --field run_id 2>/dev/null)
    if [ -n "$NEXT_RUN_ID" ] && echo "$NEXT_RUN_ID" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]+$'; then
      # Extract counter part and increment
      COUNTER=$(echo "$NEXT_RUN_ID" | awk -F'-' '{print $NF}')

@@ -10,6 +10,7 @@ Logika:
 Použití:
   python skills/fabric-init/tools/ensure_venv.py [--repo-root .] [--dep-root <path>] [--venv .venv] [--quiet]
 """
+
 from __future__ import annotations
 import argparse
 import contextlib
@@ -32,12 +33,14 @@ def _venv_bin(venv_path: Path, name: str) -> Path:
 
 # --- File locking ---
 
+
 @contextlib.contextmanager
 def _lock(lock_path: Path):
     if _IS_WIN:
         yield
         return
     import fcntl
+
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = open(lock_path, "w")
     try:
@@ -49,6 +52,7 @@ def _lock(lock_path: Path):
 
 
 # --- TOML dev-extras detection ---
+
 
 def _has_dev_extras(pyproject: Path) -> bool:
     """Return True if pyproject defines a PEP 621 optional-dependency group named 'dev'.
@@ -64,19 +68,21 @@ def _has_dev_extras(pyproject: Path) -> bool:
     return isinstance(opt_deps, dict) and ("dev" in opt_deps)
 
 
-
 def _parse_toml(path: Path) -> dict:
     text = path.read_bytes()
     try:
         import tomllib
+
         return tomllib.loads(text.decode())
     except ImportError:
         pass
     import tomli
+
     return tomli.loads(text.decode())
 
 
 # --- Core logic ---
+
 
 def hash_files(*paths: Path) -> str:
     h = hashlib.sha256()
@@ -103,6 +109,8 @@ def run(cmd: list[str], cwd: Path, quiet: bool) -> int:
     if quiet:
         kwargs["capture_output"] = True
     return subprocess.run(cmd, **kwargs).returncode
+
+
 def _ensure_baseline_tools(repo_root: Path, venv_path: Path, pip: Path, quiet: bool) -> None:
     """Best-effort install of baseline dev tools used by Fabric commands.
 
@@ -122,8 +130,6 @@ def _ensure_baseline_tools(repo_root: Path, venv_path: Path, pip: Path, quiet: b
         )
     else:
         log("[ensure_venv] Baseline tools ready ✓")
-
-
 
 
 def _log(msg: str, quiet: bool, *, force_stderr: bool = False) -> None:
@@ -217,8 +223,16 @@ def ensure_venv(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ensure project venv is up to date")
     parser.add_argument("--repo-root", default=".", help="Path to repo root (base for venv path)")
-    parser.add_argument("--dep-root", default=None, help="Dependency root (pyproject/requirements). Defaults to repo-root.")
-    parser.add_argument("--venv", default=".venv", help="Venv directory name/path (relative to repo-root unless absolute)")
+    parser.add_argument(
+        "--dep-root",
+        default=None,
+        help="Dependency root (pyproject/requirements). Defaults to repo-root.",
+    )
+    parser.add_argument(
+        "--venv",
+        default=".venv",
+        help="Venv directory name/path (relative to repo-root unless absolute)",
+    )
     parser.add_argument("--quiet", action="store_true", help="Suppress output")
     parser.add_argument("--json", dest="json_out", action="store_true", help="JSON output")
     args = parser.parse_args()
@@ -246,12 +260,16 @@ def main() -> None:
         sys.exit(1)
 
     if args.json_out:
-        print(json.dumps({
-            "status": "updated" if updated else "ok",
-            "venv": str(venv_path),
-            "dep_root": str(dep_root),
-            "repo_root": str(repo_root),
-        }))
+        print(
+            json.dumps(
+                {
+                    "status": "updated" if updated else "ok",
+                    "venv": str(venv_path),
+                    "dep_root": str(dep_root),
+                    "repo_root": str(repo_root),
+                }
+            )
+        )
 
 
 if __name__ == "__main__":
