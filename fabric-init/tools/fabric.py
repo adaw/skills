@@ -878,7 +878,7 @@ def run_command(
     cmd = str(cmd).strip()
     logs_dir = work_root / "logs" / "commands"
     logs_dir.mkdir(parents=True, exist_ok=True)
-    ts = now_utc().strftime("%Y%m%d-%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     log_path = logs_dir / f"{key}-{ts}.log"
 
     env = os.environ.copy()

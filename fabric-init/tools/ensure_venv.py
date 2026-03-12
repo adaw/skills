@@ -121,7 +121,7 @@ def _ensure_baseline_tools(repo_root: Path, venv_path: Path, pip: Path, quiet: b
     missing = [t for t in baseline_tools if not _venv_bin(venv_path, t).exists()]
     if not missing:
         return
-    log("[ensure_venv] Installing baseline tools: " + ", ".join(missing) + "...")
+    _log("[ensure_venv] Installing baseline tools: " + ", ".join(missing) + "...", quiet)
     tools_rc = run([str(pip), "install", *missing], repo_root, quiet)
     if tools_rc != 0:
         print(
@@ -129,7 +129,7 @@ def _ensure_baseline_tools(repo_root: Path, venv_path: Path, pip: Path, quiet: b
             file=sys.stderr,
         )
     else:
-        log("[ensure_venv] Baseline tools ready ✓")
+        _log("[ensure_venv] Baseline tools ready ✓", quiet)
 
 
 def _log(msg: str, quiet: bool, *, force_stderr: bool = False) -> None:
