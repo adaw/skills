@@ -204,14 +204,14 @@ fi
 
 3. **Module Inventory:**
    ```bash
-   find $CODE_ROOT -name "*.py" -type f | head -${MAX_SCAN_FILES} | wc -l
-   find $CODE_ROOT -name "*.py" -type f | head -${MAX_SCAN_FILES} | xargs wc -l | tail -1
+   find "${CODE_ROOT}" -name "*.py" -type f | head -${MAX_SCAN_FILES} | wc -l
+   find "${CODE_ROOT}" -name "*.py" -type f | head -${MAX_SCAN_FILES} | xargs wc -l | tail -1
    ```
    Output: File count + total LOC (capped at MAX_SCAN_FILES)
 
 4. **Import Graph (sample):**
    ```bash
-   grep -rn "^from\|^import" $CODE_ROOT/ --include="*.py" | head -20
+   grep -rn "^from\|^import" "${CODE_ROOT}/" --include="*.py" | head -20
    ```
    Output: Import patterns for quick dependency scan
 

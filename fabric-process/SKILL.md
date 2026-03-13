@@ -55,12 +55,19 @@ orphans: [{type, name, classification, action}]
 
 Na začátku a na konci tohoto skillu zapiš události do protokolu.
 
-Detail bash commands: Viz `references/preconditions.md` — "Protocol Logging" sekce.
+```bash
+# START
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" --skill "process" --event start
 
-**Summary:**
-- **START:** Log skill start with event=start
-- **END (OK/WARN/ERROR):** Log completion with status + report path
-- **ERROR:** Log critical errors immediately with brief reason
+# ... skill execution ...
+
+# END (po dokončení)
+python skills/fabric-init/tools/protocol_log.py \
+  --work-root "{WORK_ROOT}" --skill "process" --event end \
+  --status {OK|WARN|ERROR} \
+  --report "{WORK_ROOT}/reports/process-{YYYY-MM-DD}.md"
+```
 
 ---
 
