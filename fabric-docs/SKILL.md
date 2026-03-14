@@ -206,6 +206,17 @@ echo "=== Ověřuji CLI defaults ==="
 grep 'default=' src/llmem/cli.py 2>/dev/null | sort > /tmp/cli-defaults.txt
 grep 'default:' docs/cli.md 2>/dev/null | sort > /tmp/docs-cli.txt
 diff -u /tmp/cli-defaults.txt /tmp/docs-cli.txt | grep -E '^[+-]' && echo "WARN: CLI defaults mismatch" || echo "PASS: CLI defaults match"
+
+# README.md defaults: porovnej env var tabulku v README s config.py
+echo "=== Ověřuji README.md defaults ==="
+grep -oP 'LLMEM_\w+.*\|.*`[^`]+`' README.md 2>/dev/null | while read LINE; do
+  VAR=$(echo "$LINE" | grep -oP 'LLMEM_\w+')
+  README_VAL=$(echo "$LINE" | grep -oP '`[^`]+`' | tail -1 | tr -d '`')
+  CODE_VAL=$(grep "$VAR" src/llmem/config.py 2>/dev/null | grep -oP 'default="?[^",)]+' | head -1 | sed 's/default=//' | tr -d '"')
+  if [ -n "$CODE_VAL" ] && [ "$README_VAL" != "$CODE_VAL" ]; then
+    echo "WARN: README $VAR default='$README_VAL' vs code='$CODE_VAL'"
+  fi
+done
 ```
 
 Nesrovnalosti zapiš jako P1 findings do reportu.

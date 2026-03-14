@@ -345,7 +345,7 @@ may_modify_backlog: false      # backlog je read-only
 may_modify_code: false
 may_create_intake: true
 
-depends_on: [fabric-prio, fabric-architect, fabric-archive, fabric-vision]
+depends_on: [fabric-prio, fabric-architect, fabric-vision]
 feeds_into: [fabric-analyze]
 ```
 

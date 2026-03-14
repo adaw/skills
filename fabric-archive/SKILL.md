@@ -311,8 +311,7 @@ may_create_intake: true
 depends_on:
   - fabric-close
 
-feeds_into:
-  - fabric-sprint
+feeds_into: []
 ```
 
 ---

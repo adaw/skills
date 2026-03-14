@@ -268,6 +268,28 @@ fi
 
 Pokud `s4_symmetry_check.py` exit code ≠ 0 → zapiš P1 finding do reportu.
 
+**Povinné:** Kauzální validace depends_on — ověř, že žádný skill nemá v depends_on skill, který běží PO něm v LIFECYCLE:
+
+```bash
+# Kauzální validace: depends_on musí být z dřívější fáze lifecycle
+LIFECYCLE="vision status architect process gap generate intake prio design sprint analyze implement test review close docs check archive"
+for SKILL_FILE in skills/fabric-*/SKILL.md; do
+  SKILL_STEP=$(grep -m1 'step:\|lifecycle_step:' "$SKILL_FILE" | awk '{print $2}')
+  SKILL_IDX=$(echo "$LIFECYCLE" | tr ' ' '\n' | grep -n "^${SKILL_STEP}$" | cut -d: -f1)
+  [ -z "$SKILL_IDX" ] && continue  # utility/meta — skip
+  for DEP in $(grep 'depends_on:' "$SKILL_FILE" | sed 's/.*\[//;s/\].*//;s/,/ /g;s/fabric-//g'); do
+    DEP_FILE="skills/fabric-${DEP}/SKILL.md"
+    [ ! -f "$DEP_FILE" ] && continue
+    DEP_STEP=$(grep -m1 'step:\|lifecycle_step:' "$DEP_FILE" | awk '{print $2}')
+    DEP_IDX=$(echo "$LIFECYCLE" | tr ' ' '\n' | grep -n "^${DEP_STEP}$" | cut -d: -f1)
+    [ -z "$DEP_IDX" ] && continue
+    if [ "$DEP_IDX" -gt "$SKILL_IDX" ]; then
+      echo "P1: $(basename $(dirname $SKILL_FILE)) depends_on $DEP but $DEP runs AFTER in lifecycle ($DEP_IDX > $SKILL_IDX)"
+    fi
+  done
+done
+```
+
 **Klíčové momenty a detaily simulace:** viz `references/s4-virtual-loop-simulation.md`
 
 ---
@@ -302,29 +324,10 @@ Per skill: starý workflow vs nový fabric skill — ztráty a zisky.
 
 ## K10 — Concrete Example & Anti-patterns
 
-### Audit Execution Runner (inline pseudocode)
+### Audit Execution Runner
 
-```bash
-# Per-skill audit loop (Fáze 1 core)
-for SKILL_FILE in skills/fabric-*/SKILL.md; do
-  SKILL_NAME=$(basename "$(dirname "$SKILL_FILE")")
-  LINES=$(wc -l < "$SKILL_FILE")
-
-  # 1. Read ENTIRE skill (including references/)
-  # 2. Read config.md for cross-reference
-  # 3. Score K1-K10 using checklists above
-  # 4. Record findings with line numbers
-
-  # Scoring rules:
-  # - Counter without `grep -qE '^[0-9]+$'` → max K2=7
-  # - Hardcoded threshold without config.md grep → max K5=7
-  # - Phase WARN not STOP → max K1=6
-  # - K4=N/A for non-git skills → Max=90
-  # - §7 vague ("analyzuj") without detail → max K10=5
-
-  echo "$SKILL_NAME | K1=$K1 K2=$K2 ... K10=$K10 | $TOTAL/$MAX = $PCT%"
-done
-```
+Per-skill audit loop: read ENTIRE skill + references/ + config.md → score K1-K10 → record findings.
+**Detailní pseudocode a scoring rules viz:** `references/audit-runner-pseudocode.md`
 
 ### Example: Checker Audit — fabric-implement Score 94%
 

@@ -239,6 +239,7 @@ Pokud SKILL.md > 500 řádků:
 - [ ] §3 má bash kód pro preconditions
 - [ ] §10 má ≥3 testovatelné položky
 - [ ] §12 depends_on/feeds_into symetrie: pokud tento skill má `feeds_into: [X]`, ověř že X má `depends_on: [tento_skill]` a naopak
+- [ ] §12 depends_on kauzalita: ověř, že KAŽDÝ skill v depends_on běží PŘED tímto skillem v config.md LIFECYCLE (ne po něm). Výjimka: cross-loop deps musí být explicitně komentované
 - [ ] K10: ≥1 inline příklad s LLMem daty (≥10 řádků)
 - [ ] K10: ≥3 anti-patterns s bash detection (`grep`/`ls` příkazy)
 - [ ] Pokud ref= byl použit: klíčové pracovní instrukce z workflow jsou přeneseny

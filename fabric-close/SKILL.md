@@ -347,6 +347,8 @@ Before closing skill execution, verify:
 **Checklist:**
 - [ ] All MERGEABLE tasks have close reports
 - [ ] DONE itemy přesunuty do backlog/done/ (ne ponechány v backlog/)
+- [ ] Close report existuje v `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md`
+- [ ] Backlog index aktualizován (žádné DONE itemy v hlavním indexu)
 
 ```bash
 # 1. All MERGEABLE tasks have close reports
