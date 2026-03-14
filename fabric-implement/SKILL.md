@@ -313,6 +313,31 @@ fi
 - 6-20 errors: auto-fix + regression check (>30% regression = revert)
 - >20 errors: DON'T auto-fix, manual fix required
 
+```bash
+# K2: Regression detection post auto-fix (POVINNÉ)
+# Capture baseline test count BEFORE auto-fix
+BASELINE_PASS=$(timeout "$TIMEOUT_TEST" {COMMANDS.test} 2>&1 | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
+BASELINE_PASS=${BASELINE_PASS:-0}
+if ! echo "$BASELINE_PASS" | grep -qE '^[0-9]+$'; then BASELINE_PASS=0; fi
+
+# Run auto-fix (lint --fix, format)
+{COMMANDS.lint_fix} 2>/dev/null || echo "WARN: lint fix failed"
+
+# Capture post-fix test count
+POSTFIX_PASS=$(timeout "$TIMEOUT_TEST" {COMMANDS.test} 2>&1 | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
+POSTFIX_PASS=${POSTFIX_PASS:-0}
+if ! echo "$POSTFIX_PASS" | grep -qE '^[0-9]+$'; then POSTFIX_PASS=0; fi
+
+# Regression check: >30% test regression = revert auto-fix
+if [ "$BASELINE_PASS" -gt 0 ]; then
+  REGRESSION_PCT=$(( (BASELINE_PASS - POSTFIX_PASS) * 100 / BASELINE_PASS ))
+  if [ "$REGRESSION_PCT" -gt 30 ]; then
+    echo "WARN: Regression detected ($REGRESSION_PCT% tests lost). Reverting auto-fix."
+    git checkout -- . 2>/dev/null || echo "WARN: git checkout revert failed"
+  fi
+fi
+```
+
 ---
 
 ## §9 Report Template

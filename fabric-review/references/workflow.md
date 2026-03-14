@@ -63,7 +63,7 @@ If gate fails, determine scope of failure:
 
 ```bash
 # Get changed files in task diff
-git diff --name-only {main_branch}...{wip_branch} > /tmp/task-files.txt
+git diff --name-only "{main_branch}"..."{wip_branch}" > /tmp/task-files.txt
 
 # Distinguish task files vs pre-existing failures
 TASK_ERRORS=$(timeout 60 {COMMANDS.lint} 2>&1 | while read error_line; do
@@ -93,13 +93,13 @@ Obtain full diff and categorize changes:
 git fetch --all --prune 2>/dev/null || true
 
 # Summary
-git diff --stat {main_branch}...{wip_branch}
+git diff --stat "{main_branch}"..."{wip_branch}"
 
 # Full diff (for manual review)
-git diff {main_branch}...{wip_branch} > /tmp/review.diff
+git diff "{main_branch}"..."{wip_branch}" > /tmp/review.diff
 
 # Changed files
-git diff --name-only {main_branch}...{wip_branch} > /tmp/changed-files.txt
+git diff --name-only "{main_branch}"..."{wip_branch}" > /tmp/changed-files.txt
 
 # Categorize by type
 echo "=== Code files ===" && grep '\.py$' /tmp/changed-files.txt
@@ -552,7 +552,7 @@ Automated screening for R1–R9 violations:
 echo "=== R1-R9 ANTI-PATTERN DETECTION ==="
 
 # Get changed files
-git diff --name-only {main_branch}...{wip_branch} > /tmp/changed_files.txt
+git diff --name-only "{main_branch}"..."{wip_branch}" > /tmp/changed_files.txt
 
 # R1: Logic bugs & edge cases
 echo "=== R1: Correctness Anti-Patterns ==="
@@ -586,7 +586,7 @@ grep -rn "^def " /tmp/changed_files.txt | head -10 && echo "R6-CHECK: Review fun
 # R7: Documentation
 echo "=== R7: Documentation Anti-Patterns ==="
 grep -rn "^def [^_]" /tmp/changed_files.txt | head -5 && echo "R7-CHECK: Verify public functions have docstrings"
-git diff --name-only {main_branch}...{wip_branch} | grep -v test | grep -q . && ! git diff {main_branch}...{wip_branch} | grep -q "CHANGELOG" && echo "R7-WARN: Code changed but CHANGELOG not updated"
+git diff --name-only "{main_branch}"..."{wip_branch}" | grep -v test | grep -q . && ! git diff "{main_branch}"..."{wip_branch}" | grep -q "CHANGELOG" && echo "R7-WARN: Code changed but CHANGELOG not updated"
 
 # R8: Compliance (ADR/Spec)
 echo "=== R8: Compliance Anti-Patterns ==="
@@ -627,7 +627,7 @@ grep -A 20 "^GOVERNANCE:" {WORK_ROOT}/config.md | head -40
 ### Check changed files against contracts
 
 ```bash
-git diff --name-only {main_branch}...{wip_branch} > /tmp/changed_files.txt
+git diff --name-only "{main_branch}"..."{wip_branch}" > /tmp/changed_files.txt
 
 # For each ADR, extract contract_modules
 for adr_file in {WORK_ROOT}/decisions/*.md; do
@@ -669,7 +669,7 @@ fi
 
 echo "=== R9 PROCESS CHAIN VALIDATION ==="
 
-git diff --name-only {main_branch}...{wip_branch} > /tmp/changed_files.txt
+git diff --name-only "{main_branch}"..."{wip_branch}" > /tmp/changed_files.txt
 
 while IFS= read -r changed_file; do
   [ -z "$changed_file" ] && continue
