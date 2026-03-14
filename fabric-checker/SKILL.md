@@ -258,7 +258,7 @@ Výstup: simulační log s tick-by-tick průběhem celého lifecycle.
 **Povinné:** Spusť symetrii závislostí:
 
 ```bash
-python tools/s4_symmetry_check.py --strict 2>/dev/null
+python skills/fabric-checker/tools/s4_symmetry_check.py --strict 2>/dev/null
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
   echo "P1 finding: dependency asymmetry detected"

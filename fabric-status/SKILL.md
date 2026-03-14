@@ -496,4 +496,4 @@ feeds_into: [fabric-loop]
 
 ## Git Safety (K4)
 
-Skill fabric-status NEPROVÁDÍ git operace (pouze čte stav). K4 je N/A.
+Skill fabric-status používá READ-ONLY git příkazy (git status, git for-each-ref, git rev-list) pro health snapshot. Nemodifikuje repo. Všechny proměnné v git příkazech jsou quotované.

@@ -473,27 +473,17 @@ python skills/fabric-init/tools/protocol_log.py \
 
 ## Report
 
-`{WORK_ROOT}/reports/builder-{YYYY-MM-DD}.md`:
+`{WORK_ROOT}/reports/builder-{YYYY-MM-DD}.md` — frontmatter: `schema: fabric.report.v1`, `kind: builder`, `mode`, `status`, `target`. Body: Mód, Target, Provedené akce.
 
-```md
----
-schema: fabric.report.v1
-kind: builder
-step: "builder"
-mode: {build|fix|migrate}
-created_at: "{YYYY-MM-DDTHH:MM:SSZ}"
-status: {OK|WARN|ERROR}
-target: {skill_name}
----
+## §12 — Metadata
 
-# Builder Report — {YYYY-MM-DD}
-
-## Mód: {BUILD|FIX|MIGRATE}
-## Target: {skill_name nebo "multiple (fix)"}
-
-## Provedené akce
-{Seznam co builder udělal}
-
-## Další krok
-Spusť `fabric-checker` pro ověření.
+```yaml
+phase: meta
+step: builder
+depends_on: [fabric-checker]
+feeds_into: [fabric-checker]
+may_modify_state: false
+may_modify_code: true
+idempotent: false
+fail_mode: fail-closed
 ```

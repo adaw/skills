@@ -441,36 +441,10 @@ Loop iteration #3:
     completed_step: implement (recorded)
 ```
 
-### Anti-patterns (FORBIDDEN detection & prevention)
+### Anti-patterns
 
-```bash
-# A1: Dispatch same skill twice WITHOUT checking result
-# DETECTION: Dispatcher runs fabric-implement, but DOES NOT read report
-# FIX: After dispatch, MUST read {WORK_ROOT}/reports/implement-*.md
-#      and validate status field before next dispatch
-IMPL_REPORT=$(ls -t "{WORK_ROOT}"/reports/implement-${WIP_ITEM}-*.md 2>/dev/null | head -1)
-if [ -z "$IMPL_REPORT" ]; then
-  echo "STOP: implement report missing — cannot advance state"
-  exit 1
-fi
-
-# A2: Not checking exit condition for loop=auto
-# DETECTION: Loop continues despite no pending work
-# FIX: Before each tick, call `fabric.py work-status` and respect result
-WORK_STATUS=$(python skills/fabric-init/tools/fabric.py work-status --json-out /tmp/ws.json)
-if grep -q '"status": "none"' /tmp/ws.json; then
-  echo "No work remaining (goal=$GOAL) — LOOP BOUNDARY"
-  exit 0  # OK, not error
-fi
-
-# A3: Modifying state.md directly instead of via state-patch
-# DETECTION: Grep for `phase:` or `step:` edits in loop code
-# FIX: Use ONLY `fabric.py state-patch --fields-json '{...}'`
-# WRONG:
-  # sed -i 's/step: implement/step: test/' state.md
-# RIGHT:
-  # python skills/fabric-init/tools/fabric.py state-patch --fields-json '{"step":"test"}'
-```
+> **Detaily (A1-A3 s bash detection):** viz `references/implementation-details.md`
+> A1: Dispatch bez čtení reportu. A2: Loop bez work-status check. A3: Přímá editace state.md.
 
 ---
 
@@ -493,6 +467,16 @@ Pokud ne → FAIL + zapiš `state.error` s detailním popisem a STOP.
 
 ## Concurrency
 
-**Single-instance only** — jeden orchestrátor pro daný `{WORK_ROOT}`. Concurrent = race conditions + data corruption.
+**Single-instance only.** Viz `references/implementation-details.md`.
 
-> **Detailní implementace (concurrency detection, crash recovery, state diagrams):** viz `references/implementation-details.md`
+## §12 — Metadata
+
+```yaml
+phase: meta
+step: loop
+depends_on: [fabric-init]
+feeds_into: []
+touches_state: true
+idempotent: true
+fail_mode: fail-closed
+```

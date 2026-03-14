@@ -402,7 +402,7 @@ Skill je fail-open vůči VOLITELNÝM vstupům (chybí → pokračuj s WARNING) 
 ```yaml
 # Zařazení v lifecycle
 phase: closing
-step: documentation
+step: docs
 
 # Oprávnění
 may_modify_state: false

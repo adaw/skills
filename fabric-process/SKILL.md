@@ -476,7 +476,7 @@ may_modify_code: false
 may_create_intake: true
 
 # Pořadí v pipeline (pro fabric-loop)
-depends_on: [fabric-architect, fabric-gap]
+depends_on: [fabric-architect]
 feeds_into: [fabric-gap]
 
 # Konzumenti process mapy (cross-reference)
