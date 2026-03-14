@@ -192,7 +192,32 @@ PRIO_EFFORT_WEIGHT=${PRIO_EFFORT_WEIGHT:-0.3}
 
 **Detail:** Viz `references/scoring-logic.md` pro detailní instructions na parsing itemů, výpočet faktorů (Impact, Urgency, Readiness, EffortScore, Staleness), PRIO formulu a konkrétní příklady se factor breakdowns.
 
-### 7.6) Regeneruj backlog.md
+### 7.6) Auto-promote IDEA → DESIGN
+
+**Co:** Po skórování automaticky promuj IDEA itemy s `prio > 0` na status `DESIGN`, aby je `fabric-design` mohl zpracovat v dalším kroku lifecycle.
+
+**Jak:**
+```bash
+# Auto-promote IDEA items with prio > 0 to DESIGN
+PROMOTED=0
+for ITEM_FILE in {WORK_ROOT}/backlog/*.md; do
+  ITEM_STATUS=$(grep -m1 '^status:' "$ITEM_FILE" | awk '{print $2}')
+  ITEM_PRIO=$(grep -m1 '^prio:' "$ITEM_FILE" | awk '{print $2}')
+  ITEM_PRIO=${ITEM_PRIO:-0}
+  if [ "$ITEM_STATUS" = "IDEA" ] && [ "$ITEM_PRIO" -gt 0 ] 2>/dev/null; then
+    sed -i 's/^status: IDEA/status: DESIGN/' "$ITEM_FILE"
+    PROMOTED=$((PROMOTED + 1))
+    echo "PROMOTED: $(basename "$ITEM_FILE" .md) IDEA→DESIGN (prio=$ITEM_PRIO)"
+  fi
+done
+echo "Auto-promoted $PROMOTED items from IDEA to DESIGN"
+```
+
+**Minimum:** Všechny IDEA itemy s prio > 0 jsou po prio kroku ve stavu DESIGN.
+
+**Anti-pattern:** Nepromuj itemy s `prio: 0` nebo bez prio — ty ještě nebyly ohodnoceny.
+
+### 7.7) Regeneruj backlog.md (was 7.6)
 
 **Co:** Vytvoř tabulku v `{WORK_ROOT}/backlog.md` s všemi itemy, seřazenou podle PRIO.
 
@@ -209,7 +234,7 @@ Pořadí:
 
 **Minimum:** Tabulka existuje, seřazena podle PRIO, reflektuje aktuální frontmatter.
 
-### 7.7) Vytvoř prio report
+### 7.8) Vytvoř prio report
 
 **Co:** Report `{WORK_ROOT}/reports/prio-{YYYY-MM-DD}.md` s analýzou.
 
