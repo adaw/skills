@@ -418,7 +418,7 @@ echo "Self-check passed: sprint close complete"
 > Detail: `references/workflow.md` (closing steps, merge loop), `references/examples.md` (K10 examples).
 
 ```yaml
-depends_on: [fabric-review]
+depends_on: [fabric-review, fabric-test]
 feeds_into: [fabric-archive, fabric-implement, fabric-docs]
 phase: closing
 lifecycle_step: close

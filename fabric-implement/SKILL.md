@@ -445,7 +445,7 @@ done
 **Downstream Contract (WQ7):** fabric-review (Status=IN_REVIEW, tests+lint PASS), fabric-close (branch exists, conventional commit, no stubs).
 
 ```yaml
-depends_on: [fabric-analyze]
+depends_on: [fabric-analyze, fabric-architect, fabric-close, fabric-design]
 feeds_into: [fabric-test, fabric-e2e]
 phase: implementation
 lifecycle_step: implement

@@ -363,7 +363,7 @@ Příklad vypracovaného reportu je v `references/examples.md`.
 ```yaml
 # Zařazení v lifecycle
 phase: closing
-step: audit
+step: check
 
 # Oprávnění
 may_modify_state: false
@@ -372,7 +372,7 @@ may_modify_code: false
 may_create_intake: true
 
 # Pořadí v pipeline
-depends_on: [fabric-init]
+depends_on: [fabric-init, fabric-docs, fabric-hotfix]
 feeds_into: [fabric-loop, fabric-intake]
 ```
 

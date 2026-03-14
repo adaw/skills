@@ -479,7 +479,7 @@ Health score: **{N}/100** ({healthy|at-risk|critical})
 ```yaml
 # Zařazení v lifecycle
 phase: orientation
-step: health_snapshot
+step: status
 
 # Oprávnění
 may_modify_state: false

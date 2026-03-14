@@ -393,7 +393,7 @@ Re-run je bezpečný. Existující analýzy se přepíšou (idempotent). Task Qu
 ## §12 — Metadata (pro fabric-loop orchestraci)
 
 ```yaml
-depends_on: [fabric-sprint]
+depends_on: [fabric-sprint, fabric-design]
 feeds_into: [fabric-implement]
 phase: planning
 lifecycle_step: analyze

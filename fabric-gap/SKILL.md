@@ -370,12 +370,12 @@ Passed: N / Failed: M / Stubs: K
 
 ```yaml
 phase: orientation
-step: "detect_gaps"
+step: "gap"
 may_modify_state: false
 may_modify_backlog: false
 may_modify_code: false
 may_create_intake: true
-depends_on: [fabric-vision]
+depends_on: [fabric-vision, fabric-architect, fabric-docs, fabric-process]
 feeds_into: [fabric-generate, fabric-process]
 ```
 

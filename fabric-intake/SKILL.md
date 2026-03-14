@@ -427,7 +427,7 @@ Pokud ANY check FAIL → **FAIL + vytvoř intake item `intake/intake-selfcheck-f
 ## §12 — Metadata (pro fabric-loop orchestraci)
 
 ```yaml
-depends_on: [fabric-init]
+depends_on: [fabric-init, fabric-check, fabric-generate]
 feeds_into: [fabric-prio, fabric-design]
 phase: orientation
 lifecycle_step: intake

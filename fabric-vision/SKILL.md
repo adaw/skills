@@ -448,7 +448,7 @@ Based on vision, recommended priorities...
 
 ```yaml
 phase: orientation
-step: analyze-vision
+step: vision
 may_modify_state: false
 may_modify_backlog: false
 may_modify_code: false

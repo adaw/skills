@@ -338,14 +338,14 @@ Obecné pravidlo: Skill je fail-open vůči VOLITELNÝM vstupům (chybí → pok
 
 ```yaml
 phase: planning
-step: sprint_selection
+step: sprint
 
 may_modify_state: true         # jen SPRINT METADATA (started, ends, goal)
 may_modify_backlog: false      # backlog je read-only
 may_modify_code: false
 may_create_intake: true
 
-depends_on: [fabric-prio]
+depends_on: [fabric-prio, fabric-architect, fabric-archive, fabric-vision]
 feeds_into: [fabric-analyze]
 ```
 

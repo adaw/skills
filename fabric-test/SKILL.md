@@ -451,7 +451,7 @@ Viz§5 Výstupy (schéma) a references/examples.md (konkrétní příklad).
 
 ```yaml
 phase: implementation
-step: test_evidence
+step: test
 may_modify_state: false
 may_modify_backlog: false
 may_modify_code: false

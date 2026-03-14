@@ -476,8 +476,8 @@ findings:
 ### Orchestration Metadata
 
 ```yaml
-depends_on: [fabric-test]
-feeds_into: [fabric-close, fabric-implement]
+depends_on: [fabric-test, fabric-docs]
+feeds_into: [fabric-close]
 phase: implementation
 lifecycle_step: review
 touches_state: false
