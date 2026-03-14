@@ -372,7 +372,7 @@ a fail-fast vůči POVINNÝM vstupům (chybí → STOP).
 ```yaml
 # Zařazení v lifecycle
 phase: {orientation|planning|implementation|closing|utility}
-step: {název kroku v state machine — musí odpovídat fabric-loop}
+step: {enum z config.md LIFECYCLE: vision|status|architect|process|gap|generate|intake|prio|design|sprint|analyze|implement|test|review|close|docs|check|archive}
 
 # Oprávnění
 may_modify_state: false        # true jen pro fabric-loop, fabric-init, fabric-sprint

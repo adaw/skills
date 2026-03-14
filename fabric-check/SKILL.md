@@ -242,6 +242,41 @@ Pro každý skill v `skills/fabric-*/SKILL.md` ověř frontmatter dle Claude Cod
 
 **Severity:** WARNING pokud chybí description; CRITICAL pokud frontmatter obsahuje nepodporované atributy.
 
+### 7.X) Documentation Consistency Audit
+
+Ověř že dokumentace odpovídá aktuálnímu kódu:
+
+```bash
+# README.md defaults vs config.py
+echo "=== Checking README defaults vs config.py ==="
+grep 'default:' README.md 2>/dev/null | sort > /tmp/readme-defaults.txt
+grep 'default=' src/llmem/config.py | sort > /tmp/config-defaults.txt
+if ! diff -q /tmp/readme-defaults.txt /tmp/config-defaults.txt >/dev/null 2>&1; then
+  echo "CRITICAL: README.md defaults don't match config.py"
+  echo "P1 finding: docs-config-mismatch"
+fi
+
+# docs/api/ pokrývá všechny routes v src/llmem/api/routes/
+echo "=== Checking API documentation coverage ==="
+ENDPOINT_COUNT=$(grep -c '@.*\.\(get\|post\|put\|delete\)' src/llmem/api/routes/*.py 2>/dev/null || echo 0)
+DOC_COUNT=$(ls docs/api/*.md 2>/dev/null | wc -l)
+if [ "$DOC_COUNT" -lt "$((ENDPOINT_COUNT / 2))" ]; then
+  echo "CRITICAL: docs/api/ doesn't cover all endpoints (found: $DOC_COUNT, expected: >$((ENDPOINT_COUNT / 2)))"
+  echo "P1 finding: docs-api-coverage"
+fi
+
+# docs/cli.md defaults vs cli.py
+echo "=== Checking CLI documentation consistency ==="
+grep 'default:' docs/cli.md 2>/dev/null | sort > /tmp/docs-cli.txt
+grep 'default=' src/llmem/cli.py 2>/dev/null | sort > /tmp/cli-defaults.txt
+if ! diff -q /tmp/docs-cli.txt /tmp/cli-defaults.txt >/dev/null 2>&1; then
+  echo "CRITICAL: docs/cli.md defaults don't match cli.py"
+  echo "P1 finding: docs-cli-mismatch"
+fi
+```
+
+Nesrovnalosti = P1 finding.
+
 ### 7.15) Vygeneruj audit report
 
 Vytvoř `{WORK_ROOT}/reports/check-{YYYY-MM-DD}.md` s vyhodnocením všech check rezultátů, scoring, intake items.

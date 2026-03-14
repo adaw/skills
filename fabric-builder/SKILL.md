@@ -238,6 +238,7 @@ Pokud SKILL.md > 500 řádků:
 - [ ] §7 má příklady/šablony pro KAŽDÝ krok (přímo nebo v references/)
 - [ ] §3 má bash kód pro preconditions
 - [ ] §10 má ≥3 testovatelné položky
+- [ ] §12 depends_on/feeds_into symetrie: pokud tento skill má `feeds_into: [X]`, ověř že X má `depends_on: [tento_skill]` a naopak
 - [ ] K10: ≥1 inline příklad s LLMem daty (≥10 řádků)
 - [ ] K10: ≥3 anti-patterns s bash detection (`grep`/`ls` příkazy)
 - [ ] Pokud ref= byl použit: klíčové pracovní instrukce z workflow jsou přeneseny

@@ -195,7 +195,7 @@ Vytvoř `{WORK_ROOT}/backlog/{id}.md` podle odpovídající šablony:
 - Task/Bug/Chore/Spike → `{WORK_ROOT}/templates/task.md` (změň `type:`)
 
 Vyplň minimálně:
-- `id`, `title`, `type`, `tier`, `status`, `effort`, `created`, `updated`, `source: intake`, `prio: 0`, `linked_vision_goal`
+- `schema: fabric.backlog_item.v1`, `id`, `title`, `type`, `tier`, `status`, `effort`, `created`, `updated`, `source: intake`, `prio: 0`, `linked_vision_goal`
 - do těla vlož:
   - „Příkaz odemykující" (1 věta)
   - popis + kontext z intake

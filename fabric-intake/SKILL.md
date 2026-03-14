@@ -207,6 +207,7 @@ schema: fabric.plan.v1
 ops:
   - op: backlog.create
     fields:
+      schema: fabric.backlog_item.v1
       id: "<new-id>"
       title: "<title>"
       type: "Task"
@@ -386,6 +387,7 @@ Zpracováno N intake items. Vytvořeno N backlog items, N merged, N rejected.
 ### Quality checks
 - [ ] **Všechny intake items zpracovány**: žádné nezpracované soubory v `intake/` (vše v `intake/done/` nebo vysvětleno v reportu)
 - [ ] **Pro každý zpracovaný intake existuje backlog item** v `backlog/` s matching `id` a `title`
+- [ ] **Všechny vytvořené backlog itemy mají schema: fabric.backlog_item.v1**: frontmatter validation
 - [ ] **Duplicity odstraněny**: report obsahuje seznam duplikátů (neztraceny, sloučeny nebo zamítnuty s důvodem)
 - [ ] **Report má sekce**: Summary (N itemů zpracováno), Processing, Dedup/Merges, Backlog updates, Warnings
 - [ ] **Backlog.md je seřazený** dle PRIO (nebo config-specified ordering)

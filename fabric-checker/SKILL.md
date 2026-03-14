@@ -248,19 +248,27 @@ init → vision → gap → generate → intake → prio → sprint → analyze
 
 Pro každý přechod A → B: jaký artefakt A vytváří? Čte ho B? Co když chybí/corrupt?
 
-### S4: Virtuální průchod fabric-loop (end-to-end simulace)
+### S4: Virtuální průchod fabric-loop (end-to-end simulace) + Symetrické závislosti
 
 Spustí kompletní cyklus fabric-loop na reálných datech BEZ modifikace workspace.
 Výstup: simulační log s tick-by-tick průběhem celého lifecycle.
 
 **Detaily viz:** `references/s4-virtual-loop-simulation.md`
 
-Klíčové momenty:
-- Preconditions (P1–P8): Ověř existenci kritických souborů
-- Idle detection: Detekuj zda je práce (pokud ne, konec simulace)
-- Tick loop: MAX_TICKS=50, каждый tick loguje step, reálné příkazy s `|| true`
-- Výstupy POUZE do `$SIM/`, nikdy do reálného `$WORK/reports/`
-- Expected output: 17 ticků (vision → archive → LOOP BOUNDARY)
+**Povinné:** Spusť symetrii závislostí:
+
+```bash
+python tools/s4_symmetry_check.py --strict 2>/dev/null
+EXIT_CODE=$?
+if [ $EXIT_CODE -ne 0 ]; then
+  echo "P1 finding: dependency asymmetry detected"
+  echo "dependency_asymmetry | HIGH | asymmetrické depends_on/feeds_into v fabric skills"
+fi
+```
+
+Pokud `s4_symmetry_check.py` exit code ≠ 0 → zapiš P1 finding do reportu.
+
+**Klíčové momenty a detaily simulace:** viz `references/s4-virtual-loop-simulation.md`
 
 ---
 
@@ -287,19 +295,8 @@ Per skill: starý workflow vs nový fabric skill — ztráty a zisky.
 
 ### 3.3) Deep Quality Checks (scope=deep only)
 
-Tyto kontroly jdou HLOUBĚJI než runtime gates (lint/test). Ověřují strukturální konzistenci kódu.
-
+6 checklistů DQ1–DQ6 (API routes, model coverage, config schema, imports, test mapping, error messages).
 **Detaily viz:** `references/dq-deep-quality-checks.md`
-
-6 checklistů (DQ1–DQ6):
-- **DQ1**: API routes vs spec (HIGH severity)
-- **DQ2**: Model field coverage (docstrings, Optional defaults)
-- **DQ3**: Config schema validation (env vars descriptions)
-- **DQ4**: Import consistency (no circulars, no wildcards)
-- **DQ5**: Test-to-code mapping (test files per module)
-- **DQ6**: Error message quality (context-aware messages)
-
-Runnable bash procedury v references/ — copy-paste a customize {CODE_ROOT}/{WORK_ROOT}.
 
 ---
 

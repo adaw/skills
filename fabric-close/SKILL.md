@@ -227,6 +227,7 @@ Close is a **procedural batching skill** — run once per sprint, iterates all t
    - Commit with message format validation (WQ8)
    - Run quality gates (test, lint, format_check)
    - Update backlog item with merge_commit and status: DONE
+   - Move completed task to archive directory (backlog/done/)
 4. **Carry-Over Documentation** — for each CARRY-OVER task, record reason
 5. **Index Regeneration** — update backlog.md and sprints/sprint-{N}.md
 6. **Sprint Report Generation** — create close-sprint-{N}-{YYYY-MM-DD}.md
@@ -237,7 +238,18 @@ Close is a **procedural batching skill** — run once per sprint, iterates all t
 ### K10: Inline Example — LLMem Sprint 3 Close
 
 **Input:** Sprint 3 Task Queue: 2 MERGEABLE tasks (task-b015, task-b016 with review verdict CLEAN), 1 CARRY-OVER (task-b012 with rebase conflict), test/lint/format commands from config.md.
-**Output:** 2 tasks merged to main with squash (commit: fix(b015): add batch capture endpoint), post-merge tests PASS, backlog items updated status→DONE + merge_commit evidence, task-b012 documented as CARRY-OVER (REBASE_CONFLICT), close report with Task Status table.
+**Output:** 2 tasks merged to main with squash (commit: fix(b015): add batch capture endpoint), post-merge tests PASS, backlog items updated status→DONE + merge_commit evidence + moved to backlog/done/, task-b012 documented as CARRY-OVER (REBASE_CONFLICT), close report with Task Status table.
+
+### Povinné po DONE — Přesuň backlog item do archivního adresáře
+
+Po nastavení status→DONE musí být soubor přesunut do archivního adresáře:
+
+```bash
+mkdir -p "{WORK_ROOT}/backlog/done"
+mv "{WORK_ROOT}/backlog/${TASK_ID}.md" "{WORK_ROOT}/backlog/done/${TASK_ID}.md"
+```
+
+Toto zajistí, aby se aktivní backlog (backlog/) nezachcípávalo uzavřenými items.
 
 ### K10: Anti-patterns (s detekcí)
 ```bash
@@ -332,6 +344,10 @@ Sprint summary report includes Task Status table with columns: `Task ID`, `Title
 
 Before closing skill execution, verify:
 
+**Checklist:**
+- [ ] All MERGEABLE tasks have close reports
+- [ ] DONE itemy přesunuty do backlog/done/ (ne ponechány v backlog/)
+
 ```bash
 # 1. All MERGEABLE tasks have close reports
 MERGEABLE_COUNT=$(grep "^| T-" "{WORK_ROOT}/reports/close-sprint-${SPRINT_N}-{YYYY-MM-DD}.md" | grep -c "DONE")
@@ -368,9 +384,21 @@ done
 
 # 6. All linked backlog items status=DONE (K9 verification)
 for TASK_ID in $(grep "^| T-" "{WORK_ROOT}/reports/close-sprint-${SPRINT_N}-{YYYY-MM-DD}.md" | grep "DONE" | awk '{print $2}'); do
-  STATUS=$(grep "^status:" "{WORK_ROOT}/backlog/${TASK_ID}.md" | awk '{print $2}')
+  STATUS=$(grep "^status:" "{WORK_ROOT}/backlog/{TASK_ID}.md" | awk '{print $2}')
   if [ "$STATUS" != "DONE" ]; then
     echo "ERROR: task $TASK_ID marked DONE in report but status is '$STATUS' in backlog"
+    exit 1
+  fi
+done
+
+# 7. DONE items moved to backlog/done/ (K9 verification)
+for TASK_ID in $(grep "^| T-" "{WORK_ROOT}/reports/close-sprint-${SPRINT_N}-{YYYY-MM-DD}.md" | grep "DONE" | awk '{print $2}'); do
+  if [ -f "{WORK_ROOT}/backlog/${TASK_ID}.md" ]; then
+    echo "ERROR: task $TASK_ID marked DONE but still in backlog/ (should be moved to backlog/done/)"
+    exit 1
+  fi
+  if [ ! -f "{WORK_ROOT}/backlog/done/${TASK_ID}.md" ]; then
+    echo "ERROR: task $TASK_ID marked DONE but not found in backlog/done/"
     exit 1
   fi
 done

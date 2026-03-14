@@ -178,10 +178,37 @@ Přehled kroků:
 5. **Vytvoř/uprav CHANGELOG** — Keep a Changelog format
 6. **Vytvoř ADR** — pokud arch decision
 7. **Napln report** — všechny sekce, machine-parseable YAML
-8. **Self-check** — ověř checklist
-9. **Loguj END** — protocol log
+8. **Validace docs vs kód** — ověř konzistenci dokumentace s aktuálním kódem
+9. **Self-check** — ověř checklist
+10. **Loguj END** — protocol log
 
 Pro detaily každého kroku, příklady, anti-patterns a heurystiky viz: **[references/workflow.md](./references/workflow.md)** a **[references/examples.md](./references/examples.md)**
+
+### 7.X) Validace docs vs kód (POVINNÉ)
+
+Ověř konzistenci dokumentace s aktuálním kódem:
+
+```bash
+# Config defaults: porovnej hodnoty v docs/ s config.py
+echo "=== Ověřuji config defaults ==="
+grep 'default=' src/llmem/config.py | sort > /tmp/config-defaults.txt
+grep 'default:' docs/*.md docs/**/*.md 2>/dev/null | grep -v CHANGELOG | sort > /tmp/docs-defaults.txt
+diff -u /tmp/config-defaults.txt /tmp/docs-defaults.txt | grep -E '^[+-]' && echo "FAIL: Config defaults mismatch" || echo "PASS: Config defaults match"
+
+# API endpoints: porovnej docs/api/*.md s routes/*.py
+echo "=== Ověřuji API endpoints ==="
+grep '@.*\.\(get\|post\|put\|delete\)' src/llmem/api/routes/*.py | sort > /tmp/api-routes.txt
+grep -E '\[GET|POST|PUT|DELETE\]' docs/api/*.md 2>/dev/null | sort > /tmp/docs-endpoints.txt
+diff -u /tmp/api-routes.txt /tmp/docs-endpoints.txt | grep -E '^[+-]' && echo "WARN: API endpoint mismatch" || echo "PASS: API endpoints match"
+
+# CLI defaults: porovnej docs/cli.md s cli.py
+echo "=== Ověřuji CLI defaults ==="
+grep 'default=' src/llmem/cli.py 2>/dev/null | sort > /tmp/cli-defaults.txt
+grep 'default:' docs/cli.md 2>/dev/null | sort > /tmp/docs-cli.txt
+diff -u /tmp/cli-defaults.txt /tmp/docs-cli.txt | grep -E '^[+-]' && echo "WARN: CLI defaults mismatch" || echo "PASS: CLI defaults match"
+```
+
+Nesrovnalosti zapiš jako P1 findings do reportu.
 
 ### K10: Inline Example — LLMem API Documentation Update
 
@@ -342,6 +369,8 @@ Docstring coverage: {X}% (target: ≥80%).
 - [ ] Docstring coverage ≥80% (BAD ≤10%, ACCEPTABLE ≥30%, GOOD ≥60%)
 - [ ] API Surface Delta porovnává s last baseline
 - [ ] CHANGELOG updated pokud existuje a jsou MUST_DOCUMENT items
+- [ ] Docs defaults odpovídají config.py defaults
+- [ ] Docs API endpoints odpovídají routes/*.py
 
 ### Invarianty
 - [ ] Žádný soubor mimo `{DOCS_ROOT}/` nebyl modifikován (except close report reference)
