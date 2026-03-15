@@ -212,11 +212,31 @@ echo "=== Ověřuji README.md defaults ==="
 grep -oP 'LLMEM_\w+.*\|.*`[^`]+`' README.md 2>/dev/null | while read LINE; do
   VAR=$(echo "$LINE" | grep -oP 'LLMEM_\w+')
   README_VAL=$(echo "$LINE" | grep -oP '`[^`]+`' | tail -1 | tr -d '`')
-  CODE_VAL=$(grep "$VAR" src/llmem/config.py 2>/dev/null | grep -oP 'default="?[^",)]+' | head -1 | sed 's/default=//' | tr -d '"')
+  CODE_VAL=$(grep "$VAR" {CODE_ROOT}/config.py 2>/dev/null | grep -oP 'default="?[^",)]+' | head -1 | sed 's/default=//' | tr -d '"')
   if [ -n "$CODE_VAL" ] && [ "$README_VAL" != "$CODE_VAL" ]; then
     echo "WARN: README $VAR default='$README_VAL' vs code='$CODE_VAL'"
   fi
 done
+
+# docs/configuration.md defaults: porovnej default hodnoty s config.py
+echo "=== Ověřuji {DOCS_ROOT}/configuration.md defaults ==="
+grep -oP 'LLMEM_\w+.*\|.*`[^`]+`' {DOCS_ROOT}/configuration.md 2>/dev/null | while read LINE; do
+  VAR=$(echo "$LINE" | grep -oP 'LLMEM_\w+')
+  DOC_VAL=$(echo "$LINE" | grep -oP '`[^`]+`' | tail -1 | tr -d '`')
+  CODE_VAL=$(grep -A1 "$VAR" {CODE_ROOT}/config.py 2>/dev/null | grep -oP 'default="?[^",)]+' | head -1 | sed 's/default=//' | tr -d '"')
+  if [ -n "$CODE_VAL" ] && [ "$DOC_VAL" != "$CODE_VAL" ]; then
+    echo "P1: {DOCS_ROOT}/configuration.md $VAR default='$DOC_VAL' vs code='$CODE_VAL'"
+  fi
+done
+
+# CLI command completeness: porovnej cli.py příkazy s docs/cli.md
+echo "=== Ověřuji CLI command completeness ==="
+grep -oP "add_parser\(['\"](\w+)['\"]" {CODE_ROOT}/cli.py 2>/dev/null | grep -oP "'\w+'" | tr -d "'" | sort > /tmp/cli-commands.txt
+grep -oP '##.*`llmem (\w+)' {DOCS_ROOT}/cli.md 2>/dev/null | grep -oP '\w+$' | sort > /tmp/docs-commands.txt
+MISSING=$(comm -23 /tmp/cli-commands.txt /tmp/docs-commands.txt)
+if [ -n "$MISSING" ]; then
+  echo "P1: CLI commands missing from docs: $MISSING"
+fi
 ```
 
 Nesrovnalosti zapiš jako P1 findings do reportu.

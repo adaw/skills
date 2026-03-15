@@ -255,7 +255,7 @@ fi
 - Pokud FAIL: aplikuj heuristics (single module? spanning modules? timeout?)
 - Pokud PASS: shrň što pokrývaly, coverage story
 - Doplň Coverage Metrics (target ≥60% core modules)
-- Doplň Test Isolation check (detekuj shared state)
+- Doplň Test Isolation check (detekuj shared state: globals, os.environ, sys.modules)
 - Doplň Test/Code LOC ratio
 
 **Minimum:**

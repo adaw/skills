@@ -177,7 +177,7 @@ fi
 | sprint | analyze |
 | analyze | implement — **guard:** pokud Task Queue ve sprint plánu je prázdná (0 tasks po analýze) → přeskoč na `docs` (sprint bez implementačních položek). Vytvoř intake item `intake/loop-empty-task-queue-sprint-{N}.md`. |
 | implement | test |
-| test | pokud PASS → review; pokud FAIL → implement (test_fail_count++) |
+| test | pokud PASS → review; pokud FAIL → implement (test_fail_count++); **doctor route:** pokud test_fail_count == max_rework_iters-1 → dispatch fabric-doctor místo implement (diagnostika infrastrukturních problémů před STOP) |
 | review | pokud CLEAN → close; pokud REWORK → implement; pokud REDESIGN → close (BLOCKED) |
 | close | pokud existuje další READY task v Task Queue → implement; jinak docs |
 | docs | check |

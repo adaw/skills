@@ -87,6 +87,32 @@ grep -rn "time\.sleep\|random\." tests/ --include='*.py' \
   | grep "def test_" -A 10 \
   | grep -v "mock\|patch\|seed"
 
+# Pattern 4: sys.modules manipulation (cross-test contamination)
+# Tests that inject fake modules via sys.modules MUST use direct assignment
+# (not setdefault) AND clean up in fixtures. setdefault fails when another
+# test file already injected a different fake for the same module key.
+echo "=== sys.modules contamination check ==="
+grep -rn "sys\.modules" {TEST_ROOT}/ --include='*.py' | while read LINE; do
+  FILE=$(echo "$LINE" | cut -d: -f1)
+  LINENO=$(echo "$LINE" | cut -d: -f2)
+  # Flag setdefault — it silently keeps stale fakes from earlier test files
+  if echo "$LINE" | grep -q "setdefault"; then
+    echo "P1: $FILE:$LINENO uses sys.modules.setdefault() — MUST use direct assignment to overwrite stale fakes"
+  fi
+  # Flag missing cleanup (no conftest/fixture that restores sys.modules)
+  if ! grep -q "sys\.modules.*=.*_orig\|sys\.modules\.pop\|del sys\.modules" "$FILE"; then
+    echo "P2: $FILE manipulates sys.modules but has no cleanup/restore — risk of cross-test contamination"
+  fi
+done
+
+# Pattern 5: module-level imports after sys.modules injection
+# Files that delete sys.modules[X] + reimport must do BOTH atomically
+grep -rln "del sys\.modules" {TEST_ROOT}/ --include='*.py' | while read FILE; do
+  if ! grep -q "sys\.modules\[" "$FILE"; then
+    echo "P2: $FILE deletes sys.modules entries but doesn't re-inject fakes"
+  fi
+done
+
 # Výsledek:
 if [ -s /tmp/isolation-issues.txt ]; then
   echo "WARN: potential test isolation issues:"

@@ -229,11 +229,20 @@ if ! echo "$CURRENT" | grep -qE '^[0-9]+$'; then CURRENT=0; echo "WARN: non-nume
 NEW=$((CURRENT + 1))
 # Zapiš zpět do backlog item frontmatter
 sed -i "s/^test_fail_count:.*/test_fail_count: $NEW/" {WORK_ROOT}/backlog/{wip_item}.md || echo "WARN: counter increment failed for test_fail_count"
-# Limit check
-if [ $NEW -ge {SPRINT.max_rework_iters} ]; then
-  # STOP — task je nestabilní
+# Limit check — s doctor route
+MAX_ITERS={SPRINT.max_rework_iters}  # default 3
+DOCTOR_THRESHOLD=$((MAX_ITERS - 1))  # dispatch doctor jako poslední pokus
+
+if [ $NEW -eq $DOCTOR_THRESHOLD ]; then
+  # DOCTOR ROUTE: dispatch fabric-doctor místo implement
+  # Doctor diagnostikuje infrastrukturní root cause (sys.modules, env vars, version mismatch)
+  echo "DOCTOR: test_fail_count ($NEW) == threshold ($DOCTOR_THRESHOLD) — dispatching fabric-doctor"
+  # next_step = doctor (utility dispatch, po doctor se vrátí na test)
+  NEXT_STEP="doctor"
+elif [ $NEW -ge $MAX_ITERS ]; then
+  # STOP — task je nestabilní i po doctor pokusu
   # Nastav state.error a vytvoř intake item
-  echo "STOP: test_fail_count ($NEW) >= max_rework_iters ({SPRINT.max_rework_iters})"
+  echo "STOP: test_fail_count ($NEW) >= max_rework_iters ($MAX_ITERS)"
 fi
 ```
 
@@ -250,7 +259,7 @@ sed -i "s/^rework_count:.*/rework_count: $NEW/" {WORK_ROOT}/backlog/{wip_item}.m
 
 **Poznámka:** Inkrement se provádí VŽDY v fabric-loop, NIKDY v sub-skillech. Sub-skilly (fabric-test, fabric-review) pouze generují reporty s verdikty. Loop čte verdikty a aktualizuje countery.
 
-- **test_fail_count**: Inkrementuj při `test → FAIL → implement` (viz kód výše). Pokud `test_fail_count >= max_rework_iters` (default 3) → STOP + set `state.error = "test_fail_count exceeded"` + vytvoř intake item. Neposílej zpět na implement — task je nestabilní.
+- **test_fail_count**: Inkrementuj při `test → FAIL → implement` (viz kód výše). **Doctor route:** pokud `test_fail_count == max_rework_iters - 1` → dispatch `fabric-doctor` místo implement (diagnostika infrastrukturních root causes: sys.modules contamination, env var interference, version mismatch). Po doctor se vrátí na test. Pokud `test_fail_count >= max_rework_iters` (default 3) → STOP + set `state.error = "test_fail_count exceeded"` + vytvoř intake item.
 - **rework_count**: Inkrementuj při `review → REWORK → implement` (viz kód výše). Pokud `rework_count >= max_rework_iters` → review by měl vrátit REDESIGN (viz fabric-review pravidla). Orchestrátor to enforceuje explicitně:
 
 ```bash

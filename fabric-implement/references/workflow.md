@@ -321,6 +321,9 @@ done
 - ❌ Kopírování kódu místo abstrakce (DRY)
 - ❌ Pouze unit testy pro API endpoint změnu (MUSÍ mít integrační test s HTTP klientem)
 - ❌ Mock VŠECHNO — integrační test má testovat reálnou interakci (mock jen external deps)
+- ❌ `sys.modules.setdefault()` pro fake module injection — MUSÍ být `sys.modules[key] = fake` (setdefault nezapíše pokud klíč existuje z jiného test souboru → cross-test contamination)
+- ❌ `httpx.Client()` bez `trust_env=False` — proxy env vars z VM/CI způsobí ImportError (socksio)
+- ❌ `getattr(module, 'NewAttr')` bez fallbacku — starší verze package nemusí mít atribut, použij `getattr(mod, attr, fallback)`
 
 ---
 

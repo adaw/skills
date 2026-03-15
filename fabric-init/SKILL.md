@@ -434,7 +434,7 @@ Pokud něco chybí → zapiš do init reportu jako CRITICAL + vytvoř intake ite
 
 ```yaml
 depends_on: []
-feeds_into: [fabric-vision, fabric-architect, fabric-check, fabric-hotfix, fabric-intake, fabric-status]
+feeds_into: [fabric-vision, fabric-architect, fabric-check, fabric-doctor, fabric-hotfix, fabric-intake, fabric-status]
 phase: orientation
 lifecycle_step: init
 touches_state: true
