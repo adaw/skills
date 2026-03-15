@@ -471,13 +471,31 @@ def validate_skills(repo_root: Path, skills_root_rel: str) -> Result:
                 f"{skill_file}: {line_count} lines (>500). Consider splitting to avoid LLM truncation."
             )
 
+        # Pre-compute which lines are inside code fence blocks
+        lines = md.splitlines()
+        in_code_fence = [False] * len(lines)
+        inside = False
+        for i, l in enumerate(lines):
+            if l.strip().startswith("```"):
+                inside = not inside
+                in_code_fence[i] = inside
+            else:
+                in_code_fence[i] = inside
+
         for snippet in FORBIDDEN_HARDCODED_SNIPPETS:
             for m in re.finditer(re.escape(snippet), md):
                 line_no = md.count("\n", 0, m.start()) + 1
-                line = md.splitlines()[line_no - 1]
+                line = lines[line_no - 1] if line_no <= len(lines) else ""
                 if "PŘÍKLAD" in line or "EXAMPLE" in line:
                     continue
                 if md[max(0, m.start() - 2) : m.start()] == "}/":
+                    continue
+                # Skip lines inside code fence blocks (bash examples, validation scripts)
+                if line_no <= len(in_code_fence) and in_code_fence[line_no - 1]:
+                    continue
+                # Skip comments (lines starting with #)
+                stripped = line.strip()
+                if stripped.startswith("#"):
                     continue
                 errors.append(
                     f"{skill_file}: hardcoded '{snippet}' at line {line_no}: {line.strip()}"

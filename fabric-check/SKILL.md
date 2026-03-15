@@ -256,21 +256,21 @@ if ! diff -q /tmp/readme-defaults.txt /tmp/config-defaults.txt >/dev/null 2>&1; 
   echo "P1 finding: docs-config-mismatch"
 fi
 
-# docs/api/ pokrývá všechny routes v src/llmem/api/routes/
+# {DOCS_ROOT}/api/ pokrývá všechny routes v {CODE_ROOT}/api/routes/
 echo "=== Checking API documentation coverage ==="
-ENDPOINT_COUNT=$(grep -c '@.*\.\(get\|post\|put\|delete\)' src/llmem/api/routes/*.py 2>/dev/null || echo 0)
-DOC_COUNT=$(ls docs/api/*.md 2>/dev/null | wc -l)
+ENDPOINT_COUNT=$(grep -c '@.*\.\(get\|post\|put\|delete\)' {CODE_ROOT}/api/routes/*.py 2>/dev/null || echo 0)
+DOC_COUNT=$(ls {DOCS_ROOT}/api/*.md 2>/dev/null | wc -l)
 if [ "$DOC_COUNT" -lt "$((ENDPOINT_COUNT / 2))" ]; then
-  echo "CRITICAL: docs/api/ doesn't cover all endpoints (found: $DOC_COUNT, expected: >$((ENDPOINT_COUNT / 2)))"
+  echo "CRITICAL: {DOCS_ROOT}/api/ doesn't cover all endpoints (found: $DOC_COUNT, expected: >$((ENDPOINT_COUNT / 2)))"
   echo "P1 finding: docs-api-coverage"
 fi
 
-# docs/cli.md defaults vs cli.py
+# {DOCS_ROOT}/cli.md defaults vs cli.py
 echo "=== Checking CLI documentation consistency ==="
-grep 'default:' docs/cli.md 2>/dev/null | sort > /tmp/docs-cli.txt
-grep 'default=' src/llmem/cli.py 2>/dev/null | sort > /tmp/cli-defaults.txt
+grep 'default:' {DOCS_ROOT}/cli.md 2>/dev/null | sort > /tmp/docs-cli.txt
+grep 'default=' {CODE_ROOT}/cli.py 2>/dev/null | sort > /tmp/cli-defaults.txt
 if ! diff -q /tmp/docs-cli.txt /tmp/cli-defaults.txt >/dev/null 2>&1; then
-  echo "CRITICAL: docs/cli.md defaults don't match cli.py"
+  echo "CRITICAL: {DOCS_ROOT}/cli.md defaults don't match cli.py"
   echo "P1 finding: docs-cli-mismatch"
 fi
 ```

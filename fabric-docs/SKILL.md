@@ -189,22 +189,22 @@ Pro detaily každého kroku, příklady, anti-patterns a heurystiky viz: **[refe
 Ověř konzistenci dokumentace s aktuálním kódem:
 
 ```bash
-# Config defaults: porovnej hodnoty v docs/ s config.py
+# Config defaults: porovnej hodnoty v {DOCS_ROOT}/ s {CODE_ROOT}/config.py
 echo "=== Ověřuji config defaults ==="
-grep 'default=' src/llmem/config.py | sort > /tmp/config-defaults.txt
-grep 'default:' docs/*.md docs/**/*.md 2>/dev/null | grep -v CHANGELOG | sort > /tmp/docs-defaults.txt
+grep 'default=' {CODE_ROOT}/config.py | sort > /tmp/config-defaults.txt
+grep 'default:' {DOCS_ROOT}/*.md {DOCS_ROOT}/**/*.md 2>/dev/null | grep -v CHANGELOG | sort > /tmp/docs-defaults.txt
 diff -u /tmp/config-defaults.txt /tmp/docs-defaults.txt | grep -E '^[+-]' && echo "FAIL: Config defaults mismatch" || echo "PASS: Config defaults match"
 
-# API endpoints: porovnej docs/api/*.md s routes/*.py
+# API endpoints: porovnej {DOCS_ROOT}/api/*.md s routes/*.py
 echo "=== Ověřuji API endpoints ==="
-grep '@.*\.\(get\|post\|put\|delete\)' src/llmem/api/routes/*.py | sort > /tmp/api-routes.txt
-grep -E '\[GET|POST|PUT|DELETE\]' docs/api/*.md 2>/dev/null | sort > /tmp/docs-endpoints.txt
+grep '@.*\.\(get\|post\|put\|delete\)' {CODE_ROOT}/api/routes/*.py | sort > /tmp/api-routes.txt
+grep -E '\[GET|POST|PUT|DELETE\]' {DOCS_ROOT}/api/*.md 2>/dev/null | sort > /tmp/docs-endpoints.txt
 diff -u /tmp/api-routes.txt /tmp/docs-endpoints.txt | grep -E '^[+-]' && echo "WARN: API endpoint mismatch" || echo "PASS: API endpoints match"
 
-# CLI defaults: porovnej docs/cli.md s cli.py
+# CLI defaults: porovnej {DOCS_ROOT}/cli.md s cli.py
 echo "=== Ověřuji CLI defaults ==="
-grep 'default=' src/llmem/cli.py 2>/dev/null | sort > /tmp/cli-defaults.txt
-grep 'default:' docs/cli.md 2>/dev/null | sort > /tmp/docs-cli.txt
+grep 'default=' {CODE_ROOT}/cli.py 2>/dev/null | sort > /tmp/cli-defaults.txt
+grep 'default:' {DOCS_ROOT}/cli.md 2>/dev/null | sort > /tmp/docs-cli.txt
 diff -u /tmp/cli-defaults.txt /tmp/docs-cli.txt | grep -E '^[+-]' && echo "WARN: CLI defaults mismatch" || echo "PASS: CLI defaults match"
 
 # README.md defaults: porovnej env var tabulku v README s config.py

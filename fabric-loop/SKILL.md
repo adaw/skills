@@ -39,7 +39,7 @@ Chování je vždy stejné: pokud je stav `idle`, provede se idle tick (detekce 
     - `state.step == "idle"` a idle tick potvrdí, že není práce, nebo
     - STOP/CRITICAL (např. `state.error`, kontrakt breach).
   - Default: `loop=1` (= 1 sprint).
-  - Limit: `N` omez na rozsah **1–50** (cokoliv mimo clampni na nejbližší mez).
+  - Limit: `N` omez na rozsah z `config.md RUN.max_loops_clamp` (cokoliv mimo clampni na nejbližší mez).
 
 - `loop=auto` = „běž, dokud je co dělat":
   - totéž co `loop=N`, ale `MAX_LOOPS` je high-cap (default `100`, lze přepsat v `config.md` jako `RUN.auto_max_loops`).
@@ -65,7 +65,7 @@ V uživatelském triggeru (promptu) hledej tyto tokeny (case-insensitive). Pokud
 
 
 - pokud je hodnota `auto` → `MAX_LOOPS = RUN.auto_max_loops` (default `100`)
-- jinak parsuj jako integer → `MAX_LOOPS=<N>` (clamp 1–50)
+- jinak parsuj jako integer → `MAX_LOOPS=<N>` (clamp dle `RUN.max_loops_clamp`)
 
 **Stop dřív než vyčerpáš limit, pokud nastane STOP/CRITICAL** (např. `state.error`, kontrakt breach, missing config/commands). Skonči také, když se systém dostane do `state.step=idle` a idle tick potvrdí, že není práce.
 
@@ -83,9 +83,12 @@ elif echo "$LOOP_RAW" | grep -qiE '^auto$'; then
   MAX_LOOPS=100  # hard cap from config RUN.auto_max_loops
 elif echo "$LOOP_RAW" | grep -qE '^[0-9]+$'; then
   MAX_LOOPS=$LOOP_RAW
-  # Clamp to [1, 50]
-  [ "$MAX_LOOPS" -lt 1 ] && MAX_LOOPS=1
-  [ "$MAX_LOOPS" -gt 50 ] && MAX_LOOPS=50
+  # Clamp to config RUN.max_loops_clamp (read from config.md)
+  CLAMP_MIN=$(grep 'max_loops_clamp:' "{WORK_ROOT}/config.md" | grep -oE '[0-9]+' | head -1)
+  CLAMP_MAX=$(grep 'max_loops_clamp:' "{WORK_ROOT}/config.md" | grep -oE '[0-9]+' | tail -1)
+  CLAMP_MIN=${CLAMP_MIN:-1}; CLAMP_MAX=${CLAMP_MAX:-100}
+  [ "$MAX_LOOPS" -lt "$CLAMP_MIN" ] && MAX_LOOPS=$CLAMP_MIN
+  [ "$MAX_LOOPS" -gt "$CLAMP_MAX" ] && MAX_LOOPS=$CLAMP_MAX
 else
   echo "WARN: invalid loop value '$LOOP_RAW', using default loop=1"
   MAX_LOOPS=1
@@ -375,7 +378,7 @@ Na začátku běhu urč `MAX_LOOPS` a `MAX_TICKS_PER_LOOP` podle parametru `loop
 Dále urč `GOAL` (`goal=<...>` nebo `RUN.default_goal`, default `release`) a podle `RUN.*`:
 
 - pokud parametr **není**: `MAX_LOOPS = 1`
-- pokud `loop=<N>`: `MAX_LOOPS = clamp(N, 1–50)`
+- pokud `loop=<N>`: `MAX_LOOPS = clamp(N, RUN.max_loops_clamp)`
 - pokud `loop=auto`: `MAX_LOOPS = RUN.auto_max_loops` (default `100`)
 
 Chování je vždy stejné: idle tick se provede, a pokud je práce, sprint začne. Rozdíl je **jen v MAX_LOOPS** — kolik sprintů maximálně proběhne.
