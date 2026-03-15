@@ -368,6 +368,8 @@ Passed: N / Failed: M / Stubs: K
 
 ## §12 — Metadata
 
+> **Cross-sprint lookup:** fabric-gap depends_on fabric-docs (closing phase) to read previous sprint's documentation for context and acceptance criteria alignment. This is a read-only lookup across sprint boundaries, not a sequential order violation.
+
 ```yaml
 phase: orientation
 step: "gap"

@@ -37,7 +37,7 @@ python skills/fabric-init/tools/protocol_log.py \
   --skill "fabric-sprint" \
   --event end \
   --status {OK|WARN|ERROR} \
-  --report "{WORK_ROOT}/reports/sprint-{YYYY-MM-DD}.md"
+  --report "{WORK_ROOT}/reports/sprint-{N}-{YYYY-MM-DD}-{run_id}.md"
 ```
 
 **ERROR (pokud STOP/CRITICAL):**
@@ -126,7 +126,7 @@ fi
 
 ### Primární (vždy)
 - Sprint plan: `{WORK_ROOT}/sprints/sprint-{N}.md` (schema: `fabric.report.v1`, kind: sprint-plan)
-- Report: `{WORK_ROOT}/reports/sprint-{N}-{YYYY-MM-DD}.md` (schema: `fabric.report.v1`)
+- Report: `{WORK_ROOT}/reports/sprint-{N}-{YYYY-MM-DD}-{run_id}.md` (schema: `fabric.report.v1`)
 
 ### Vedlejší (podmínečně)
 - Intake items: `{WORK_ROOT}/intake/fabric-sprint-{slug}.md` (schema: `fabric.intake_item.v1`) — pokud jsou problémy
@@ -222,19 +222,44 @@ Utilization: 19/40 points (47%) — conservative, leaves buffer
 Risks: b017 (M/13) and b041 (M/13) deferred to sprint 5 (capacity limits)
 ```
 
+### K10: Rework/Error Flow Example
+
+**Input:** Sprint 5 planning with 3 items from rollover (b017, b041 both blocked by b050 dependency).
+**Flow:**
+1. Rollover tracking detects b017 and b041 carried from sprint 4
+2. Dependency check: b050 (status=IN_PROGRESS) blocks b017 → b041
+3. Pre-Sprint Gate FAIL: circular dependency b050→b017→b041→b050 detected
+4. Intake item created: `{WORK_ROOT}/intake/fabric-sprint-circular-dep.md`
+5. Sprint plan written with status WARN, b017/b041 excluded
+6. Capacity re-calculated: 40pts → 19pts available (conservative)
+7. Report status: WARN with rollover analysis documenting why items deferred
+
 ### K10: Anti-patterns (s detekcí)
 ```bash
+SPRINT_FILE="{WORK_ROOT}/sprints/sprint-${CURRENT_SPRINT}.md"
+
 # A1: Including M/L Tasks Without Splitting
-# Detection: grep "Effort: M\|Effort: L" sprints/sprint-*.md | wc -l
-# Fix: Break M/L tasks into smaller S/XS subtasks; include only <M effort
+ML_COUNT=$(grep -cE 'Effort:\s*(M|L|XL)' "$SPRINT_FILE" 2>/dev/null || echo 0)
+if ! echo "$ML_COUNT" | grep -qE '^[0-9]+$'; then ML_COUNT=0; fi
+if [ "$ML_COUNT" -gt 2 ]; then
+  echo "WARN: A1 — $ML_COUNT M/L/XL tasks in sprint; consider splitting into S/XS"
+fi
 
 # A2: Ignoring WIP=1 (Single-Piece Flow)
-# Detection: grep "IN_PROGRESS" backlog/*.md | wc -l; [should be ≤1 per sprint]
-# Fix: Complete prior sprint items before starting new ones
+WIP_VIOLATIONS=$(grep -cl 'status:.*IN_PROGRESS' "{WORK_ROOT}"/backlog/*.md 2>/dev/null | wc -l)
+if ! echo "$WIP_VIOLATIONS" | grep -qE '^[0-9]+$'; then WIP_VIOLATIONS=0; fi
+if [ "$WIP_VIOLATIONS" -gt 1 ]; then
+  echo "FAIL: A2 — $WIP_VIOLATIONS items IN_PROGRESS simultaneously; WIP=1 violated"
+  exit 1
+fi
 
 # A3: Missing Definition of Done
-# Detection: grep "Definition of Done" sprints/sprint-*.md | wc -l
-# Fix: Add DoD checklist (tests pass, docs updated, PR reviewed, deployed to staging)
+if [ -f "$SPRINT_FILE" ]; then
+  if ! grep -q 'Definition of Done' "$SPRINT_FILE" 2>/dev/null; then
+    echo "FAIL: A3 — Sprint plan missing Definition of Done checklist"
+    exit 1
+  fi
+fi
 ```
 
 ---
@@ -250,7 +275,7 @@ Skill nemá quality gates (je deterministický plán, ne kód). Ale ověř:
 
 ## §9 — Report
 
-Vytvoř `{WORK_ROOT}/reports/sprint-{N}-{YYYY-MM-DD}.md`:
+Vytvoř `{WORK_ROOT}/reports/sprint-{N}-{YYYY-MM-DD}-{run_id}.md`:
 
 ```md
 ---
@@ -295,7 +320,7 @@ status: {PASS|WARN|FAIL}
 ### Existence checks
 - [ ] Sprint plan existuje: `{WORK_ROOT}/sprints/sprint-{N}.md`
 - [ ] Sprint plan má validní YAML frontmatter se schematem `fabric.report.v1`
-- [ ] Report existuje: `{WORK_ROOT}/reports/sprint-{YYYY-MM-DD}.md`
+- [ ] Report existuje: `{WORK_ROOT}/reports/sprint-{N}-{YYYY-MM-DD}-{run_id}.md`
 - [ ] Protocol log má START a END záznam s `skill: fabric-sprint`
 
 ### Quality checks (BLOCKING)

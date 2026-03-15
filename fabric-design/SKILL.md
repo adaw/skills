@@ -88,7 +88,7 @@ python skills/fabric-init/tools/protocol_log.py \
   --skill "fabric-design" \
   --event end \
   --status {OK|WARN|ERROR} \
-  --report "{WORK_ROOT}/reports/design-{YYYY-MM-DD}.md"
+  --report "{WORK_ROOT}/reports/design-{TASK_ID}-{YYYY-MM-DD}-{run_id}.md"
 ```
 
 **ERROR (pokud STOP/CRITICAL):**
@@ -163,7 +163,7 @@ Detail: `references/01-protocol.md` (logging), `references/02-preconditions.md` 
 
 ### Primární (vždy)
 - Design spec: `{ANALYSES_ROOT}/{TASK_ID}-design.md` (schema: `fabric.report.v1`, kind: `design`)
-- Report: `{WORK_ROOT}/reports/design-{TASK_ID}-{YYYY-MM-DD}.md` (schema: `fabric.report.v1`)
+- Report: `{WORK_ROOT}/reports/design-{TASK_ID}-{YYYY-MM-DD}-{run_id}.md` (schema: `fabric.report.v1`)
 - Aktualizovaný backlog item: `status: READY` (pokud design kompletní)
 
 ### Vedlejší (podmínečně)
@@ -355,18 +355,10 @@ Design work consists of 8 sequential sections. Each has a dedicated reference fi
 - Implementation order specified
 - Parallelizable work identified
 
-### K10: Inline Example — LLMem Batch Capture API
+### K10: Examples & Anti-patterns
 
-**Input:** Backlog item task-b015 "Add /capture/batch endpoint" (S effort): Accept POST with ≤100 observations, validate each, store deterministically, return 207 Multi-Status.
-**Output:** Design with D1–D8: (D1) existing capture.py + triage flow understood, (D2) BatchCaptureRequest model with validators, (D3) endpoint signature POST /capture/batch with request/response schemas, (D4) integration flow diagram, (D5) config: BATCH_MAX_ITEMS=100, (D6) 3 test cases: happy path (3 items), edge case (100 items), error (1 invalid item mixed with valid), (D7) 2 alternatives (sequential vs parallel processing) + risks (rate limiting, memory), (D8) depends_on: triage.py stable, pydantic ≥2.0.
-
-### K10: Anti-patterns (s detekcí)
-```bash
-# A1: Designing without reading existing code — Detection: D1 section lacking 'read {CODE_ROOT}/' references
-# A2: Test cases without concrete input/output values — Detection: grep -E 'test.*pass|TODO|TBD' {design-spec} in D6 section
-# A3: Pseudokód too vague (no numbered steps) — Detection: grep -c '^[0-9]\.' {D3} < 3 for complex logic
-# A4: Missing alternatives or unjustified choices — Detection: ! grep -E '| Alternative |' {D7} or no pro/con table
-```
+> **K10 příklady, rework/error flow a executable anti-pattern guards:** Přečti `references/12-k10-examples.md` pomocí Read toolu.
+> Obsahuje: inline příklad (Batch Capture API design D1-D8), rework flow (Gate 5 governance conflict), 4 anti-patterns s executable bash guards (A1-A4).
 
 ---
 
@@ -416,8 +408,8 @@ fi
 
 ## §9 — Report
 
-Create `{WORK_ROOT}/reports/design-{TASK_ID}-{YYYY-MM-DD}.md` with:
-- Frontmatter: schema, kind, run_id, status, task_id, design_spec path
+Create `{WORK_ROOT}/reports/design-{TASK_ID}-{YYYY-MM-DD}-{run_id}.md` with:
+- Frontmatter: schema, kind, run_id (`design-{TASK_ID}-{YYYY-MM-DD}-{RUN_ID}`), status, task_id, design_spec path
 - Summary: 1–3 sentences (what designed, outcome, blockers)
 - Quality gates status (all 5 gates)
 - Governance section: constraints + conflicts

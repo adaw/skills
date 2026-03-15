@@ -222,12 +222,60 @@ MAX_DEPS_PER_TASK=${MAX_DEPS_PER_TASK:-10}
 **Input:** Sprint target: "Add per-instance Qdrant support with warmup + async initialization"
 **Output:** 3 tasks (task-b015, task-b016, task-b017) with per-task analysis, effort estimates (M, S, S), dependencies (task-b015 → task-b016 → task-b017), Module Dependency Table showing storage/backends/*.py impact, Test Strategy covering Write Path chain (capture→triage→store→verify).
 
+### K10: Rework/Error Flow Example
+
+**Input:** Sprint target "Improve recall pipeline" decomposes into task-b020 (M) with FILES_TOUCHED=12.
+**Flow:**
+1. Effort algorithm: FILES_TOUCHED=12, NEW_TESTS=8, MAX_COMPLEXITY=3 → computed effort=XL
+2. XL exceeds threshold → task must be split
+3. Re-decompose: task-b020a (scoring refactor, S, 4 files), task-b020b (candidate generation, S, 5 files), task-b020c (injection update, S, 3 files)
+4. Dependency: b020a → b020b → b020c (serial — scoring feeds generation feeds injection)
+5. Cross-task check: shared module `recall/pipeline.py` touched by b020a and b020b → explicit ordering enforced
+6. Contract validation: all 11 sections present in each analysis → status READY
+7. Report: 1 target → 3 tasks (3 READY, 0 DESIGN), governance constraints: ADR-005 (scoring weights)
+
 ### K10: Anti-patterns (s detekcí)
 ```bash
-# A1: Analyzing without governance specs — Detection: grep -L 'decisions/INDEX.md\|specs/INDEX.md' {ANALYSES_ROOT}/*.md
-# A2: Epic→Tasks missing intermediate decomposition — Detection: task has 0 sub-tasks but >8 files_touched
-# A3: Circular dependencies in Task Queue — Detection: task-a depends on task-b depends on task-a
-# A4: Effort estimates missing FILES_TOUCHED — Detection: grep -L 'FILES_TOUCHED:\|NEW_TESTS:' {ANALYSES_ROOT}/*-analysis.md
+# A1: Analyzing without governance specs
+MISSING_GOV=$(find "{ANALYSES_ROOT}" -name '*-analysis.md' -exec grep -L 'decisions/INDEX.md\|specs/INDEX.md\|Constraints' {} \; 2>/dev/null | wc -l)
+if ! echo "$MISSING_GOV" | grep -qE '^[0-9]+$'; then MISSING_GOV=0; fi
+if [ "$MISSING_GOV" -gt 0 ]; then
+  echo "WARN: A1 — $MISSING_GOV analyses missing governance cross-reference"
+fi
+
+# A2: Epic→Tasks missing intermediate decomposition
+for ANALYSIS in "{ANALYSES_ROOT}"/*-analysis.md; do
+  [ -f "$ANALYSIS" ] || continue
+  FILES_TOUCHED=$(grep -oE 'FILES_TOUCHED:\s*[0-9]+' "$ANALYSIS" 2>/dev/null | grep -oE '[0-9]+')
+  FILES_TOUCHED=${FILES_TOUCHED:-0}
+  if ! echo "$FILES_TOUCHED" | grep -qE '^[0-9]+$'; then FILES_TOUCHED=0; fi
+  if [ "$FILES_TOUCHED" -gt 8 ]; then
+    echo "WARN: A2 — $(basename "$ANALYSIS") touches $FILES_TOUCHED files; consider splitting"
+  fi
+done
+
+# A3: Circular dependencies in Task Queue
+# Detection via topological sort failure
+if [ -f "$SPRINT_FILE" ]; then
+  DEPS=$(grep -oE 'depends_on:.*' "{ANALYSES_ROOT}"/*-analysis.md 2>/dev/null)
+  # Simple A→B→A check
+  for A in $(echo "$DEPS" | grep -oE 'task-[a-z0-9-]+'); do
+    for B in $(grep "depends_on:.*$A" "{ANALYSES_ROOT}"/*-analysis.md 2>/dev/null | grep -oE 'task-[a-z0-9-]+' | grep -v "$A"); do
+      if grep -q "depends_on:.*$B" "{ANALYSES_ROOT}/${A}"-analysis.md 2>/dev/null; then
+        echo "FAIL: A3 — Circular dependency: $A ↔ $B"
+        exit 1
+      fi
+    done
+  done
+fi
+
+# A4: Effort estimates missing FILES_TOUCHED
+MISSING_EFFORT=$(grep -rL 'FILES_TOUCHED:\|NEW_TESTS:' "{ANALYSES_ROOT}"/*-analysis.md 2>/dev/null | wc -l)
+if ! echo "$MISSING_EFFORT" | grep -qE '^[0-9]+$'; then MISSING_EFFORT=0; fi
+if [ "$MISSING_EFFORT" -gt 0 ]; then
+  echo "FAIL: A4 — $MISSING_EFFORT analyses missing FILES_TOUCHED/NEW_TESTS effort data"
+  exit 1
+fi
 ```
 
 Stručný přehled kroků:

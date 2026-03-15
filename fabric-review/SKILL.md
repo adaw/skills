@@ -92,6 +92,11 @@ if ! echo "$REWORK_COUNT" | grep -qE '^[0-9]+$'; then
   exit 1
 fi
 MAX_REWORK=$(grep 'max_rework_iters:' "{WORK_ROOT}/config.md" | awk '{print $2}'); MAX_REWORK=${MAX_REWORK:-3}
+# K5: Numeric guard for MAX_REWORK
+if ! echo "$MAX_REWORK" | grep -qE '^[0-9]+$'; then
+  MAX_REWORK=3
+  echo "WARN: max_rework_iters not numeric in config.md, reset to default (3)"
+fi
 if [ "$REWORK_COUNT" -ge "$MAX_REWORK" ]; then
   echo "STOP: max rework iterations ($MAX_REWORK) exceeded for $WIP_ITEM"
   exit 1
@@ -130,7 +135,9 @@ fi
 ```bash
 # K5: Timeout bounds from config (defaults match config.md timeout_bounds)
 TIMEOUT_LINT=$(awk '/timeout_bounds:/,/^[^ ]/{if(/lint:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_LINT=${TIMEOUT_LINT:-120}
+if ! echo "$TIMEOUT_LINT" | grep -qE '^[0-9]+$'; then TIMEOUT_LINT=120; echo "WARN: timeout_bounds.lint not numeric, reset to 120"; fi
 TIMEOUT_FMT=$(awk '/timeout_bounds:/,/^[^ ]/{if(/format_check:/)print $2}' "{WORK_ROOT}/config.md"); TIMEOUT_FMT=${TIMEOUT_FMT:-120}
+if ! echo "$TIMEOUT_FMT" | grep -qE '^[0-9]+$'; then TIMEOUT_FMT=120; echo "WARN: timeout_bounds.format_check not numeric, reset to 120"; fi
 
 # 1. Run objective gates (optional if not in config)
 if [ -n "{COMMANDS.lint}" ] && [ "{COMMANDS.lint}" != "TBD" ]; then
@@ -474,6 +481,8 @@ findings:
 ```
 
 ### Orchestration Metadata
+
+> **Cross-sprint lookup:** fabric-review depends_on fabric-docs (closing phase) to read acceptance criteria and documentation from previous sprint for code review validation. This is a read-only lookup across sprint boundaries.
 
 ```yaml
 depends_on: [fabric-test, fabric-docs]

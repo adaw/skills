@@ -444,6 +444,8 @@ done
 
 **Downstream Contract (WQ7):** fabric-review (Status=IN_REVIEW, tests+lint PASS), fabric-close (branch exists, conventional commit, no stubs).
 
+> **Cross-sprint lookup:** fabric-implement depends_on fabric-close (closing phase) to read previous sprint's completion context and rollback/versioning records. This is a read-only lookup across sprint boundaries.
+
 ```yaml
 depends_on: [fabric-analyze, fabric-architect, fabric-close, fabric-design]
 feeds_into: [fabric-test, fabric-e2e]

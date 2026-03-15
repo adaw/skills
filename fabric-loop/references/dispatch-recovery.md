@@ -111,7 +111,7 @@ Porovnej config LIFECYCLE vs kanonickou sekvenci. Drift = STOP.
 
 ```bash
 # State drift detection: compare config LIFECYCLE vs hardcoded canonical
-CANONICAL="vision status architect process gap generate intake prio sprint analyze implement test review close docs check archive"
+CANONICAL="vision status architect process gap generate intake prio design sprint analyze implement test review close docs check archive"
 CONFIG_STEPS=$(grep -A 50 'LIFECYCLE:' "{WORK_ROOT}/config.md" | grep -oP '^\s+-\s+\K[a-z]+' | tr '\n' ' ' | sed 's/ $//')
 if [ -n "$CONFIG_STEPS" ] && [ "$CONFIG_STEPS" != "$CANONICAL" ]; then
   echo "STOP: LIFECYCLE drift detected"
@@ -173,7 +173,8 @@ fi
 | gap | generate |
 | generate | intake |
 | intake | prio |
-| prio | sprint |
+| prio | design |
+| design | sprint |
 | sprint | analyze |
 | analyze | implement — **guard:** pokud Task Queue ve sprint plánu je prázdná (0 tasks po analýze) → přeskoč na `docs` (sprint bez implementačních položek). Vytvoř intake item `intake/loop-empty-task-queue-sprint-{N}.md`. |
 | implement | test |

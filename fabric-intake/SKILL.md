@@ -428,6 +428,8 @@ Pokud ANY check FAIL → **FAIL + vytvoř intake item `intake/intake-selfcheck-f
 
 ## §12 — Metadata (pro fabric-loop orchestraci)
 
+> **Cross-sprint lookup:** fabric-intake depends_on fabric-check (closing phase) to validate intake items against previous sprint's quality/coverage standards. This is a read-only lookup across sprint boundaries for acceptance criteria validation.
+
 ```yaml
 depends_on: [fabric-init, fabric-check, fabric-generate]
 feeds_into: [fabric-prio, fabric-design]

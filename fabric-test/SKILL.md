@@ -457,7 +457,7 @@ may_modify_backlog: false
 may_modify_code: false
 may_create_intake: true
 
-depends_on: [fabric-implement]
+depends_on: [fabric-implement, fabric-doctor]
 feeds_into: [fabric-review, fabric-close]
 ```
 
