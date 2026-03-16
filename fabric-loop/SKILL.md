@@ -477,7 +477,8 @@ Pokud ne → FAIL + zapiš `state.error` s detailním popisem a STOP.
 ```yaml
 phase: meta
 step: loop
-depends_on: [fabric-init]
+# Runs across all lifecycle phases as orchestrator
+depends_on: [fabric-init, fabric-status, fabric-check]
 feeds_into: []
 touches_state: true
 idempotent: true

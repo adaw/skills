@@ -483,6 +483,8 @@ phase: meta
 step: builder
 depends_on: [fabric-checker]
 feeds_into: [fabric-checker]
+# Cross-tool contract: builder (code generator) → checker (validator)
+# Not symmetric: builder is one-time setup; checker runs repeatedly.
 may_modify_state: false
 may_modify_code: true
 idempotent: false

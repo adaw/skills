@@ -489,7 +489,7 @@ python skills/fabric-init/tools/protocol_log.py \
 ## §12 — Metadata
 
 ```yaml
-depends_on: []
+depends_on: [fabric-builder]  # builder (code generator) → checker (validator)
 feeds_into: []
 phase: meta
 lifecycle_step: checker
