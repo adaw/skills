@@ -276,15 +276,15 @@ LIFECYCLE="vision status architect process gap generate intake prio design sprin
 for SKILL_FILE in skills/fabric-*/SKILL.md; do
   SKILL_STEP=$(grep -m1 'step:\|lifecycle_step:' "$SKILL_FILE" | awk '{print $2}')
   SKILL_IDX=$(echo "$LIFECYCLE" | tr ' ' '\n' | grep -n "^${SKILL_STEP}$" | cut -d: -f1)
-  [ -z "$SKILL_IDX" ] && continue  # utility/meta — skip
+  [ -z "${SKILL_IDX}" ] && continue  # utility/meta — skip
   for DEP in $(grep 'depends_on:' "$SKILL_FILE" | sed 's/.*\[//;s/\].*//;s/,/ /g;s/fabric-//g'); do
     DEP_FILE="skills/fabric-${DEP}/SKILL.md"
-    [ ! -f "$DEP_FILE" ] && continue
-    DEP_STEP=$(grep -m1 'step:\|lifecycle_step:' "$DEP_FILE" | awk '{print $2}')
+    [ ! -f "${DEP_FILE}" ] && continue
+    DEP_STEP=$(grep -m1 'step:\|lifecycle_step:' "${DEP_FILE}" | awk '{print $2}')
     DEP_IDX=$(echo "$LIFECYCLE" | tr ' ' '\n' | grep -n "^${DEP_STEP}$" | cut -d: -f1)
-    [ -z "$DEP_IDX" ] && continue
-    if [ "$DEP_IDX" -gt "$SKILL_IDX" ]; then
-      echo "P1: $(basename $(dirname $SKILL_FILE)) depends_on $DEP but $DEP runs AFTER in lifecycle ($DEP_IDX > $SKILL_IDX)"
+    [ -z "${DEP_IDX}" ] && continue
+    if [ "${DEP_IDX}" -gt "${SKILL_IDX}" ]; then
+      echo "P1: $(basename "$(dirname "$SKILL_FILE")") depends_on ${DEP} but ${DEP} runs AFTER in lifecycle (${DEP_IDX} > ${SKILL_IDX})"
     fi
   done
 done

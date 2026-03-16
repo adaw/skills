@@ -196,7 +196,7 @@ Detailní postup je v `references/workflow.md`. Zde shrnutí klíčových kroků
 
 **7.13) Vytvoř sprint plán** — `{WORK_ROOT}/sprints/sprint-{N}.md` dle šablony. Vyplň: title, goal, start/end, Sprint Targets tabulka, Task Queue.
 
-**7.14) Update state metadata** — nastav jen: `sprint_started`, `sprint_ends`, `sprint_goal`. Nesahej na `phase` nebo `step`.
+**7.14) Update state metadata** — nastav jen: `sprint_started`, `sprint_ends`, `sprint_goal`. Nesahej na `phase` nebo `step`. Guard: pokud `sprint_started` už má dnešní datum, přeskoč zápis (double-set protection).
 
 **7.15) Vytvoř sprint report** — `{WORK_ROOT}/reports/sprint-{N}-{YYYY-MM-DD}.md` se summary, risks, analysis.
 
