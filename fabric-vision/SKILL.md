@@ -141,7 +141,9 @@ validate_path "{WORK_ROOT}/vision.md"
 ### K2: Counter initialization and validation
 ```bash
 # K5: Read from config.md
-CONFIG_MAX_CAP=$(grep 'VISION.max_capabilities:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+CONFIG_MAX_CAP=$(grep 'VISION.max_capabilities:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}')
+CONFIG_MAX_CAP=${CONFIG_MAX_CAP:-""}
+if [ -z "$CONFIG_MAX_CAP" ]; then echo "WARN: VISION.max_capabilities not found in config.md, using default"; fi
 MAX_CAPABILITIES=${CONFIG_MAX_CAP:-${MAX_CAPABILITIES:-200}}
 
 # K2: Counter initialization

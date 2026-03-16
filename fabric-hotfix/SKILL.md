@@ -87,6 +87,12 @@ if [ ! -f "{WORK_ROOT}/config.md" ] || [ ! -f "{WORK_ROOT}/state.md" ]; then
   exit 1
 fi
 
+# K6: Backlog directory must exist (for optional backlog item linking)
+if [ ! -d "{WORK_ROOT}/backlog" ]; then
+  echo "STOP: backlog/ directory required — run fabric-init first"
+  exit 1
+fi
+
 # K4: Git safety — verify clean working tree before hotfix
 if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
   echo "STOP: git working tree not clean — commit or stash changes first"
@@ -94,7 +100,7 @@ if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
 fi
 
 # K4: COMMANDS.test configured
-COMMANDS_TEST=$(grep 'COMMANDS.test:' "{WORK_ROOT}/config.md" | grep -v test_e2e | head -1 | sed 's/.*: //')
+COMMANDS_TEST=$(grep 'COMMANDS.test:' "{WORK_ROOT}/config.md" 2>/dev/null | grep -v test_e2e | head -1 | sed 's/.*: //' || echo "") || { echo "ERROR: failed to read COMMANDS.test from config.md"; exit 1; }
 if [ -z "$COMMANDS_TEST" ] || [ "$COMMANDS_TEST" = "TBD" ]; then
   echo "STOP: COMMANDS.test not configured"
   exit 1
@@ -145,7 +151,7 @@ python skills/fabric-init/tools/fabric.py backlog-index 2>/dev/null || true
 python skills/fabric-init/tools/fabric.py governance-index 2>/dev/null || true
 
 # 3. Zjisti hlavní branch
-MAIN_BRANCH=$(grep 'main_branch:' "{WORK_ROOT}/config.md" | awk '{print $2}')
+MAIN_BRANCH=$(grep 'main_branch:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read main_branch from config.md"; exit 1; }
 MAIN_BRANCH=${MAIN_BRANCH:-main}
 ```
 
@@ -163,7 +169,7 @@ Reject any input containing `..` (path traversal attack prevention).
 
 ```bash
 # K5: Read from config.md
-CONFIG_MAX_RETRIES=$(grep 'HOTFIX.max_retries:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+CONFIG_MAX_RETRIES=$(grep 'HOTFIX.max_retries:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read MAX_RETRIES from config.md"; exit 1; }
 MAX_RETRIES=${CONFIG_MAX_RETRIES:-${MAX_RETRIES:-3}}
 LINT_RETRY_COUNT=0
 FORMAT_RETRY_COUNT=0

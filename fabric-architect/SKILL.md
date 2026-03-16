@@ -111,7 +111,11 @@ find "$CODE_ROOT" -name "*.py" -type f | head -1 > /dev/null || {
 }
 
 # --- Precondition: Phase validation ---
-CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read phase from state.md"; exit 1; }
+if [ -z "$CURRENT_PHASE" ]; then
+  echo "STOP: phase not found in state.md"
+  exit 1
+fi
 if [ "$CURRENT_PHASE" != "orientation" ]; then
   echo "STOP: Expected phase=orientation, got '$CURRENT_PHASE'"
   exit 1
@@ -180,7 +184,7 @@ done
 
 ```bash
 # K5: Read scanning limits from config.md
-MAX_SCAN_FILES=$(grep 'ARCHITECT.max_scan_files:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_SCAN_FILES=$(grep 'ARCHITECT.max_scan_files:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read MAX_SCAN_FILES from config.md"; exit 1; }
 MAX_SCAN_FILES=${MAX_SCAN_FILES:-5000}
 # K2: Numeric guard
 if ! echo "$MAX_SCAN_FILES" | grep -qE '^[0-9]+$'; then

@@ -63,7 +63,7 @@ if [ ! -f "{WORK_ROOT}/backlog/${TASK_ID}.md" ]; then
 fi
 
 # Precondition: test command configured
-TEST_CMD=$(grep 'test:' "{WORK_ROOT}/config.md" | awk '{print $2}')
+TEST_CMD=$(grep 'test:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read test command from config.md"; exit 1; }
 if [ -z "$TEST_CMD" ] || [ "$TEST_CMD" = "TBD" ]; then
   echo "STOP: COMMANDS.test is not configured"
   exit 1

@@ -132,7 +132,7 @@ python skills/fabric-init/tools/fabric.py backlog-scan \
   --json-out "{WORK_ROOT}/reports/backlog-scan-{YYYY-MM-DD}.json"
 
 # 4. K2+K5: Initialize generation counter from config
-MAX_ITEMS=$(grep 'GENERATE.max_items:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_ITEMS=$(grep 'GENERATE.max_items:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read GENERATE.max_items from config.md"; exit 1; }
 MAX_ITEMS=${MAX_ITEMS:-100}
 GENERATION_COUNTER=0
 
@@ -149,9 +149,9 @@ Použij backlog snapshot pro počet READY/DESIGN položek, deduplikaci, rozhodnu
 ## §7 — Postup (JÁDRO SKILLU)
 
 # K5: Generate thresholds from config.md
-MAX_GENERATE_ITEMS=$(grep 'GENERATE.max_items:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_GENERATE_ITEMS=$(grep 'GENERATE.max_items:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read GENERATE.max_items from config.md"; exit 1; }
 MAX_GENERATE_ITEMS=${MAX_GENERATE_ITEMS:-100}
-BACKLOG_WARN_THRESHOLD=$(grep 'GENERATE.backlog_warn_threshold:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+BACKLOG_WARN_THRESHOLD=$(grep 'GENERATE.backlog_warn_threshold:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read GENERATE.backlog_warn_threshold from config.md"; exit 1; }
 BACKLOG_WARN_THRESHOLD=${BACKLOG_WARN_THRESHOLD:-200}
 ```
 

@@ -155,7 +155,7 @@ Použij ho jako zdroj pravdy pro výběr top-PRIO položek.
 ### K2: Counter initialization and validation
 ```bash
 # K5: Read from config.md
-CONFIG_MAX_TASKS=$(grep 'SPRINT.max_tasks:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+CONFIG_MAX_TASKS=$(grep 'SPRINT.max_tasks:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read SPRINT.max_tasks from config.md"; exit 1; }
 MAX_SPRINT_TASKS=${CONFIG_MAX_TASKS:-${MAX_SPRINT_TASKS:-50}}
 
 # K2: Counter initialization

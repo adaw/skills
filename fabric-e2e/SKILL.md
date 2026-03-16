@@ -94,16 +94,20 @@ if ! echo "$MAX_E2E_TESTS" | grep -qE '^[0-9]+$'; then
 fi
 
 # K5: Read config
-E2E_PORT=$(grep 'E2E.port:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+E2E_PORT=$(grep 'E2E.port:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read E2E.port from config.md"; exit 1; }
 E2E_PORT=${E2E_PORT:-8099}
-E2E_TIMEOUT=$(grep 'E2E.timeout:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+E2E_TIMEOUT=$(grep 'E2E.timeout:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read E2E.timeout from config.md"; exit 1; }
 E2E_TIMEOUT=${E2E_TIMEOUT:-120}
 ```
 
 ### K1: Phase validation — e2e runs in implementation
 ```bash
 # K1: Phase validation — e2e runs in implementation
-CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read phase from state.md"; exit 1; }
+if [ -z "$CURRENT_PHASE" ]; then
+  echo "STOP: phase not found in state.md"
+  exit 1
+fi
 if [ "$CURRENT_PHASE" != "implementation" ]; then
   echo "STOP: fabric-e2e requires phase=implementation, current=$CURRENT_PHASE"
   exit 1
@@ -117,9 +121,15 @@ for VAR in "{WORK_ROOT}" "{CODE_ROOT}"; do
   fi
 done
 
-# K6: Dependency enforcement — test report MUST exist
+# K6: Dependency enforcement — test and implement reports MUST exist
 if ! ls "{WORK_ROOT}/reports/test-"*.md 1>/dev/null 2>&1; then
   echo "STOP: No test report found — fabric-test must run before fabric-e2e"
+  exit 1
+fi
+
+# K6: Verify implement report exists (dependency: fabric-implement)
+if ! ls "{WORK_ROOT}/reports/implement-"*.md 1>/dev/null 2>&1; then
+  echo "STOP: No implement report found — fabric-implement must run before fabric-e2e"
   exit 1
 fi
 ```

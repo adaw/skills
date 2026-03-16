@@ -91,7 +91,7 @@ if ! echo "$REWORK_COUNT" | grep -qE '^[0-9]+$'; then
   echo "STOP: rework_count='$REWORK_COUNT' not numeric in backlog/${WIP_ITEM}.md"
   exit 1
 fi
-MAX_REWORK=$(grep 'max_rework_iters:' "{WORK_ROOT}/config.md" | awk '{print $2}'); MAX_REWORK=${MAX_REWORK:-3}
+MAX_REWORK=$(grep 'max_rework_iters:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo ""); MAX_REWORK=${MAX_REWORK:-3}
 # K5: Numeric guard for MAX_REWORK
 if ! echo "$MAX_REWORK" | grep -qE '^[0-9]+$'; then
   MAX_REWORK=3

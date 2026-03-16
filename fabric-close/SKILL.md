@@ -67,17 +67,17 @@ for VAR in "{WORK_ROOT}" "{CODE_ROOT}"; do
 done
 
 # Config validation
-COMMANDS_TEST=$(grep '^COMMANDS.test:' "{WORK_ROOT}/config.md" | awk '{print $2}')
-COMMANDS_LINT=$(grep '^COMMANDS.lint:' "{WORK_ROOT}/config.md" | awk '{print $2}')
-COMMANDS_FORMAT=$(grep '^COMMANDS.format_check:' "{WORK_ROOT}/config.md" | awk '{print $2}')
+COMMANDS_TEST=$(grep '^COMMANDS.test:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "TBD")
+COMMANDS_LINT=$(grep '^COMMANDS.lint:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "")
+COMMANDS_FORMAT=$(grep '^COMMANDS.format_check:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "")
 
 if [ "$COMMANDS_TEST" = "TBD" ] || [ -z "$COMMANDS_TEST" ]; then
   echo "FAIL: COMMANDS.test not configured (TBD or empty)"
   exit 1
-fi
+fi || { echo "ERROR: failed to read COMMANDS from config.md"; exit 1; }
 
 # QUALITY.mode strict check
-QUALITY_MODE=$(grep '^QUALITY.mode:' "{WORK_ROOT}/config.md" | awk '{print $2}')
+QUALITY_MODE=$(grep '^QUALITY.mode:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "lenient")
 if [ "$QUALITY_MODE" = "strict" ]; then
   if [ -z "$COMMANDS_LINT" ] || [ "$COMMANDS_LINT" = "TBD" ]; then
     echo "FAIL: strict mode requires COMMANDS.lint, but it is missing/TBD"
@@ -90,14 +90,18 @@ if [ "$QUALITY_MODE" = "strict" ]; then
 fi
 
 # Sprint plan existence
-SPRINT_N=$(grep '^sprint:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+SPRINT_N=$(grep '^sprint:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read sprint from state.md"; exit 1; }
+if [ -z "$SPRINT_N" ]; then
+  echo "FAIL: sprint not found in state.md"
+  exit 1
+fi
 if [ ! -f "{WORK_ROOT}/sprints/sprint-${SPRINT_N}.md" ]; then
   echo "FAIL: sprint plan not found: sprints/sprint-${SPRINT_N}.md"
   exit 1
 fi
 
 # State validation (phase must be closing)
-CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" | awk '{print $2}')
+CURRENT_PHASE=$(grep '^phase:' "{WORK_ROOT}/state.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read phase from state.md"; exit 1; }
 if [ "$CURRENT_PHASE" != "closing" ]; then
   echo "STOP: phase must be 'closing', current: $CURRENT_PHASE"
   exit 1
@@ -122,6 +126,23 @@ if [ -f "{WORK_ROOT}/reviews/INDEX.md" ]; then
   if [ "$REWORK_COUNT" -gt 0 ]; then
     echo "WARN: $REWORK_COUNT tasks have REWORK verdict — verify before closing"
   fi
+fi
+
+# K6: Verify review reports exist for all CLEAN tasks in sprint plan
+if [ -f "{WORK_ROOT}/sprints/sprint-${SPRINT_N}.md" ]; then
+  TASKS_TO_MERGE=$(grep "^| " "{WORK_ROOT}/sprints/sprint-${SPRINT_N}.md" | grep -v "^| Task" | awk '{print $2}' | grep -v "^$" 2>/dev/null || echo "")
+  for TASK_ID in $TASKS_TO_MERGE; do
+    if [ -z "$TASK_ID" ] || [ "$TASK_ID" = "|" ]; then continue; fi
+    # Only check tasks with CLEAN verdict (CARRY-OVER tasks don't need review)
+    if grep -q "verdict: CLEAN" "{WORK_ROOT}/backlog/${TASK_ID}.md" 2>/dev/null; then
+      # At least one review report must exist for this task
+      REVIEW_COUNT=$(find "{WORK_ROOT}/reports" -name "review-${TASK_ID}-*.md" 2>/dev/null | wc -l)
+      if [ "$REVIEW_COUNT" -eq 0 ]; then
+        echo "STOP: Task $TASK_ID marked CLEAN but no review report found"
+        exit 1
+      fi
+    fi
+  done || echo "WARN: Could not validate all review reports (may be first run)"
 fi
 ```
 
@@ -345,10 +366,15 @@ Sprint summary report includes Task Status table with columns: `Task ID`, `Title
 Before closing skill execution, verify:
 
 **Checklist:**
-- [ ] All MERGEABLE tasks have close reports
-- [ ] DONE itemy přesunuty do backlog/done/ (ne ponechány v backlog/)
-- [ ] Close report existuje v `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md`
-- [ ] Backlog index aktualizován (žádné DONE itemy v hlavním indexu)
+- [ ] All MERGEABLE tasks have close reports (existence)
+- [ ] DONE items moved to backlog/done/ (not left in backlog/)
+- [ ] Close report exists: `{WORK_ROOT}/reports/close-sprint-{N}-{YYYY-MM-DD}.md`
+- [ ] Backlog index regenerated (no DONE items in main index)
+- [ ] State wip_item and wip_branch reset to null
+- [ ] Sprint report has `schema: fabric.report.v1` frontmatter (quality)
+- [ ] Merged branches deleted or marked (no stale branches)
+- [ ] All linked backlog items have status=DONE (invariant)
+- [ ] Protocol END logged with status and report path
 
 ```bash
 # 1. All MERGEABLE tasks have close reports

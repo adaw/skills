@@ -235,7 +235,7 @@ python skills/fabric-init/tools/fabric.py apply "{WORK_ROOT}/reports/intake-plan
 ## §7 — Postup (JÁDRO SKILLU — zde žije kvalita práce)
 
 # K5: Intake thresholds from config.md
-MAX_INTAKE_ITEMS=$(grep 'INTAKE.max_items:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_INTAKE_ITEMS=$(grep 'INTAKE.max_items:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read INTAKE.max_items from config.md"; exit 1; }
 MAX_INTAKE_ITEMS=${MAX_INTAKE_ITEMS:-200}
 if ! echo "$MAX_INTAKE_ITEMS" | grep -qE '^[0-9]+$'; then
   MAX_INTAKE_ITEMS=200

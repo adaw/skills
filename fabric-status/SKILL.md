@@ -122,7 +122,7 @@ Pak report stav podle dat ze snapshotu (ne odhadem). Snapshots mohou být dočas
 ### K2: Counter initialization and validation
 ```bash
 # K5: Read from config.md
-CONFIG_MAX_FILES=$(grep 'STATUS.max_files_scan:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+CONFIG_MAX_FILES=$(grep 'STATUS.max_files_scan:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read STATUS.max_files_scan from config.md"; exit 1; }
 MAX_FILES_SCAN=${CONFIG_MAX_FILES:-${MAX_FILES_SCAN:-10000}}
 
 # K2: Counter initialization

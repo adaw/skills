@@ -21,10 +21,10 @@ if ! echo "$MAX_COMPONENTS" | grep -qE '^[0-9]+$'; then
 fi
 
 # K5: Design thresholds from config.md
-MIN_TEST_CASES=$(grep 'DESIGN.min_test_cases:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MIN_TEST_CASES=$(grep 'DESIGN.min_test_cases:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read DESIGN.min_test_cases from config.md"; exit 1; }
 MIN_TEST_CASES=${MIN_TEST_CASES:-3}
 if ! echo "$MIN_TEST_CASES" | grep -qE '^[0-9]+$'; then MIN_TEST_CASES=3; fi
-MAX_DEPS_PER_COMPONENT=$(grep 'DESIGN.max_deps_per_component:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_DEPS_PER_COMPONENT=$(grep 'DESIGN.max_deps_per_component:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read DESIGN.max_deps_per_component from config.md"; exit 1; }
 MAX_DEPS_PER_COMPONENT=${MAX_DEPS_PER_COMPONENT:-5}
 if ! echo "$MAX_DEPS_PER_COMPONENT" | grep -qE '^[0-9]+$'; then MAX_DEPS_PER_COMPONENT=5; fi
 ```

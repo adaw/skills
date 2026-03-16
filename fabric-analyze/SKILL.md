@@ -211,9 +211,9 @@ fi
 
 ```bash
 # K5: Analysis thresholds from config.md (with fallback defaults)
-EFFORT_BASE=$(grep 'ANALYSIS.effort_base:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+EFFORT_BASE=$(grep 'ANALYSIS.effort_base:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read ANALYSIS.effort_base from config.md"; exit 1; }
 EFFORT_BASE=${EFFORT_BASE:-1}
-MAX_DEPS_PER_TASK=$(grep 'ANALYSIS.max_deps_per_task:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_DEPS_PER_TASK=$(grep 'ANALYSIS.max_deps_per_task:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read ANALYSIS.max_deps_per_task from config.md"; exit 1; }
 MAX_DEPS_PER_TASK=${MAX_DEPS_PER_TASK:-10}
 ```
 

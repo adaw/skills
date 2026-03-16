@@ -171,9 +171,9 @@ if ! echo "$MAX_ITEMS_PER_ARCHIVE" | grep -qE '^[0-9]+$'; then
 fi
 
 # K5: Read from config.md
-CONFIG_MAX=$(grep 'ARCHIVE.max_items_per_run:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+CONFIG_MAX=$(grep 'ARCHIVE.max_items_per_run:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read ARCHIVE.max_items_per_run from config.md"; exit 1; }
 MAX_ITEMS_PER_ARCHIVE=${CONFIG_MAX:-$MAX_ITEMS_PER_ARCHIVE}
-RETENTION_DAYS=$(grep 'ARCHIVE.retention_days:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+RETENTION_DAYS=$(grep 'ARCHIVE.retention_days:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read ARCHIVE.retention_days from config.md"; exit 1; }
 RETENTION_DAYS=${RETENTION_DAYS:-365}
 ```
 

@@ -164,11 +164,11 @@ fi
 
 ```bash
 # K5: Prioritization thresholds from config.md
-PRIO_IMPACT_WEIGHT=$(grep 'PRIO.impact_weight:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+PRIO_IMPACT_WEIGHT=$(grep 'PRIO.impact_weight:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read PRIO.impact_weight from config.md"; exit 1; }
 PRIO_IMPACT_WEIGHT=${PRIO_IMPACT_WEIGHT:-0.4}
-PRIO_URGENCY_WEIGHT=$(grep 'PRIO.urgency_weight:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+PRIO_URGENCY_WEIGHT=$(grep 'PRIO.urgency_weight:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read PRIO.urgency_weight from config.md"; exit 1; }
 PRIO_URGENCY_WEIGHT=${PRIO_URGENCY_WEIGHT:-0.3}
-PRIO_EFFORT_WEIGHT=$(grep 'PRIO.effort_weight:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+PRIO_EFFORT_WEIGHT=$(grep 'PRIO.effort_weight:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read PRIO.effort_weight from config.md"; exit 1; }
 PRIO_EFFORT_WEIGHT=${PRIO_EFFORT_WEIGHT:-0.3}
 ```
 

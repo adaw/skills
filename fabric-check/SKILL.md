@@ -139,7 +139,7 @@ python skills/fabric-init/tools/fabric.py governance-index
 ### FAST PATH Initialization:
 ```bash
 # K5: Read MAX_FINDINGS from config.md
-MAX_FINDINGS=$(grep 'QUALITY.max_findings:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_FINDINGS=$(grep 'QUALITY.max_findings:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read QUALITY.max_findings from config.md"; exit 1; }
 MAX_FINDINGS=${MAX_FINDINGS:-500}
 FINDINGS_COUNTER=0
 

@@ -150,7 +150,7 @@ python skills/fabric-init/tools/fabric.py backlog-scan \
 ### FAST PATH Initialization:
 ```bash
 # K5: Read max gaps from config.md
-MAX_GAPS=$(grep 'GAP.max_gaps:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MAX_GAPS=$(grep 'GAP.max_gaps:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read GAP.max_gaps from config.md"; exit 1; }
 MAX_GAPS=${MAX_GAPS:-50}
 # K2: Numeric guard for MAX_GAPS
 if ! echo "$MAX_GAPS" | grep -qE '^[0-9]+$'; then
@@ -160,13 +160,13 @@ fi
 GAP_COUNTER=0
 
 # K5: Gap thresholds from config.md
-MIN_COVERAGE_PCT=$(grep 'GAP.min_coverage_pct:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+MIN_COVERAGE_PCT=$(grep 'GAP.min_coverage_pct:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read GAP.min_coverage_pct from config.md"; exit 1; }
 MIN_COVERAGE_PCT=${MIN_COVERAGE_PCT:-80}
 if ! echo "$MIN_COVERAGE_PCT" | grep -qE '^[0-9]+$'; then
   MIN_COVERAGE_PCT=80
   echo "WARN: MIN_COVERAGE_PCT not numeric, reset to default (80)"
 fi
-GAP_SEVERITY_THRESHOLD=$(grep 'GAP.severity_threshold:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+GAP_SEVERITY_THRESHOLD=$(grep 'GAP.severity_threshold:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read GAP.severity_threshold from config.md"; exit 1; }
 GAP_SEVERITY_THRESHOLD=${GAP_SEVERITY_THRESHOLD:-medium}
 ```
 

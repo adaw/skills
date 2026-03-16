@@ -70,7 +70,7 @@ if ! grep -q '^DOCS_ROOT:' "{WORK_ROOT}/config.md"; then
 fi
 
 # Precondition 4: DOCS_ROOT directory exists (bootstrap if not)
-DOCS_ROOT=$(grep '^DOCS_ROOT:' "{WORK_ROOT}/config.md" | awk '{print $2}')
+DOCS_ROOT=$(grep '^DOCS_ROOT:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read DOCS_ROOT from config.md"; exit 1; }
 if [ ! -d "{CODE_ROOT}/${DOCS_ROOT}" ]; then
   echo "BOOTSTRAP: Creating ${DOCS_ROOT} and ${DOCS_ROOT}/api/"
   mkdir -p "{CODE_ROOT}/${DOCS_ROOT}/api"

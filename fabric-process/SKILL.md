@@ -103,14 +103,14 @@ fi
 
 ```bash
 # K6: CODE_ROOT existence guard (mandatory)
-CODE_ROOT=$(grep 'CODE_ROOT:' "{WORK_ROOT}/config.md" | awk '{print $2}' | tr -d '"')
+CODE_ROOT=$(grep 'CODE_ROOT:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' | tr -d '"' || echo "") || { echo "ERROR: failed to read CODE_ROOT from config.md"; exit 1; }
 if [ -z "$CODE_ROOT" ] || [ ! -d "$CODE_ROOT" ]; then
   echo "STOP: CODE_ROOT '$CODE_ROOT' not found — cannot analyze processes without source code"
   exit 1
 fi
 
 # K5: Route coverage threshold from config (not hardcoded)
-ROUTE_COVERAGE_MIN=$(grep 'PROCESS.route_coverage_min:' "{WORK_ROOT}/config.md" | awk '{print $2}' 2>/dev/null)
+ROUTE_COVERAGE_MIN=$(grep 'PROCESS.route_coverage_min:' "{WORK_ROOT}/config.md" 2>/dev/null | awk '{print $2}' || echo "") || { echo "ERROR: failed to read PROCESS.route_coverage_min from config.md"; exit 1; }
 ROUTE_COVERAGE_MIN=${ROUTE_COVERAGE_MIN:-80}
 if ! echo "$ROUTE_COVERAGE_MIN" | grep -qE '^[0-9]+$'; then
   echo "WARN: ROUTE_COVERAGE_MIN='$ROUTE_COVERAGE_MIN' not numeric — using default 80"
