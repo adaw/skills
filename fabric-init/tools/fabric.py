@@ -985,7 +985,7 @@ def snapshot_status(
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
 
     # snapshot_status is a helper (not a cmd_* wrapper) — no args namespace available.
-    eff_tier_max = _resolve_tier_max(cfg, None, None)
+    _resolve_tier_max(cfg, None, None)
     code_root = resolve_rel(repo_root, paths.get("CODE_ROOT", "goden/"))
     test_root = resolve_rel(repo_root, paths.get("TEST_ROOT", "tests/"))
     docs_root = resolve_rel(repo_root, paths.get("DOCS_ROOT", "docs/"))
@@ -1079,7 +1079,7 @@ def apply_plan(repo_root: Path, cfg: Dict[str, Any], plan_path: Path) -> Dict[st
     work_root = resolve_rel(repo_root, paths.get("WORK_ROOT", "fabric/"))
 
     # apply_plan is a helper (not a cmd_* wrapper) — no args namespace available.
-    eff_tier_max = _resolve_tier_max(cfg, None, None)
+    _resolve_tier_max(cfg, None, None)
     backlog_dir = work_root / "backlog"
     templates_dir = resolve_rel(
         repo_root,
@@ -1340,7 +1340,7 @@ def cmd_backlog_scan(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     items = (
         parse_backlog_items(backlog_dir, include_done=args.include_done)
@@ -1372,7 +1372,7 @@ def cmd_backlog_validate(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     items: List[Tuple[Path, Dict[str, Any]]] = []
 
@@ -1416,7 +1416,7 @@ def cmd_backlog_normalize(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     today = today_date()
 
@@ -1456,7 +1456,7 @@ def cmd_intake_scan(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     intake_dir = work_root / "intake"
     items = (
         parse_intake_items(intake_dir, include_done=args.include_done)
@@ -1488,7 +1488,7 @@ def cmd_intake_new(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     templates_dir = resolve_rel(repo_root, paths.get("TEMPLATES_ROOT", "fabric/templates/"))
     state_path = work_root / "state.md"
 
@@ -1661,7 +1661,7 @@ def cmd_backlog_index(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     items = parse_backlog_items(backlog_dir, include_done=False) if backlog_dir.exists() else []
     idx = generate_backlog_index(work_root, items)
@@ -1683,7 +1683,7 @@ def cmd_governance_index(args: argparse.Namespace) -> int:
     paths = get_paths_block(cfg)
 
     work_root_rel = paths.get("WORK_ROOT", "fabric/")
-    work_root = resolve_rel(repo_root, work_root_rel)
+    resolve_rel(repo_root, work_root_rel)
 
     decisions_root_rel = paths.get("DECISIONS_ROOT", f"{str(work_root_rel).rstrip('/')}/decisions/")
     specs_root_rel = paths.get("SPECS_ROOT", f"{str(work_root_rel).rstrip('/')}/specs/")
@@ -1821,7 +1821,7 @@ def cmd_backlog_set(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     state_path = work_root / "state.md"
     state: Dict[str, Any] = {}
@@ -1852,7 +1852,7 @@ def cmd_state_read(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
     data = state_read(state_path)
     if hasattr(args, "field") and args.field:
@@ -1876,7 +1876,7 @@ def cmd_state_patch(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
     state: Dict[str, Any] = {}
     if state_path.exists():
@@ -1908,7 +1908,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     res = run_command(repo_root, work_root, cfg, args.key, tail_lines=args.tail)
     out = asdict(res)
     print(json.dumps(out, indent=2, ensure_ascii=False))
@@ -1932,7 +1932,7 @@ def cmd_gate_test(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     templates_dir = resolve_rel(repo_root, paths.get("TEMPLATES_ROOT", "fabric/templates/"))
     state_path = work_root / "state.md"
 
@@ -2115,7 +2115,7 @@ def cmd_run_start(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
 
     run_id = generate_run_id()
@@ -2150,7 +2150,7 @@ def cmd_report_new(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     templates_dir = resolve_rel(repo_root, paths.get("TEMPLATES_ROOT", "fabric/templates/"))
     state_path = work_root / "state.md"
 
@@ -2432,7 +2432,7 @@ def cmd_report_index(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
 
     entries = _scan_reports(repo_root, work_root, include_archive=args.include_archive)
     out = (
@@ -2528,7 +2528,7 @@ def cmd_report_latest(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
 
     entries = _scan_reports(repo_root, work_root, include_archive=args.include_archive)
     latest = _latest_report(
@@ -2574,7 +2574,7 @@ def cmd_reports_validate(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
 
     schema_reports = (
         (cfg.get("SCHEMA") or {}).get("reports") if isinstance(cfg.get("SCHEMA"), dict) else None
@@ -2682,7 +2682,7 @@ def cmd_contract_check(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
     state: Dict[str, Any] = {}
     if state_path.exists():
@@ -2770,7 +2770,7 @@ def cmd_run_report(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     state_path = work_root / "state.md"
 
     state: Dict[str, Any] = {}
@@ -2887,7 +2887,7 @@ def cmd_evidence_pack(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
 
     # Load state for context.
     state_path = work_root / "state.md"
@@ -3356,7 +3356,7 @@ def cmd_tick(args: argparse.Namespace) -> int:
         # Gating overrides.
         entries = _scan_reports(repo_root, work_root, include_archive=False)
         wip_item = state.get("wip_item") if isinstance(state.get("wip_item"), str) else None
-        run_id = state.get("run_id") if isinstance(state.get("run_id"), str) else None
+        state.get("run_id") if isinstance(state.get("run_id"), str) else None
         sprint = state.get("sprint")
         sprint_str = str(sprint) if sprint is not None else None
 
@@ -3622,7 +3622,7 @@ def cmd_sprint_next(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     state_path = work_root / "state.md"
 
@@ -3780,7 +3780,7 @@ def cmd_archive_sprint(args: argparse.Namespace) -> int:
 
     goal = args.goal if hasattr(args, "goal") else None
     tier_max = args.tier_max if hasattr(args, "tier_max") else None
-    eff_tier_max = _resolve_tier_max(cfg, goal, tier_max)
+    _resolve_tier_max(cfg, goal, tier_max)
     backlog_dir = work_root / "backlog"
     done_dir = backlog_dir / "done"
     reports_dir = work_root / "reports"
