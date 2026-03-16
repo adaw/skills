@@ -412,20 +412,14 @@ status: {PASS|WARN|FAIL}
 
 ## §10 — Self-check (povinný — NEKRÁTIT)
 
-### Existence checks
-- [ ] Report existuje: `{WORK_ROOT}/reports/doctor-{YYYY-MM-DD}-{run_id}.md`
-- [ ] Protocol log má START + END záznam pro `doctor`
-
-### Quality checks
-- [ ] Všechny previously failing testy nyní PASS
-- [ ] Žádné regrese (post-fix passed ≥ pre-fix passed)
-- [ ] Každý fix má identifikovaný root cause v reportu
-- [ ] Každý root cause má mapovaný responsible skill
-- [ ] Git commit existuje s fix(doctor): prefix
-
-### Invarianty
-- [ ] Working tree čistý po dokončení
-- [ ] Žádný test nebyl přeskočen (@pytest.mark.skip) jako "fix"
+- [ ] Report exists with schema: `{WORK_ROOT}/reports/doctor-{YYYY-MM-DD}-{run_id}.md`
+- [ ] All failing tests PASS: post-fix count = 0 failures
+- [ ] Zero regressions: post-fix passed ≥ pre-fix passed
+- [ ] Each fix has root cause identified in report
+- [ ] Fixes are code, not assertion tweaks
+- [ ] Git commit with `fix(doctor):` prefix exists
+- [ ] NO @pytest.mark.skip added
+- [ ] Working tree clean (only reports/ modified)
 
 ---
 

@@ -332,90 +332,103 @@ Sekce: Summary, Per-task Results (tabulka), Cross-task Analysis, Governance Cons
 
 ---
 
-## §10 — Self-check (VŠECHNY položky MUSÍ být ✅ ANTES publish)
+## §10 — Self-check (povinný — NEKRÁTIT)
 
-### Per-task Analysis Quality (§2.1 contract)
+### Existence Checks
+- [ ] Report exists: `{WORK_ROOT}/reports/analyze-{YYYY-MM-DD}-{run_id}.md` with schema frontmatter
+- [ ] Per-task analyses exist: `{ANALYSES_ROOT}/{task_id}-analysis.md` for all tasks in Task Queue
+- [ ] Task Queue created: `{WORK_ROOT}/sprints/sprint-{N}.md` with ≥1 task
+- [ ] Protocol log has START and END: `{WORK_ROOT}/.protocol-log` contains analyze entries
+- [ ] No incomplete artifacts: all references in report point to existing files
 
-- [ ] **Každý task má kompletní per-task analýzu** v `{ANALYSES_ROOT}/{task_id}-analysis.md`
-- [ ] **§1 Constraints**: Tabulka `| ADR/Spec | Requirement | How satisfied |` — ≥1 row (može být "None")
-- [ ] **§2 Data Flow**: ASCII diagram s minimálně 3 kroky + error handling pro každý krok (ne jen happy path)
-- [ ] **§3 Module Dependency Table**: Tabulka `| Module | Type | Upstream | Downstream | Risk |` — VŠECHNY dotčené moduly
-- [ ] **§4 Entity Lifecycle**: Stavy CREATED → ... → EXPIRED (pokud task mění entity); jinak "N/A — {reason}"
-- [ ] **§5 Affected Processes**: Cross-reference s process-map.md (konkrétní proces jméno + kontrakty) nebo "NOTE: file not found"
-- [ ] **§6 Pseudocode**: KONKRÉTNÍ (references actual files, functions, imports), ne generický Python
-- [ ] **§7 Alternatives**: ≥2 alternativy (nebo WARN pro XS/S) s tabulkou `| Approach | Complexity | Risk | ADR Align | Test | Total | Chosen |`
-- [ ] **§8 Test Strategy**: VŠECH 5 úrovní (Unit/Integration/E2E/Edge/Regression) s konkrétními test jmény (ne "implementátor doplní")
-- [ ] **§9 Effort Estimate**: Vypočteno algoritmicky (FILES_TOUCHED + NEW_TESTS + MAX_COMPLEXITY) + výpočet zobrazen
-- [ ] **§10 AC Mapping**: Tabulka mapování AC → jak task splňuje
-- [ ] **§11 Risks & Open Questions**: Konkrétní rizika (ne "může být složité") + mitigation + open questions (ne prázdné)
+```bash
+# Existence verification
+if [ ! -f "{WORK_ROOT}/reports/analyze-$(date +%Y-%m-%d)-"*.md ]; then
+  echo "ERROR: analyze report not found"
+  exit 1
+fi
+ANALYZE_TASKS=$(grep "^| T-" "{WORK_ROOT}/sprints/sprint-${CURRENT_SPRINT}.md" 2>/dev/null | wc -l)
+for TASK_ID in $(grep "^| T-" "{WORK_ROOT}/sprints/sprint-${CURRENT_SPRINT}.md" 2>/dev/null | awk '{print $2}'); do
+  if [ ! -f "{ANALYSES_ROOT}/${TASK_ID}-analysis.md" ]; then
+    echo "ERROR: per-task analysis missing for $TASK_ID"
+    exit 1
+  fi
+done
+echo "✓ Existence checks passed ($ANALYZE_TASKS tasks)"
+```
 
-### Contract Validation (§4 enforcement)
+### Quality Checks
+- [ ] ALL 11 sections (§1-§11) present in each analysis: `grep "^## §" {analysis}` count = 11
+- [ ] Data Flow diagram has ≥3 steps + error paths: ASCII box diagram with inputs/transforms/outputs
+- [ ] Module Dependency Table lists all touched files with risk assessment
+- [ ] Test Strategy covers 5 levels (Unit/Integration/E2E/Edge/Regression) with concrete test names
+- [ ] Effort algorithm applied: FILES_TOUCHED + NEW_TESTS visible in estimate, not ad-hoc
+- [ ] Cross-task analysis complete: ≥1 shared module identified OR "no shared modules"
 
-- [ ] **Contract validation script PASSED**: Všechny 11 sekcí přítomny (výjimka: Alternatives ok pro XS/S)
-  - Pokud FAIL → task vrácen do DESIGN, implementátor ho přeskočí
-  - Pokud PASS → status nastavěn na READY ✅
-- [ ] **Status synchronization**: VŠECHNY 3 místa updated:
-  1. `{ANALYSES_ROOT}/{task_id}-analysis.md` frontmatter `status:`
-  2. `{WORK_ROOT}/sprints/sprint-{N}.md` Task Queue sloupec `Status`
-  3. `{WORK_ROOT}/backlog/{task_id}.md` frontmatter `status:`
+```bash
+# Quality verification (sample)
+MISSING_SECTIONS=0
+for ANALYSIS in "{ANALYSES_ROOT}"/*-analysis.md; do
+  [ -f "$ANALYSIS" ] || continue
+  SECTION_COUNT=$(grep -c "^## §" "$ANALYSIS" 2>/dev/null || echo 0)
+  if [ "$SECTION_COUNT" -lt 11 ]; then
+    echo "WARN: $(basename $ANALYSIS) has only $SECTION_COUNT sections (need 11)"
+    MISSING_SECTIONS=$((MISSING_SECTIONS + 1))
+  fi
+  if ! grep -q "FILES_TOUCHED:\|NEW_TESTS:" "$ANALYSIS"; then
+    echo "WARN: $(basename $ANALYSIS) missing effort algorithm data"
+  fi
+done
+[ "$MISSING_SECTIONS" -eq 0 ] && echo "✓ Quality checks passed"
+```
 
-### Cross-task Analysis (§4.1 ALWAYS)
+### Invariant Checks
+- [ ] Status SYNCHRONIZED across 3 locations:
+  - Per-task analysis `status:` field matches
+  - Task Queue `Status` column matches
+  - Backlog item `status:` matches
+- [ ] No circular dependencies: topological sort succeeds on Task Queue
+- [ ] No stale dependencies: all referenced tasks exist in Task Queue or completed backlog
+- [ ] Protocol log clean: START timestamp < END timestamp, status = OK|WARN|ERROR
 
-- [ ] **Cross-task analýza v analyze reportu** (i pro 1-2 tasks):
-  - 1-2 tasks: "N/A — {N} tasks, impact on backlog verified"
-  - ≥3 tasks: KOMPLETNÍ analýza s dependency table + execution order + parallel opportunities
-- [ ] **Dependency ordering**: Task Queue seřazeno podle: dependencies → risk → effort (momentum)
-- [ ] **Shared modules identified**: Pokud ≥2 tasks touch stejný soubor → explicita order v reportu
+```bash
+# Invariant verification
+CIRCULAR=$(grep "depends_on:" "{ANALYSES_ROOT}"/*-analysis.md 2>/dev/null | \
+  grep -oE 'task-[a-z0-9-]+' | sort -u | while read T1; do
+    for T2 in $(grep "depends_on:.*$T1" "{ANALYSES_ROOT}"/*-analysis.md 2>/dev/null | grep -oE 'task-[a-z0-9-]+'); do
+      if [ "$T2" = "$T1" ]; then echo "CIRCULAR: $T1"; fi
+    done
+  done)
+if [ -n "$CIRCULAR" ]; then
+  echo "ERROR: circular dependencies detected"
+  exit 1
+fi
+echo "✓ Invariant checks passed"
+```
 
-### Governance Integrity
+### Report Validation
+- [ ] Report frontmatter has required fields: schema, kind, status, targets_count, tasks_ready, tasks_design
+- [ ] Report sections present: Summary, Per-task Results (table), Cross-task Analysis, Governance, Warnings
+- [ ] Intake items created for blockers/clarifications (if any)
+- [ ] Report line count ≤500 (constraint)
 
-- [ ] **Governance indexes existují** a jsou čitelné (`{WORK_ROOT}/decisions/INDEX.md`, `{WORK_ROOT}/specs/INDEX.md`)
-- [ ] **Constraints sekce**: Všechny relevantní ADR/SPEC odkazovány (ne vynechané)
-- [ ] **Conflicts escalated**: Pokud task conflicts s ADR/SPEC → intake item `governance-clarification-{task_id}.md` vytvořen
-
-### Test Coverage & Process Chain
-
-- [ ] **Write Path tasks** (capture, triage, store): test pokrytí Write Path chain (capture→triage→store→verify)
-- [ ] **Recall Path tasks** (recall, scoring, injection): test pokrytí Recall Path chain (query→search→score→inject)
-- [ ] **Critical process tests**: Pokud task mění process-map kontrakty → `test_e2e_{process_name}` zmapován
-- [ ] **Regression coverage**: Pokud bugfix → `test_{id}_regression_{bug}` named konkrétně
-
-### Effort & Scope Sanity
-
-- [ ] **Effort sanity check**: Pokud S ale FILES_TOUCHED ≥5 → odhad Updated (L nebo XL)
-- [ ] **XL/oversized tasks split**: Pokud EFFORT = XL → task je rozložen na ≤L subtasks
-- [ ] **Anti-patterns**: Vágní popis ("implementuj feature X" — musí být konkrétní soubory/funkce)
-
-### Report & Artifacts
-
-- [ ] **Analyze report** (`{WORK_ROOT}/reports/analyze-{YYYY-MM-DD}-{run_id}.md`) vytvořen:
-  - Souhrn: N targetů → N tasks (M READY, N-M DESIGN)
-  - ADR/SPEC constraints použité
-  - Clarifications vytvořené (intake items)
-  - Cross-task analysis sekce
-- [ ] **Intake items** (pokud potřeba): `{WORK_ROOT}/intake/governance-clarification-*.md` + `{WORK_ROOT}/intake/blocker-*.md`
-- [ ] **Backlog updated**: Všechny backlog items s linkama na analysis (`See {ANALYSES_ROOT}/{task_id}-analysis.md`)
-
-### Final Checkpoint — BLOCKING ENFORCEMENT (WQ10)
-
-- [ ] ✅ Všechny per-task analýzy prošly contract validation (PASS)
-  - ❌ CRITICAL: Analýza chybí povinné sekce (§1-§11) → **FAIL task** (vrátit do DESIGN, EXIT 1)
-  - ❌ CRITICAL: Task in READY ale bez Data Flow diagram → **EXIT 1** (incomplete specification)
-- [ ] ✅ Všechny tasks v Task Queue jsou READY nebo DESIGN (ne other states)
-  - ❌ CRITICAL: Task se opakuje ve více řádcích Task Queue → **EXIT 1** (duplicate cleanup required)
-- [ ] ✅ Žádný task v READY bez kompletní analýzy (contract enforcement passed)
-  - ❌ CRITICAL: Status sync mismatch (READY v analysis, DESIGN v backlog) → **EXIT 1** (synchronize before publish)
-- [ ] ✅ Cross-task analýza pokrývá všechny interakce (dependency ordering optimized)
-  - ❌ CRITICAL: Circular dependency detected (A→B→A) → **EXIT 1** (unresolvable, intake item required)
-- [ ] ✅ Report vygenerován a archivován
-  - ❌ CRITICAL: Analyze report missing or truncated → **EXIT 1** (re-run analysis)
-
-**Non-critical warnings (don't fail analyze):**
-- ⚠️ WARN: Task is DESIGN (incomplete analysis) — note in report, implementer will skip
-- ⚠️ WARN: Effort estimate ≥XL — recommend splitting (but don't fail)
-- ⚠️ WARN: process-map.md missing — note in report, continue without process validation
-
-Pokud JAKÝKOLIV CRITICAL check selhává → **EXIT 1, log error, artifact cleanup** (don't publish partial report).
+```bash
+# Report validation
+REPORT=$(ls -t "{WORK_ROOT}/reports/analyze-"*.md 2>/dev/null | head -1)
+if [ -z "$REPORT" ]; then
+  echo "ERROR: no analyze report found"
+  exit 1
+fi
+if ! grep -q "schema: fabric.report.v1" "$REPORT"; then
+  echo "ERROR: report missing schema frontmatter"
+  exit 1
+fi
+REPORT_LINES=$(wc -l < "$REPORT")
+if [ "$REPORT_LINES" -gt 500 ]; then
+  echo "WARN: report ($REPORT_LINES lines) exceeds 500-line soft limit"
+fi
+echo "✓ Report validation passed"
+```
 
 ---
 

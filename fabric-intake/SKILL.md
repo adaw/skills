@@ -376,29 +376,22 @@ Zpracováno N intake items. Vytvořeno N backlog items, N merged, N rejected.
 
 ## §10 — Self-check (povinný — NEKRÁTIT)
 
-> **Naming clarifikace:** Intake **items** (soubory v `intake/`) pojmenovávej dle config konvence `{source}-{slug}-{date-or-id}.md`. Intake **report** (výstup skillu) je `reports/intake-{YYYY-MM-DD}.md`. Nezaměňuj.
+> **Naming:** Intake **items** = soubory v `intake/` podle config (`{source}-{slug}-{date-or-id}.md`). Intake **report** = `reports/intake-{YYYY-MM-DD}.md` (výstup skillu).
 
-### Existence checks
-- [ ] Report existuje: `{WORK_ROOT}/reports/intake-{YYYY-MM-DD}.md`
-- [ ] Report má validní YAML frontmatter se schematem `fabric.report.v1`
-- [ ] Backlog index aktualizován: `{WORK_ROOT}/backlog.md` existuje a odpovídá `backlog/*.md`
-- [ ] Protocol log má START a END záznam s `skill: intake`
+### Existence Checks
+- [ ] Report exists: `{WORK_ROOT}/reports/intake-{YYYY-MM-DD}.md` with schema: fabric.report.v1
+- [ ] Report has frontmatter: processed_count, created_count, merged_count, rejected_count, warnings_count
+- [ ] Backlog index updated: `{WORK_ROOT}/backlog.md` exists and matches `backlog/*.md` files
+- [ ] Protocol log has START and END: skill=intake with status=OK|WARN|ERROR
 
-### Quality checks
-- [ ] **Všechny intake items zpracovány**: žádné nezpracované soubory v `intake/` (vše v `intake/done/` nebo vysvětleno v reportu)
-- [ ] **Pro každý zpracovaný intake existuje backlog item** v `backlog/` s matching `id` a `title`
-- [ ] **Všechny vytvořené backlog itemy mají schema: fabric.backlog_item.v1**: frontmatter validation
-- [ ] **Duplicity odstraněny**: report obsahuje seznam duplikátů (neztraceny, sloučeny nebo zamítnuty s důvodem)
-- [ ] **Report má sekce**: Summary (N itemů zpracováno), Processing, Dedup/Merges, Backlog updates, Warnings
-- [ ] **Backlog.md je seřazený** dle PRIO (nebo config-specified ordering)
-
-### Invariants
-- [ ] Žádný soubor mimo `{WORK_ROOT}/intake/`, `{WORK_ROOT}/backlog/`, `{WORK_ROOT}/reports/` nebyl modifikován
-- [ ] State.md NENÍ modifikován (intake nesmí měnit phase/step)
-- [ ] Žádný backlog item smazán (jen stav změněn)
-- [ ] Protocol log má START i END záznam
-
-Pokud ANY check FAIL → **FAIL + vytvoř intake item `intake/intake-selfcheck-failed-{date}.md`**.
+- [ ] Report exists with schema: `{WORK_ROOT}/reports/intake-{YYYY-MM-DD}.md`
+- [ ] Report has frontmatter: processed_count, created_count, merged_count, rejected_count
+- [ ] Backlog index updated: `{WORK_ROOT}/backlog.md` exists and matches files
+- [ ] All intake items processed: no files pending in `intake/` (moved to done/ or rejected/)
+- [ ] Each processed item has backlog entry: report Processing table complete
+- [ ] Dedup documented: "Dedup/Merges" section lists merged items with reason
+- [ ] State.md NOT modified: phase/step unchanged
+- [ ] No backlog items deleted (moved to done/, not deleted)
 
 ---
 

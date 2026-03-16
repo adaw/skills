@@ -246,24 +246,98 @@ Schema: `fabric.report.v1` with status, task_id, effort, merge_commit, evidence 
 
 ## §10 — Self-check (povinný — NEKRÁTIT)
 
-### Existence checks
-- [ ] Report existuje: `{WORK_ROOT}/reports/hotfix-{YYYY-MM-DD}-{run_id}.md`
-- [ ] Backlog item existuje a má `status: DONE`
-- [ ] Merge commit existuje na main: `git log --oneline -1 | grep "${TASK_ID}"`
+### Existence Checks
+- [ ] Report exists: `{WORK_ROOT}/reports/hotfix-{YYYY-MM-DD}-{run_id}.md` with schema frontmatter
+- [ ] Backlog item exists: `{WORK_ROOT}/backlog/{TASK_ID}.md` with `status: DONE`
+- [ ] Merge commit on main: `git log --oneline | grep "${TASK_ID}"` (commit on main branch)
+- [ ] Protocol log has START and END: both entries with status
 
-### Quality checks
-- [ ] Post-merge tests PASS
-- [ ] Hotfix branch smazaná (ne na lokálu, ne na remote)
-- [ ] Backlog index regenerován
-- [ ] Report má schema frontmatter se status
-- [ ] Minimálně 3 testy byly napsány/aktualizovány (happy/edge/error)
-- [ ] Self-review proběhl na 4 dimenze (R1–R4)
+```bash
+# Existence verification
+TASK_ID="${1}"
+if [ ! -f "{WORK_ROOT}/reports/hotfix-$(date +%Y-%m-%d)-"*.md ]; then
+  echo "ERROR: hotfix report not found"
+  exit 1
+fi
+if [ ! -f "{WORK_ROOT}/backlog/${TASK_ID}.md" ]; then
+  echo "ERROR: backlog item not found: {WORK_ROOT}/backlog/${TASK_ID}.md"
+  exit 1
+fi
+STATUS=$(grep "^status:" "{WORK_ROOT}/backlog/${TASK_ID}.md" | awk '{print $2}')
+if [ "$STATUS" != "DONE" ]; then
+  echo "ERROR: backlog item status is '$STATUS' (expected DONE)"
+  exit 1
+fi
+echo "✓ Existence checks passed"
+```
 
-### Invarianty
-- [ ] Hotfix nezměnil `state.md` (phase/step/sprint) — jen wip_item/wip_branch
-- [ ] Protocol log obsahuje START i END záznam
-- [ ] Žádný `git push --force` nebyl proveden
-- [ ] Working tree je čistý po dokončení
+### Quality Checks
+- [ ] Post-merge tests PASS: `{COMMANDS.test}` exit code = 0 after merge
+- [ ] Hotfix branch deleted: `git branch -a | grep -c "hotfix-${TASK_ID}"` = 0
+- [ ] Backlog index regenerated: `{WORK_ROOT}/backlog.md` includes merged item
+- [ ] Report has schema: `schema: fabric.report.v1` in frontmatter
+- [ ] Minimum 3 tests: git diff shows ≥3 test additions/updates (happy/edge/error)
+- [ ] Self-review documented: report contains R1-R4 (Correctness, Error Handling, Security, Tests)
+
+```bash
+# Quality verification
+REPORT=$(ls -t "{WORK_ROOT}/reports/hotfix-"*.md 2>/dev/null | head -1)
+[ -z "$REPORT" ] && exit 1
+
+if ! grep -q "schema: fabric.report.v1" "$REPORT"; then
+  echo "ERROR: report missing schema frontmatter"
+  exit 1
+fi
+
+# Verify branch is deleted
+if git branch -a 2>/dev/null | grep -q "hotfix-"; then
+  echo "WARN: hotfix branches still exist (should be deleted)"
+fi
+
+# Verify test count (approximate via diff)
+TESTS_TOUCHED=$(git diff HEAD~1 HEAD --name-only 2>/dev/null | grep -c test)
+if [ "$TESTS_TOUCHED" -lt 1 ]; then
+  echo "WARN: no test files in merge commit (expected ≥3 test cases)"
+fi
+
+echo "✓ Quality checks passed"
+```
+
+### Invariants
+- [ ] `state.md` unchanged: phase/step/sprint values identical to pre-hotfix
+- [ ] Only wip_item/wip_branch reset to null: no other state changes
+- [ ] Protocol log clean: START < END, both with status
+- [ ] No force push: `git log --oneline -1 | grep "^[a-f0-9]" | grep -v "Merge"` = standard commit
+- [ ] Working tree clean: `git status --porcelain` only shows reports/
+
+```bash
+# Invariant verification
+# 1. Verify state.md not modified (except wip fields)
+STATE_HASH_BEFORE=$(git show HEAD~1:"{WORK_ROOT}/state.md" 2>/dev/null | grep -v "^wip_" | md5sum)
+STATE_HASH_AFTER=$(cat "{WORK_ROOT}/state.md" | grep -v "^wip_" | md5sum)
+
+if [ "$STATE_HASH_BEFORE" != "$STATE_HASH_AFTER" ]; then
+  echo "ERROR: state.md was modified beyond wip fields"
+  exit 1
+fi
+
+# 2. Verify wip_item/wip_branch reset
+WIP_ITEM=$(grep "^wip_item:" "{WORK_ROOT}/state.md" | awk '{print $2}')
+WIP_BRANCH=$(grep "^wip_branch:" "{WORK_ROOT}/state.md" | awk '{print $2}')
+
+if [ "$WIP_ITEM" != "null" ] || [ "$WIP_BRANCH" != "null" ]; then
+  echo "ERROR: wip_item/wip_branch not reset to null"
+  exit 1
+fi
+
+# 3. Verify no force push
+if git log --oneline -3 2>/dev/null | grep -q "force"; then
+  echo "ERROR: force push detected (use only standard merges)"
+  exit 1
+fi
+
+echo "✓ Invariant checks passed"
+```
 
 ---
 

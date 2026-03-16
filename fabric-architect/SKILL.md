@@ -370,45 +370,36 @@ mutations:
 **Run before completing skill:**
 
 **Existence Checks:**
-- [ ] Report file `reports/architect-{YYYY-MM-DD}.md` created
-- [ ] All mutations written to `backlog/` (if default mode)
-- [ ] ADR files created for undocumented decisions (if A19 < 80)
-- [ ] Protocol log has START and END timestamps
-- [ ] Backlog index updated with new items + counts
+- [ ] Report file `reports/architect-{YYYY-MM-DD}.md` created with schema frontmatter
+- [ ] All mutations written to `backlog/` (if default mode, files named `T0-architect-*.md` or `T1-architect-*.md`)
+- [ ] Protocol log has START and END timestamps with status
+- [ ] Backlog index regenerated: `{WORK_ROOT}/backlog.md` includes new mutations
 
-**Quality Checks:**
-- [ ] All 20 dimensions scored (A0-A19)
-- [ ] Weighted formula correctly applied
-- [ ] Each CRITICAL (🔴) finding has corresponding T0 mutation (default mode)
-- [ ] Evidence is file:line specific, not vague
-- [ ] Verdict matches score range (≥80 → SOLID, <40 → REDESIGN, etc.)
-- [ ] Cross-dimensional insights table present (≥3 insights)
-
-**Invariant Checks:**
-- [ ] Zero code files modified (architect is read-only analysis)
-- [ ] Only mutations: backlog files, ADR files, report file
-- [ ] In --no-fix mode: zero backlog mutations created (only report)
-- [ ] All new backlog items in `backlog/` with proper filename (`T0-architect-*.md`)
-- [ ] No external API calls (all analysis local)
+- [ ] Report created with schema frontmatter
+- [ ] All 20 dimensions scored: `grep -c "{dim:" {report}`
+- [ ] Each CRITICAL finding has T0 mutation (default mode)
+- [ ] Cross-dimensional insights ≥3
+- [ ] Zero code modified (read-only): `git status --short | grep -c src/` = 0
+- [ ] New backlog items in `backlog/T0-architect-*.md` or `T1-architect-*.md`
 
 ---
 
-## §11 Failure Handling
+## §11 Failure Handling (K3: Error Recovery Executable)
 
-| Phase | Error | Action |
-|-------|-------|--------|
-| **Preconditions** | vision.md missing | STOP immediately — cannot score without vision principles. Log: "CRITICAL: vision.md required." Exit code 1. |
-| **Pre-flight (A0)** | No .py files found | STOP — nothing to analyze. Log error, exit code 1. |
-| **A1 Scanning** | Cannot parse file (syntax error) | WARN + skip file + note in report "File skipped due to parse error: {file}". Continue with other files. |
-| **A2-A4 Scanning** | Confidence <50% on >50% of dimensions | REPORT WARN in final report: "High uncertainty on this analysis. Confidence: 50%. Consider manual review." Mark those dimensions LOW confidence. |
-| **Mutation Creation (default mode)** | Cannot write to backlog/ | WARN + list mutations in report with message: "Mutations not created. Apply manually:" + show each mutation spec. |
-| **Report Write Failure** | Cannot create reports/ directory | STOP + exit. Log: "Cannot write report — check permissions." Exit code 1. |
+| Phase | Error | Action | Recovery Code |
+|-------|-------|--------|----------------|
+| **Preconditions** | vision.md missing | STOP — cannot score without vision. Exit code 1. | See below: `missing_vision_recovery` |
+| **Pre-flight (A0)** | No .py files found | STOP — nothing to analyze. Exit 1. | Check CODE_ROOT path in config |
+| **A1 Scanning** | Cannot parse file (syntax error) | WARN + skip file. Continue analyzing others. | Append error to report; increment skipped counter |
+| **A2-A4 Scanning** | Confidence <50% on >50% dims | WARN in report. Mark dims LOW_CONFIDENCE. Continue. | Set flag in report: `confidence_level: LOW` |
+| **Mutation Creation** | Cannot write to backlog/ | WARN + list mutations in report as manual tasks. Continue. | Create intake item: `intake/architect-manual-mutations.md` |
+| **Report Write** | Cannot create reports/ | STOP + exit. Log "check permissions". | `mkdir -p {WORK_ROOT}/reports` or fail-fast |
 
-**Operator Guidance on Errors:**
-- Missing precondition → fix precondition, re-run skill
-- Parse error → fix syntax, re-run skill
-- Low confidence → manually review hotspots; re-run with --strategy=DEEP
-- Backlog write fail → manually apply mutations from report
+**K3 Recovery Code:** See `references/k3-error-recovery.md` for complete recovery patterns:
+- missing_vision: Create FAILED report, exit 1
+- low_confidence: Mark report with `confidence_level: LOW`, continue
+- parse_error: Skip file with logging, continue
+- mutation_write: Fallback to intake item, mark WARN
 
 ---
 

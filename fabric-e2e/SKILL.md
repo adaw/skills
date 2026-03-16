@@ -255,22 +255,90 @@ report_file: reports/e2e-2026-03-05.md
 ## §10 Self-check (12 items)
 
 **Existence:**
-- [ ] Report exists: `reports/e2e-{YYYY-MM-DD}.md`
-- [ ] Log file exists: `reports/e2e-{YYYY-MM-DD}.log`
-- [ ] Server process terminated: `! kill -0 $SERVER_PID 2>/dev/null`
-- [ ] Temp directory cleaned: `[ ! -d "$E2E_HOME" ]`
+- [ ] Report exists: `reports/e2e-{YYYY-MM-DD}.md` with schema frontmatter
+- [ ] Log file exists: `reports/e2e-{YYYY-MM-DD}.log` with server + test output
+- [ ] Server process terminated: no PID alive post-test
+- [ ] Temp directory cleaned: no leftover `$E2E_HOME` directory
+
+```bash
+# Existence verification
+if [ ! -f "{WORK_ROOT}/reports/e2e-$(date +%Y-%m-%d).md" ]; then
+  echo "ERROR: e2e report not found"
+  exit 1
+fi
+if [ ! -f "{WORK_ROOT}/reports/e2e-$(date +%Y-%m-%d).log" ]; then
+  echo "ERROR: e2e log file not found"
+  exit 1
+fi
+if [ -d "$E2E_HOME" ]; then
+  echo "ERROR: temp directory $E2E_HOME not cleaned"
+  exit 1
+fi
+echo "✓ Existence checks passed"
+```
 
 **Quality:**
-- [ ] All test categories represented (≥5 of 8 categories in output)
-- [ ] Each failed test has intake item
-- [ ] Regression comparison done (if previous report exists)
-- [ ] Report has pass/fail counts, duration, provider info
+- [ ] Test coverage: ≥8 tests executed (health, API, capture, triage, recall minimum)
+- [ ] Pass rate: ≥75% tests passing (PASS) or ≥50% for WARN
+- [ ] Failed tests have intake items: `grep "test.*FAILED" {e2e-report}` → intake items created
+- [ ] Regression analysis: compared with previous e2e report if exists
+- [ ] Report has frontmatter: schema, kind=e2e, status, tests_total, tests_passed, duration_seconds
+
+```bash
+# Quality verification
+REPORT=$(ls -t "{WORK_ROOT}/reports/e2e-"*.md 2>/dev/null | head -1)
+[ -z "$REPORT" ] && exit 1
+
+if ! grep -q "schema: fabric.report.v1" "$REPORT"; then
+  echo "ERROR: report missing schema frontmatter"
+  exit 1
+fi
+
+TOTAL=$(grep "tests_total:" "$REPORT" | awk '{print $2}')
+PASSED=$(grep "tests_passed:" "$REPORT" | awk '{print $2}')
+
+if [ "$TOTAL" -lt 8 ]; then
+  echo "ERROR: only $TOTAL tests executed (need ≥8)"
+  exit 1
+fi
+
+PASS_RATE=$((PASSED * 100 / TOTAL))
+if [ "$PASS_RATE" -lt 50 ]; then
+  echo "ERROR: pass rate $PASS_RATE% too low (need ≥50%)"
+  exit 1
+fi
+
+echo "✓ Quality checks passed ($PASSED/$TOTAL tests, $PASS_RATE%)"
+```
 
 **Invariants:**
-- [ ] Port `${E2E_PORT}` is free: `! lsof -i :${E2E_PORT}`
-- [ ] No orphan processes: `ps aux | grep -c "llmem\|uvicorn"` should be baseline
-- [ ] Protocol log has START and END: check protocol_log.py
-- [ ] No production data directory was used: all state is in temp `$E2E_HOME`
+- [ ] Port `${E2E_PORT}` is free: `! lsof -i :${E2E_PORT}` returns true
+- [ ] No orphan processes: baseline process count unchanged
+- [ ] Protocol log has START and END: both entries with status in log
+- [ ] No production state: `$DATA_DIR` is temporary, not real instance
+
+```bash
+# Invariant verification
+E2E_PORT=${E2E_PORT:-8099}
+if lsof -i ":$E2E_PORT" >/dev/null 2>&1; then
+  echo "ERROR: port $E2E_PORT still in use (server not terminated)"
+  exit 1
+fi
+
+# Check for uvicorn orphans
+ORPHANS=$(pgrep -f "uvicorn.*$E2E_PORT" 2>/dev/null | wc -l)
+if [ "$ORPHANS" -gt 0 ]; then
+  echo "WARN: $ORPHANS orphan processes found on port $E2E_PORT"
+fi
+
+# Verify temp directory isolation
+if [ -n "$E2E_HOME" ] && [ -d "$E2E_HOME" ]; then
+  echo "ERROR: E2E temp directory not cleaned"
+  exit 1
+fi
+
+echo "✓ Invariant checks passed"
+```
 
 ## §11 Failure Handling
 

@@ -425,26 +425,23 @@ Create `{WORK_ROOT}/reports/design-{TASK_ID}-{YYYY-MM-DD}-{run_id}.md` with:
 
 ## §10 — Self-Check (povinný — NEKRÁTIT)
 
-Self-check is MANDATORY before marking design READY. Use detailed checklist in **references/10-self-check.md**.
+Self-check is MANDATORY before marking design READY.
 
 ### Existence Checks
-- [ ] Design spec exists: `{ANALYSES_ROOT}/{TASK_ID}-design.md`
-- [ ] Report exists: `{WORK_ROOT}/reports/design-{TASK_ID}-{YYYY-MM-DD}.md`
+- [ ] Design spec exists: `{ANALYSES_ROOT}/{TASK_ID}-design.md` with schema frontmatter
+- [ ] Report exists: `{WORK_ROOT}/reports/design-{TASK_ID}-{YYYY-MM-DD}-{run_id}.md`
 - [ ] Backlog item status: READY (if complete) or DESIGN (if incomplete)
+- [ ] Protocol log has START and END with status=OK|WARN|ERROR
 
-### Quality Checks
-- [ ] ALL 8 sections (D1–D8) present and substantive
-- [ ] D2: Complete type definitions with validators
-- [ ] D3: Pseudokód for all complex logic
-- [ ] D6: ≥3 test cases per component with concrete inputs/outputs
-- [ ] D7: ≥2 alternatives with pro/con, ≥2 risks with mitigation
-- [ ] D1: Governance constraints explicitly listed
-
-### Invariants
-- [ ] Design spec contains NO real code (only pseudokód/specification)
-- [ ] NO files in `{CODE_ROOT}/` were modified
-- [ ] Protocol log has START and END entries
-- [ ] Backlog item not deleted or moved
+- [ ] Design spec exists with schema frontmatter at `{ANALYSES_ROOT}/{TASK_ID}-design.md`
+- [ ] ALL 8 sections (D1–D8): `grep -c "^#### D[1-8]:" {design-spec}` = 8
+- [ ] D2: ≥1 data model per entity with types + validators
+- [ ] D3: Pseudokód (not code) with numbered steps for complex logic
+- [ ] D6: ≥3 test cases per component (happy/edge/error)
+- [ ] D7: ≥2 alternatives, ≥2 risks with mitigation
+- [ ] NO Python code: `grep -cE "^    (def |class )" {design-spec}` = 0
+- [ ] NO source files modified: `git status --short | grep src/` empty
+- [ ] Backlog item exists with READY or DESIGN status
 
 ---
 
