@@ -475,8 +475,8 @@ def validate_skills(repo_root: Path, skills_root_rel: str) -> Result:
         lines = md.splitlines()
         in_code_fence = [False] * len(lines)
         inside = False
-        for i, l in enumerate(lines):
-            if l.strip().startswith("```"):
+        for i, line in enumerate(lines):
+            if line.strip().startswith("```"):
                 inside = not inside
                 in_code_fence[i] = inside
             else:
